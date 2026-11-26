@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
 using System.Threading.Tasks;
+using SonicRoute.Core.Interop;
 using SonicRoute.Core.Models;
 
 namespace SonicRoute.Core
@@ -18,6 +19,32 @@ namespace SonicRoute.Core
 
         /// <summary>快速界面隐藏的录音设备（短 ID 列表）。</summary>
         public List<string> HiddenInputDevices { get; set; } = new();
+
+        public bool IsDeviceShown(EDataFlow flow, string id)
+        {
+            string key = VisibilityId(flow, id);
+            return !HiddenDevices(flow).Exists(hidden => SameVisibilityId(hidden, key));
+        }
+
+        public void SetDeviceShown(EDataFlow flow, string id, bool shown)
+        {
+            string key = VisibilityId(flow, id);
+            var hidden = HiddenDevices(flow);
+            if (shown)
+                hidden.RemoveAll(value => SameVisibilityId(value, key));
+            else if (IsDeviceShown(flow, key))
+                hidden.Add(key);
+        }
+
+        private List<string> HiddenDevices(EDataFlow flow) => flow == EDataFlow.eCapture ? HiddenInputDevices : HiddenOutputDevices;
+
+        private static string VisibilityId(EDataFlow flow, string id) => AudioService.IsSystemDefault(id)
+            ? (flow == EDataFlow.eCapture ? AudioService.SystemDefaultInputDeviceId : AudioService.SystemDefaultDeviceId)
+            : id;
+
+        private static bool SameVisibilityId(string hidden, string id) =>
+            string.Equals(hidden, id, StringComparison.OrdinalIgnoreCase)
+            || (AudioService.IsSystemDefault(id) && AudioService.IsSystemDefault(hidden));
 
         public bool StartMinimized { get; set; } = true;
 

@@ -32,7 +32,6 @@ internal sealed partial class ApplicationHost
             var actual = _audio.Volume(Flow.Render, id, level: percent);
             return (actual.Count > 0, actual.Percent);
         });
-        _audio.Start(resident);
         _audio.AudioChanged += NotifyAudioVisualChanged;
         PcRoutingApi.OutputsChanged += NotifyAudioVisualChanged;
 #if SONICROUTE_PHONE
@@ -46,12 +45,9 @@ internal sealed partial class ApplicationHost
             () => HasPhone ? Phone : null,
             () => Phone,
             () => HasAirPlay ? AirPlay : null,
-            () =>
-            {
-                _audio.InvalidateAppsCache();
-                NotifyAudioVisualChanged();
-            });
+            NotifyAudioVisualChanged, PrepareSavedPhoneOutputsAsync, resident ? ExternalAudioSettings : null);
 #endif
+        _audio.Start(resident);
         _automation.Start(resident);
         if (resident) { RefreshForegroundInterest(); CurrentApp.Refresh(); }
     }
@@ -91,8 +87,6 @@ internal sealed partial class ApplicationHost
 #if SONICROUTE_PHONE
         _externalVolumeWriter?.Dispose();
         _externalVolumeWriter?.Completion.GetAwaiter().GetResult();
-        _audio.ExternalAudio?.Dispose();
-        _audio.ExternalAudio = null;
 #endif
         Task.Run(_audio.Dispose).GetAwaiter().GetResult();
     }

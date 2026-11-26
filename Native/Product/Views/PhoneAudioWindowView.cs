@@ -53,6 +53,9 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
     private ComboPopupWindow? _comboPopup;
     private bool _airPlaySelected;
     private string _searchText = "";
+    private IReadOnlyList<AndroidApp>? _filteredAppsSource;
+    private string? _filteredAppsQuery;
+    private AndroidApp[] _filteredApps = [];
     private string? _activeProfileId;
     private AndroidDevice? _activeDevice;
     private QuickPanelWindow? _panel;
@@ -76,6 +79,7 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
     private string? _seekPackage;
     private UiRect _mediaTitleRect;
     private CancellationTokenSource? _catalogRefresh;
+    private CancellationTokenSource? _openingReconnect;
     private string? _refreshError;
     private string? _seekTitle;
     private UiRect _seekSliderRect;
@@ -157,6 +161,7 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
         _theme = UiThemePalette.Resolve(_config);
         EnsureCreated(L10n.T("Phone.AudioWindowTitle"));
         RepositionForOwner(owner);
+        owner.ApplyCompanionEntrance(this);
         if (!IsVisible) Show(activate: false);
         AttachPhone();
         AttachCrossDeviceDrag();
@@ -354,6 +359,7 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
         ComboPopupWindow.Close(ref _comboPopup);
         StopMediaWatch();
         ClearArtworkState();
+        ClearFilteredApps();
         _appIcons.Clear();
         _airPlay.Detach();
         DetachCrossDeviceDrag();
@@ -375,6 +381,7 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
         ComboPopupWindow.Close(ref _comboPopup);
         StopMediaWatch();
         ClearArtworkState();
+        ClearFilteredApps();
         _appIcons.Clear();
         _airPlay.Detach();
         DetachCrossDeviceDrag();
@@ -419,16 +426,32 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
     {
         if (_wired) return;
         _wired = true;
-        _host.Phone.Changed += OnPhoneChanged;
-        _host.Phone.StartTracking();
-        _ = _host.Phone.RefreshAsync(restore: true);
+        var phone = _host.Phone;
+        phone.Changed += OnPhoneChanged;
+        phone.StartTracking();
+        var profile = phone.Store.Profile;
+        if (!_airPlaySelected && profile is { LastDevice: not null, ManuallyDisconnected: false })
+        {
+            _openingReconnect = new CancellationTokenSource();
+            _ = phone.RefreshInBackgroundAsync(profile.Id, _openingReconnect.Token);
+        }
+        else _ = phone.RefreshInBackgroundAsync();
     }
 
     private void DetachPhone()
     {
+        CancelOpeningReconnect();
         if (!_wired) return;
         _wired = false;
         _host.Phone.Changed -= OnPhoneChanged;
+    }
+
+    private void CancelOpeningReconnect()
+    {
+        if (_openingReconnect is not { } reconnect) return;
+        _openingReconnect = null;
+        reconnect.Cancel();
+        reconnect.Dispose();
     }
 
     private void AttachCrossDeviceDrag()
@@ -788,7 +811,7 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
         g.DrawText(FormatMediaTime(posMs), posRect, _theme.TextSecondary, 10f);
         g.DrawText(durationMs > 0 ? FormatMediaTime(durationMs) : "--:--", durRect, _theme.TextSecondary, 10f, 400, UiTextAlign.Trailing);
         var seekSlider = new UiRect(posRect.Right, seekY, durRect.X - posRect.Right, 20f);
-        UiPrimitives.DrawVolumeSlider(g, _theme, _hit, "companion.seek", seekSlider, progress01, 0f, muted: false, showPeak: false,
+        UiPrimitives.DrawValueSlider(g, _theme, _hit, "companion.seek", seekSlider, progress01,
             enabled: canSeek);
 
         y = mediaCard.Bottom + 6f;
@@ -815,8 +838,8 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
             return;
         }
 
-        // App list: Whole-Phone Audio Row + Retained Apps (sorted by DeviceAudio then Playing)
-        var apps = GetFilteredApps();
+        // Keep whole-phone audio first and the retained apps in their saved order.
+        var apps = GetFilteredApps(profile);
         const float itemH = 50f;
         const float itemGap = 4f;
         _scroll.ViewportHeight = listRect.Height;
@@ -1025,7 +1048,7 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
             long durationMs = _mediaState?.DurationMs ?? 0L;
             if (durationMs > 0)
             {
-                int pct = UiPrimitives.SliderValueFromX(_seekSliderRect, xDip);
+                int pct = UiPrimitives.ValueSliderValueFromX(_seekSliderRect, xDip);
                 _seekPositionMs = (long)Math.Round(durationMs * (pct / 100.0));
                 Invalidate();
             }
@@ -1082,7 +1105,7 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
             _seekPackage = st.Package;
             _seekTitle = st.Title;
             StopSeekTimer();
-            int pct = UiPrimitives.SliderValueFromX(h.Bounds, e.X);
+            int pct = UiPrimitives.ValueSliderValueFromX(h.Bounds, e.X);
             _seekPositionMs = (long)Math.Round(st.DurationMs * (pct / 100.0));
         }
         Invalidate();
@@ -1277,6 +1300,7 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
     private async Task RefreshCatalogAsync()
     {
         if (_catalogRefresh != null) return;
+        CancelOpeningReconnect();
         var phone = _host.Phone;
         var selected = phone.Store.Profile;
         var mediaAtClick = _mediaWatch;
@@ -1364,18 +1388,27 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
         if (IsVisible) Invalidate();
     }
 
-    private AndroidApp[] GetFilteredApps()
+    private AndroidApp[] GetFilteredApps(AndroidPhoneProfile? profile = null)
     {
-        var profile = _host.Phone.Store.Profile;
+        profile ??= _host.Phone.Store.Profile;
         if (profile.LastDevice == null) return Array.Empty<AndroidApp>();
+        var source = profile.QuickPanelApps;
+        if (ReferenceEquals(_filteredAppsSource, source) && _filteredAppsQuery == _searchText) return _filteredApps;
+
         string query = _searchText.Trim();
-        return profile.QuickPanelApps.Prepend(AndroidApp.DeviceAudio)
-            .Where(a => a.IsDeviceAudio || query.Length == 0
-                || a.Name.Contains(query, StringComparison.CurrentCultureIgnoreCase)
-                || a.Package.Contains(query, StringComparison.OrdinalIgnoreCase))
-            .OrderByDescending(a => a.IsDeviceAudio)
-            .ThenByDescending(IsAppCurrentlyPlaying)
-            .ToArray();
+        _filteredApps = (query.Length == 0 ? source : source.Where(a =>
+            a.Name.Contains(query, StringComparison.CurrentCultureIgnoreCase) ||
+            a.Package.Contains(query, StringComparison.OrdinalIgnoreCase)))
+            .Prepend(AndroidApp.DeviceAudio).ToArray();
+        _filteredAppsSource = source;
+        _filteredAppsQuery = _searchText;
+        return _filteredApps;
+    }
+
+    private void ClearFilteredApps()
+    {
+        _filteredAppsSource = null;
+        _filteredApps = [];
     }
 
     private bool IsAppCurrentlyPlaying(AndroidApp app) => _mediaState is { } state &&
@@ -1397,6 +1430,7 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
         ShowCombo(anchor, choices, selected, picked =>
         {
             CancelCatalogRefresh();
+            CancelOpeningReconnect();
             if (picked.Key == AirPlayChoiceKey)
             {
                 _airPlaySelected = true;

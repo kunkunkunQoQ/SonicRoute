@@ -3,6 +3,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
@@ -26,9 +27,84 @@ internal static class NativeAppIconService
     private static readonly Dictionary<string, IconBitmap> Cache = new(StringComparer.OrdinalIgnoreCase);
     private static readonly Dictionary<string, long> NegativeCache = new(StringComparer.OrdinalIgnoreCase);
     private static readonly LinkedList<string> Order = new();
-    private static readonly HashSet<string> InFlight = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly Dictionary<string, IconLoad> InFlight = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly ConditionalWeakTable<byte[], IconLoad> PngIcons = new();
     private static IconBitmap? _brandIcon;
     private static int? _stockAppIconHash;
+
+    private sealed class IconLoad
+    {
+        internal HashSet<Action>? Listeners;
+        internal bool Completed;
+        internal IconBitmap? Bitmap;
+
+        internal void AddListener(Action? listener)
+        {
+            if (listener != null) (Listeners ??= []).Add(listener);
+        }
+    }
+
+    // The source snapshot owns the PNG. A refresh that reuses it also reuses its decoded icon.
+    public static IconBitmap? GetPngIcon(byte[] png, Action? onLoaded)
+    {
+        IconLoad load;
+        lock (Gate)
+        {
+            if (PngIcons.TryGetValue(png, out var existing))
+            {
+                if (!existing.Completed) existing.AddListener(onLoaded);
+                return existing.Bitmap;
+            }
+            load = new IconLoad();
+            load.AddListener(onLoaded);
+            PngIcons.Add(png, load);
+        }
+
+        _ = Task.Run(() =>
+        {
+            IconBitmap? bitmap = null;
+            try
+            {
+                if (UiBitmap.TryDecodePng(png, 48, out byte[] pixels, out int w, out int h))
+                    bitmap = new IconBitmap(pixels, w, h);
+            }
+            catch { }
+
+            HashSet<Action>? listeners;
+            lock (Gate)
+            {
+                load.Bitmap = bitmap;
+                load.Completed = true;
+                listeners = load.Listeners;
+                load.Listeners = null;
+            }
+            if (bitmap.HasValue) NotifyLoaded(listeners);
+        });
+        return null;
+    }
+
+    // Call under Gate. A second visible surface can wait on the same icon extraction.
+    private static bool BeginLoad(string key, Action? onLoaded)
+    {
+        bool start = !InFlight.TryGetValue(key, out var load);
+        if (load == null) InFlight.Add(key, load = new IconLoad());
+        load.AddListener(onLoaded);
+        return start;
+    }
+
+    private static void EndLoad(string key, bool loaded)
+    {
+        IconLoad? load;
+        lock (Gate) InFlight.Remove(key, out load);
+        if (loaded) NotifyLoaded(load?.Listeners);
+    }
+
+    private static void NotifyLoaded(HashSet<Action>? listeners)
+    {
+        if (listeners == null) return;
+        foreach (var listener in listeners)
+            try { listener(); } catch (Exception ex) { System.Diagnostics.Trace.WriteLine(ex.Message); }
+    }
 
     public static IconBitmap? GetBrandIcon()
     {
@@ -74,22 +150,23 @@ internal static class NativeAppIconService
                 if (Cache.TryGetValue(cKey, out var cachedCustom)) return cachedCustom;
                 if (NegativeCache.TryGetValue(cKey, out long negAt) && Environment.TickCount64 - negAt < NegativeCacheMs)
                     goto FallbackNative;
-                if (InFlight.Add(cKey))
+                if (BeginLoad(cKey, onLoaded))
                 {
                     _ = Task.Run(() =>
                     {
+                        bool loaded = false;
                         try
                         {
                             byte[] png = AppIconFiles.ReadPng(customFile);
                             if (UiBitmap.TryDecodePng(png, 64, out byte[] pixels, out int w, out int h))
                             {
                                 PutCache(cKey, new IconBitmap(pixels, w, h));
-                                onLoaded?.Invoke();
+                                loaded = true;
                             }
                             else PutNegative(cKey);
                         }
                         catch { PutNegative(cKey); }
-                        finally { lock (Gate) InFlight.Remove(cKey); }
+                        finally { EndLoad(cKey, loaded); }
                     });
                 }
             }
@@ -110,12 +187,13 @@ internal static class NativeAppIconService
             if (Cache.TryGetValue(key, out var cached)) return cached;
             if (NegativeCache.TryGetValue(key, out long failAt) && Environment.TickCount64 - failAt < NegativeCacheMs)
                 return null;
-            if (!InFlight.Add(key)) return null;
+            if (!BeginLoad(key, onLoaded)) return null;
         }
 
         string? directPath = !string.IsNullOrWhiteSpace(processPath) ? processPath.Trim() : null;
         _ = Task.Run(() =>
         {
+            bool loaded = false;
             try
             {
                 string? exe = directPath ?? (pid > 0 ? TryResolveProcessPath(pid) : null);
@@ -128,7 +206,7 @@ internal static class NativeAppIconService
                 if (bmp is { } resolved)
                 {
                     PutCache(key, resolved);
-                    onLoaded?.Invoke();
+                    loaded = true;
                 }
                 else
                 {
@@ -141,7 +219,7 @@ internal static class NativeAppIconService
             }
             finally
             {
-                lock (Gate) InFlight.Remove(key);
+                EndLoad(key, loaded);
             }
         });
         return null;

@@ -437,6 +437,29 @@ public sealed class AndroidPhoneStore
         : p with { RetainedApps = Array.AsReadOnly(p.RetainedApps.Where(a => a.Package != package).ToArray()),
             DisabledSmartVolumeApps = p.DisabledSmartVolumeApps.Contains(package)
                 ? Array.AsReadOnly(p.DisabledSmartVolumeApps.Where(a => a != package).ToArray()) : p.DisabledSmartVolumeApps });
+
+    internal void MoveRetainedApp(string profileId, string package, string anchorPackage, bool after) => ChangeProfile(profileId, profile =>
+    {
+        if (package == anchorPackage) return profile;
+        int source = -1, anchor = -1;
+        for (int i = 0; i < profile.RetainedApps.Count && (source < 0 || anchor < 0); i++)
+        {
+            string candidate = profile.RetainedApps[i].Package;
+            if (candidate == package) source = i;
+            else if (candidate == anchorPackage) anchor = i;
+        }
+        if (source < 0 || anchor < 0) return profile;
+        int destination = anchor + (after ? 1 : 0);
+        if (source < destination) destination--;
+        if (source == destination) return profile;
+
+        var apps = profile.RetainedApps.ToList();
+        var moved = apps[source];
+        apps.RemoveAt(source);
+        apps.Insert(destination, moved);
+        return profile with { RetainedApps = apps.AsReadOnly() };
+    });
+
     internal void SetReceiveFolder(string profileId, string folder)
     {
         AndroidFileTransfer.ValidateFolder(folder);

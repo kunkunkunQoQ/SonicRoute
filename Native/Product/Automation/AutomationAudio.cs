@@ -25,18 +25,20 @@ internal sealed partial class ProductAutomation
             bool targetApp = AutoRuleActions.NeedsApp(step.Action);
             bool current = step.Action is AutoRuleAction.SetCurrentAppInputMute or AutoRuleAction.ToggleCurrentAppInputMute;
             int pid = 0;
+            AudioAppInfo? app = null;
             if (current || targetApp)
             {
-                var app = current ? host.CurrentApp.Resolve() : FindApp(step.TargetApp);
+                app = current ? host.CurrentApp.Resolve() : FindApp(step.TargetApp);
                 if (app == null) { if (detail != null) detail.Reason = "app_unavailable"; return false; }
                 pid = checked((int)app.ProcessId);
-                if (detail != null) { detail.TargetPid = pid; detail.TargetApp = AppDisplayName.Get(app); }
+                if (detail != null) { detail.TargetPid = app.IsExternal ? null : pid; detail.TargetSourceId = app.ExternalSourceId; detail.TargetApp = AppDisplayName.Get(app); }
             }
 
             bool batch = step.Action is AutoRuleAction.SetAllAppsVolume or AutoRuleAction.AdjustAllAppsVolume or
                 AutoRuleAction.SetAllAppsMute or AutoRuleAction.ToggleAllAppsMute;
             if (batch || current || step.Action is AutoRuleAction.SetAppInputMute or AutoRuleAction.ToggleAppInputMute)
             {
+                if (app is { IsExternal: true }) return false;
                 var result = audio.BatchVolume(batch ? Flow.Render : Flow.Capture, batch ? null : pid,
                     AutoRuleActions.SetsVolume(step.Action) ? Math.Clamp(step.Volume,0,100) : null,
                     AutoRuleActions.AdjustsVolume(step.Action) ? Math.Clamp(step.VolumeDelta,-100,100) : null,
@@ -56,7 +58,13 @@ internal sealed partial class ProductAutomation
             string? endpoint = null;
             if (step.Action is AutoRuleAction.SetAppOutput or AutoRuleAction.SetAppInput)
             {
-                string target = string.IsNullOrWhiteSpace(step.TargetDeviceId) ? AudioService.SystemDefaultDeviceId : step.TargetDeviceId;
+                string target = string.IsNullOrWhiteSpace(step.TargetDeviceId)
+                    ? (input ? AudioService.SystemDefaultInputDeviceId : AudioService.SystemDefaultDeviceId)
+                    : step.TargetDeviceId;
+#if SONICROUTE_PHONE
+                if (app is { IsExternal: true })
+                    return flow == Flow.Render && audio.ExternalAudio is { } bridge && Success(await bridge.SetExternalOutputAsync(app, target));
+#endif
                 return flow == Flow.Capture ? audio.SetRoute(pid, flow, target) :
                     Success(await host.CurrentApp.SelectOutputAsync(pid, target));
             }
@@ -77,7 +85,9 @@ internal sealed partial class ProductAutomation
             int? delta = AutoRuleActions.AdjustsVolume(step.Action) ? Math.Clamp(step.VolumeDelta,-100,100) : null;
             bool? mute = AutoRuleActions.SetsMute(step.Action) ? step.Muted : null;
             if (!toggle && volume == null && delta == null && mute == null) return false;
-            return audio.Volume(flow, endpoint, pid, volume, mute, delta ?? 0, toggle).Count > 0;
+            var state = app == null ? audio.Volume(flow, endpoint, pid, volume, mute, delta ?? 0, toggle)
+                : audio.Volume(app, volume, mute, delta ?? 0, toggle);
+            return state.Count > 0;
         },token).ConfigureAwait(false);
     }
 
@@ -180,11 +190,10 @@ internal sealed partial class ProductAutomation
             bool output = action is HotkeyActions.ActSetDefaultOutput or HotkeyActions.ActSwitchAllOutput;
             bool system = action is HotkeyActions.ActSetDefaultOutput or HotkeyActions.ActSetDefaultInput;
             var flow = output ? Flow.Render : Flow.Capture;
-            var hidden = output ? config.HiddenOutputDevices : config.HiddenInputDevices;
-            var devices = (output ? audio.RenderDevicesWithPhone() : ProductAudio.Devices(flow))
-                .Where(d => !hidden.Contains(d.Id)).ToList();
+            var devices = (output && !system ? audio.RenderDevicesWithPhone(includePhoneCurrent: true) : ProductAudio.Devices(flow))
+                .Where(d => config.IsDeviceShown((EDataFlow)flow, d.PreferenceId)).ToList();
             string defaultId = output ? AudioService.SystemDefaultDeviceId : AudioService.SystemDefaultInputDeviceId;
-            if (!system && !hidden.Contains(defaultId))
+            if (!system && config.IsDeviceShown((EDataFlow)flow, defaultId))
                 devices.Insert(0, new(defaultId, L10n.T(output ? "Dev.SystemDefaultOut" : "Dev.SystemDefaultIn")));
             if (devices.Count == 0) throw new InvalidOperationException(L10n.T("Ov.NoDevice"));
             AudioAppInfo? singleApp = null;
@@ -193,16 +202,27 @@ internal sealed partial class ProductAutomation
             else if (action == HotkeyActions.ActSwitchInput)
             {
                 singleApp = host.CurrentApp.Resolve(foreground, hwnd) ?? throw new InvalidOperationException(L10n.T("Ov.NoSession"));
+                if (singleApp.IsExternal) throw new InvalidOperationException(L10n.T("Ov.NoMicDevice"));
                 apps = [singleApp];
             }
             else apps = audio.Apps();
+            if (!output && singleApp == null) apps.RemoveAll(a => a.IsExternal);
             if (!system && apps.Count == 0) throw new InvalidOperationException(L10n.T("Ov.NoSession"));
             if (singleApp != null) host.CurrentApp.RecordUsedApp(singleApp);
             string? old = system ? ProductAudio.DefaultId(flow) : audio.ReadRoute(apps[0], flow);
+#if SONICROUTE_PHONE
+            if (!system && output && apps[0].IsExternal && audio.ExternalAudio is { } source)
+                old = source.AddressedOutput(apps[0], old);
+#endif
             old ??= action == HotkeyActions.ActSwitchInput ? defaultId : ProductAudio.DefaultId(flow);
             int index = devices.FindIndex(d => Same(d.Id, old));
             var target = devices[DeviceCycle.Index(index, devices.Count, steps < 0, Math.Abs(steps))];
-            if (system) audio.SetDefault(flow, target.Id);
+            if (system)
+            {
+                if (!audio.SetDefault(flow, target.Id) || !Same(ProductAudio.DefaultId(flow, Role.Console), target.Id) ||
+                    !Same(ProductAudio.DefaultId(flow, Role.Multimedia), target.Id))
+                    throw new InvalidOperationException(L10n.T("Tray.AudioActionFailed"));
+            }
             else
             {
                 int writes = 0;
@@ -215,15 +235,17 @@ internal sealed partial class ProductAutomation
 #if SONICROUTE_PHONE
                             if (a.IsExternal)
                             {
-                                var reply = await audio.SetExternalOutputsAsync(a, [target.Id]);
-                                if (Success(reply)) writes++;
+                                if (audio.ExternalAudio is { } bridge && Success(await bridge.SetExternalOutputAsync(a, target.Id)))
+                                    writes++;
                                 continue;
                             }
 #endif
-                            if (!a.IsExternal && Success(await host.CurrentApp.SelectOutputAsync((int)a.ProcessId, target.Id)))
-                                writes++;
+                            int appPid = checked((int)a.ProcessId);
+                            if (Success(await audio.SelectOutputAsync(appPid, target.Id)) &&
+                                Same(audio.ReadRoute(appPid, flow) ?? defaultId, target.Id)) writes++;
                         }
-                        else if (!a.IsExternal && audio.SetRoute((int)a.ProcessId, flow, target.Id))
+                        else if (audio.SetRoute((int)a.ProcessId, flow, target.Id)
+                            && Same(audio.ReadRoute((int)a.ProcessId, flow) ?? defaultId, target.Id))
                         {
                             writes++;
                         }

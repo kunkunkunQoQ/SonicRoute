@@ -40,8 +40,9 @@ public sealed class AndroidPcmSource : IWasapiPlaybackSource
     private long _dropped, _underflow;
     private long _written, _nonSilent, _read;
     private float _lastPeak;
+    private const int MeterPacketHoldMs = 150;
     private float _meterUnreadPeak = -1f, _meterActivePeak;
-    private long _lastWriteTick = -1000, _lastNonSilentWriteTick = -1000;
+    private long _meterUnreadTick = -1000, _lastNonSilentWriteTick = -1000;
     private int _meterWaiting;
 
     public AndroidPcmSource() : this(AudioLatencyMode.Balanced) { }
@@ -228,15 +229,18 @@ public sealed class AndroidPcmSource : IWasapiPlaybackSource
                         _primeWaitStartMs = nowMs;
                     }
                 }
-            }
-            long tickNow = Environment.TickCount64;
-            if (meterPeak > _meterUnreadPeak) _meterUnreadPeak = meterPeak;
-            _meterActivePeak = meterPeak;
-            _lastWriteTick = tickNow;
-            if (meterPeak > 0f)
-            {
-                _lastNonSilentWriteTick = tickNow;
-                wake = Interlocked.Exchange(ref _meterWaiting, 0) != 0;
+                long tickNow = Environment.TickCount64;
+                if (meterPeak >= _meterUnreadPeak || tickNow - _meterUnreadTick > MeterPacketHoldMs)
+                {
+                    _meterUnreadPeak = meterPeak;
+                    _meterUnreadTick = tickNow;
+                }
+                _meterActivePeak = meterPeak;
+                if (meterPeak > 0f)
+                {
+                    _lastNonSilentWriteTick = tickNow;
+                    wake = Interlocked.Exchange(ref _meterWaiting, 0) != 0;
+                }
             }
         }
         if (wake && PeakActivity is { } listeners)
@@ -253,7 +257,7 @@ public sealed class AndroidPcmSource : IWasapiPlaybackSource
         {
             long now = Environment.TickCount64;
             float peak;
-            if (_meterUnreadPeak >= 0f && now - _lastWriteTick <= 150)
+            if (_meterUnreadPeak >= 0f && now - _meterUnreadTick <= MeterPacketHoldMs)
             {
                 peak = _meterUnreadPeak;
                 _meterUnreadPeak = -1f;
@@ -503,8 +507,7 @@ public sealed class AndroidPcmSource : IWasapiPlaybackSource
             _smartEnvelope = 0f;
             _meterUnreadPeak = -1f;
             _meterActivePeak = 0f;
-            _lastWriteTick = _lastNonSilentWriteTick = -1000;
-            Volatile.Write(ref _meterWaiting, 0);
+            _meterUnreadTick = _lastNonSilentWriteTick = -1000;
             _hasReceivedAudio = false;
             _primed = false;
             _primeWaitStartMs = double.NaN;

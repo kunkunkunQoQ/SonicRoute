@@ -5,7 +5,10 @@ namespace SonicRoute.Native.Audio;
 
 internal enum Flow { Render, Capture }
 internal enum Role { Console, Multimedia, Communications }
-internal sealed record Endpoint(string Id, string Name);
+internal sealed record Endpoint(string Id, string Name, string? VisibilityId = null)
+{
+    internal string PreferenceId => VisibilityId ?? Id;
+}
 internal sealed record SessionInfo(uint ProcessId, uint State);
 
 internal sealed unsafe class Endpoints : IDisposable
@@ -116,6 +119,35 @@ internal sealed unsafe class Endpoints : IDisposable
         {
             int hr = ((delegate* unmanaged[Stdcall]<nint,nint*,int>)control.Slot(4))(control.Handle,&text);
             return hr >= 0 ? Marshal.PtrToStringUni(text) : null;
+        }
+        finally { Marshal.FreeCoTaskMem(text); }
+    }
+
+    internal static string SessionId(Com control2, bool instance)
+    {
+        nint text = 0;
+        try
+        {
+            Com.Check(((delegate* unmanaged[Stdcall]<nint,nint*,int>)control2.Slot(instance ? 13 : 12))(control2.Handle,&text),
+                instance ? "GetSessionInstanceIdentifier" : "GetSessionIdentifier");
+            return Marshal.PtrToStringUni(text) ?? "";
+        }
+        finally { Marshal.FreeCoTaskMem(text); }
+    }
+
+    internal static string? ConnectedAdapterId(Com device)
+    {
+        using var topology = Activate(device, new Guid("2A07407E-6497-4A18-9787-32F79BD0D98F"));
+        nint connection = 0;
+        Com.Check(((delegate* unmanaged[Stdcall]<nint,uint,nint*,int>)topology.Slot(4))(topology.Handle,0,&connection),
+            "IDeviceTopology.GetConnector");
+        using var connector = new Com(connection);
+        nint text = 0;
+        try
+        {
+            Com.Check(((delegate* unmanaged[Stdcall]<nint,nint*,int>)connector.Slot(10))(connector.Handle,&text),
+                "IConnector.GetDeviceIdConnectedTo");
+            return Marshal.PtrToStringUni(text);
         }
         finally { Marshal.FreeCoTaskMem(text); }
     }

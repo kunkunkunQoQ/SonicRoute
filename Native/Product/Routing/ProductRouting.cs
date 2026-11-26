@@ -12,26 +12,30 @@ internal sealed class ProductRouting : IDisposable
     private int _active;
     private bool _closing;
 #if SONICROUTE_PHONE
-    internal ExternalAudioBridge? ExternalAudio { get; set; }
+    internal ExternalAudioBridge? ExternalAudio
+    {
+        get => PcRoutingApi.Phones;
+        set => PcRoutingApi.Phones = value;
+    }
 #endif
     internal void Start() => AppPlaybackRestore.Start();
 
     internal string? ReadPlaybackRoute(int pid, bool includeSelection, out HashSet<string>? selected)
     {
 #if SONICROUTE_PHONE
-        bool exclusive = false;
-        string? phone = ExternalAudio?.GetPhoneRoute(pid, out exclusive);
-        if (exclusive && phone != null)
+        if (LocalAppOutputMirrors.GetExclusivePhone(pid, out _) is { } phone)
         {
-            selected = includeSelection ? new(StringComparer.OrdinalIgnoreCase) { phone } : null;
+            selected = includeSelection ? AppPlaybackOutputs.GetSelected(pid, phone) : null;
             return phone;
+        }
+        if (ExternalAudio?.GetPhoneRoute(pid, out bool exclusive) is { } legacy && exclusive)
+        {
+            selected = includeSelection ? new(StringComparer.OrdinalIgnoreCase) { legacy } : null;
+            return legacy;
         }
 #endif
         string? primary = PcRoutingApi.GetPersistedEndpoint(pid, EDataFlow.eRender);
         selected = includeSelection ? AppPlaybackOutputs.GetSelected(pid, primary) : null;
-#if SONICROUTE_PHONE
-        if (phone != null) selected?.Add(phone);
-#endif
         return primary;
     }
 
@@ -63,58 +67,9 @@ internal sealed class ProductRouting : IDisposable
                     }).ConfigureAwait(false);
                     return new(JsonSerializer.Serialize(values, RoutingJson.Default.StringArray));
                 case "output-native" when request.Args is [_, var single]:
-                    if (PcRoutingApi.IsPhoneOutputDevice(single))
-                    {
-#if SONICROUTE_PHONE
-                        if (ExternalAudio == null) return new("error: phone_unavailable");
-                        await LocalAppOutputMirrors.ClearAsync(pid).ConfigureAwait(false);
-                        var phoneRes = ExternalAudio.RoutePcAppToPhone(pid, single, silenceLocal: true);
-                        PcRoutingApi.NotifyRouteChanged(pid);
-                        return new(phoneRes.Success ? "ok" : $"error: 0x{phoneRes.HResult:X8} {phoneRes.Message}");
-#else
-                        return new("error: phone_output_unsupported_in_lite");
-#endif
-                    }
-#if SONICROUTE_PHONE
-                    ExternalAudio?.StopPcAppToPhone(pid, restorePreviousEndpoint: false);
-#endif
-                    var native = await AppPlaybackOutputs.SetAsync(new AudioAppInfo { ProcessId = (uint)pid }, [single], single, nativeIfUnmanaged: true).ConfigureAwait(false);
-                    PcRoutingApi.NotifyRouteChanged(pid);
-                    return new(native.Success ? "ok" : $"error: 0x{native.HResult:X8} {native.Message}");
+                    return await ApplyOutputsAsync(pid, [single], single, nativeIfUnmanaged: true).ConfigureAwait(false);
                 case "outputs-set" when request.Args is [_, var preferred, .. var outputs]:
-                {
-                    var phoneOutputs = outputs.Where(PcRoutingApi.IsPhoneOutputDevice).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
-                    var windowsOutputs = outputs.Where(id => !PcRoutingApi.IsPhoneOutputDevice(id)).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
-                    if (phoneOutputs.Length == 0 && !PcRoutingApi.IsPhoneOutputDevice(preferred))
-                    {
-#if SONICROUTE_PHONE
-                        ExternalAudio?.StopPcAppToPhone(pid, restorePreviousEndpoint: false);
-#endif
-                        var result = await AppPlaybackOutputs.SetAsync(new AudioAppInfo { ProcessId = (uint)pid }, outputs, preferred).ConfigureAwait(false);
-                        PcRoutingApi.NotifyRouteChanged(pid);
-                        return new(result.Success ? "ok" : $"error: 0x{result.HResult:X8} {result.Message}");
-                    }
-#if SONICROUTE_PHONE
-                    if (ExternalAudio == null) return new("error: phone_unavailable");
-                    string targetPhone = phoneOutputs.Length > 0 ? phoneOutputs[0] : preferred;
-                    bool phoneOnly = windowsOutputs.Length == 0;
-                    if (phoneOnly)
-                    {
-                        await LocalAppOutputMirrors.ClearAsync(pid).ConfigureAwait(false);
-                        var phoneOnlyRes = ExternalAudio.RoutePcAppToPhone(pid, targetPhone, silenceLocal: true);
-                        PcRoutingApi.NotifyRouteChanged(pid);
-                        return new(phoneOnlyRes.Success ? "ok" : $"error: 0x{phoneOnlyRes.HResult:X8} {phoneOnlyRes.Message}");
-                    }
-                    string winPreferred = PcRoutingApi.IsPhoneOutputDevice(preferred) ? windowsOutputs[0] : preferred;
-                    var winRes = await AppPlaybackOutputs.SetAsync(new AudioAppInfo { ProcessId = (uint)pid }, windowsOutputs, winPreferred).ConfigureAwait(false);
-                    if (!winRes.Success) return new($"error: 0x{winRes.HResult:X8} {winRes.Message}");
-                    var mixedPhoneRes = ExternalAudio.RoutePcAppToPhone(pid, targetPhone, silenceLocal: false);
-                    PcRoutingApi.NotifyRouteChanged(pid);
-                    return new(mixedPhoneRes.Success ? "ok" : $"error: 0x{mixedPhoneRes.HResult:X8} {mixedPhoneRes.Message}");
-#else
-                    return new("error: PC playback selection requires Windows endpoints");
-#endif
-                }
+                    return await ApplyOutputsAsync(pid, outputs, preferred, nativeIfUnmanaged: false).ConfigureAwait(false);
                 default: return new("error: unknown_command");
             }
         }
@@ -122,6 +77,17 @@ internal sealed class ProductRouting : IDisposable
         {
             lock (_gate) { if (--_active == 0 && _closing) _drained.TrySetResult(); }
         }
+    }
+
+    private static async Task<ControlReply> ApplyOutputsAsync(int pid, string[] outputs, string preferred, bool nativeIfUnmanaged)
+    {
+#if !SONICROUTE_PHONE
+        if (PcRoutingApi.IsPhoneOutputDevice(preferred) || outputs.Any(PcRoutingApi.IsPhoneOutputDevice))
+            return new("error: phone_output_unsupported_in_lite");
+#endif
+        var result = await AppPlaybackOutputs.SetAsync(new AudioAppInfo { ProcessId = (uint)pid },
+            outputs, preferred, nativeIfUnmanaged).ConfigureAwait(false);
+        return new(result.Success ? "ok" : $"error: 0x{result.HResult:X8} {result.Message}");
     }
 
     public void Dispose()
@@ -135,5 +101,8 @@ internal sealed class ProductRouting : IDisposable
         _drained.Task.GetAwaiter().GetResult();
         AppPlaybackRestore.StopAsync().GetAwaiter().GetResult();
         LocalAppOutputMirrors.ShutdownAsync().GetAwaiter().GetResult();
+#if SONICROUTE_PHONE
+        PhoneMirrorIsolation.Shutdown();
+#endif
     }
 }

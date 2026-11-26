@@ -1,4 +1,7 @@
 #if SONICROUTE_PHONE
+#if SONICROUTE_NATIVE_PC
+using SonicRoute.Native.Product;
+#endif
 using System.IO;
 using System.Runtime.InteropServices;
 using SonicRoute.AndroidAudio;
@@ -8,7 +11,10 @@ namespace SonicRoute;
 
 internal static partial class LocalAppOutputMirrors
 {
+#if !SONICROUTE_NATIVE_PC
     private static LocalIsolationNotifications? _phoneIsolationWatch;
+#endif
+    internal static bool HasPhoneOutputs => Routes.Values.Any(route => route.Sinks.Any(sink => sink.Pcm != null));
 
     internal static string? GetExclusivePhone(int pid, out bool mutedSpeaker)
     {
@@ -26,8 +32,13 @@ internal static partial class LocalAppOutputMirrors
     }
 
     internal static Task PhoneRemovedAsync(AndroidDevice device, bool recover = false) =>
-        PruneAsync((_, sink) => sink.Player is AndroidPhonePcmPlayer phone && AndroidDeviceIdentity.Matches(device, phone.Device), recover);
+        PruneAsync((_, sink) => sink.Player is AndroidPhonePcmPlayer phone && AndroidDeviceIdentity.Matches(device, phone.Device)
+#if SONICROUTE_NATIVE_PC
+            && (!recover || PcRoutingApi.Phones?.ExistingPhone?.Connections.IsCurrent(phone.Device) != true)
+#endif
+            , recover);
 
+#if !SONICROUTE_NATIVE_PC
     static partial void ReleaseUnusedPhoneWatch()
     {
         if (_phoneIsolationWatch != null && !Routes.Values.Any(r => r.PhoneOnly))
@@ -37,11 +48,17 @@ internal static partial class LocalAppOutputMirrors
         }
     }
 
+#endif
+
     static partial void NotifyPrunedPhoneOutputs(Route route, Sink[] previous, Sink[] retained, bool recover)
     {
         foreach (var sink in previous)
             if (sink.Player is AndroidPhonePcmPlayer phone && !retained.Contains(sink))
+#if SONICROUTE_NATIVE_PC
+                AppPlaybackOutputs.OutputEnded(route.ProcessId, sink.Id, recover && PcRoutingApi.Phones?.ExistingPhone?.Store.IsRemoved(phone.Device) == false);
+#else
                 AppPlaybackOutputs.OutputEnded(route.ProcessId, sink.Id, recover && !AndroidAudioHost.Phone.IsRemoved(phone.Device));
+#endif
     }
 
     private sealed partial class Route
@@ -59,6 +76,9 @@ internal static partial class LocalAppOutputMirrors
 
         private void Isolate(bool allowSpeakerMute)
         {
+#if SONICROUTE_NATIVE_PC
+            var lease = PhoneMirrorIsolation.Acquire(ProcessId, allowSpeakerMute, out bool muteSpeaker);
+#else
             _phoneIsolationWatch ??= new LocalIsolationNotifications();
             IPcProcessSilenceLease? lease = null;
             (string? Endpoint, bool Active) original = default;
@@ -69,6 +89,7 @@ internal static partial class LocalAppOutputMirrors
             }
             bool muteSpeaker = lease == null && allowSpeakerMute;
             if (muteSpeaker) lease = AndroidAudioHost.AcquireSpeakerFallback(ProcessId, original);
+#endif
             if (lease == null) throw new IOException(L10n.T("Phone.AppKeptOutput"));
             try
             {

@@ -667,6 +667,7 @@
   "Phone.PairAndConnect": "配對並連線",
   "Phone.ConnectedStatus": "已連線",
   "Phone.ProcessingStatus": "正在處理…",
+  "Phone.DragAppOrder": "拖曳應用程式圖示調整順序，靠近邊緣自動捲動，按 Esc 取消。",
   "Phone.QuickPanelAppsTitle": "在快速面板中顯示的應用程式",
   "Phone.SmartVolumeTitle": "智慧音量",
   "Phone.ClipboardSyncTitle": "剪貼簿同步",

@@ -667,6 +667,7 @@
   "Phone.PairAndConnect": "Vincular y conectar",
   "Phone.ConnectedStatus": "Conectado",
   "Phone.ProcessingStatus": "Procesando…",
+  "Phone.DragAppOrder": "Arrastra el icono para cambiar el orden. Acércalo al borde para desplazar la lista. Pulsa Esc para cancelar.",
   "Phone.QuickPanelAppsTitle": "Aplicaciones del dispositivo en el panel rápido",
   "Phone.SmartVolumeTitle": "Volumen inteligente",
   "Phone.ClipboardSyncTitle": "Sincronización del portapapeles",

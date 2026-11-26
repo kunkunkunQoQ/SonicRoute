@@ -8,7 +8,7 @@ using SonicRoute.Core;
 
 namespace SonicRoute.Native.Product;
 
-internal sealed class PhonePreview : IDisposable
+internal sealed partial class PhonePreview : IDisposable
 {
     private readonly CancellationTokenSource lifetime = new();
     private readonly CancellationToken token;
@@ -22,6 +22,10 @@ internal sealed class PhonePreview : IDisposable
     private readonly IMainThread owner;
     private readonly AppConfig config;
     private Task? tracking;
+    private CancellationTokenSource? trackingLifetime;
+    private bool keepTracking;
+    private int temporaryTrackers;
+    private IReadOnlyList<AndroidDevice> lastOnline = [];
     private int closed;
 
     internal readonly AdbClient Adb;
@@ -41,7 +45,7 @@ internal sealed class PhonePreview : IDisposable
 
     internal PhonePreview(string root, NativeApplicationWindow shell, IMainThread owner, AppConfig config,
         Func<int, IPcProcessSilenceLease?>? silenceLocalProcess = null,
-        Func<AirPlayPreview?>? tryGetAirPlay = null)
+        Func<AirPlayPreview?>? tryGetAirPlay = null, AndroidAudioSettingsStore? settings = null)
     {
         this.owner = owner;
         this.config = config;
@@ -55,12 +59,12 @@ internal sealed class PhonePreview : IDisposable
         string storePath = Path.Combine(root, "android-phone.json");
         MigrateLegacyPhoneStore(root, storePath);
         Store = new(storePath, () => L10n.T("Phone.DefaultName"));
-        Settings = new(Path.Combine(root, "android-audio.json"));
+        Settings = settings ?? new(Path.Combine(root, "android-audio.json"));
         Discovery = new(cancel => Adb.DevicesAsync(cancel, deduplicate: false));
         Connections = new(Store, () => Discovery, Settings.MigrateConnectionPreferences);
         Wireless = new(Adb);
         Sources = new(() => new AndroidAudioSession(Adb, Settings.GetStreaming, Connections.ResolveKey), Settings,
-            (phone, app) => Store.IsSmartVolumeEnabled(phone, app));
+            (phone, app) => Store.IsSmartVolumeEnabled(phone, app), Connections.IsCurrent, token);
         Pc = new(() => Adb, silenceLocalProcess);
         Pc.OutputsObserved += (device, outputs) => Store.UpdateOutputs(device, outputs);
         Pc.DeviceDisconnected += OnPcPlaybackDisconnected;
@@ -70,8 +74,11 @@ internal sealed class PhonePreview : IDisposable
             d => Store.IsRemoved(d), d => Connections.Resolve(d), d => Store.FindProfile(d)?.LastDevice);
 
         Sources.Changed += Notify;
+        Sources.ResourcesRetired += QueueSourceReconciliation;
+        Sources.CaptureInterrupted += OnPcPlaybackDisconnected;
         Discovery.Changed += Observe;
         Store.Changed += OnStoreChanged;
+        Store.OutputsChanged += OnPlaybackDevicesChanged;
         Pc.Changed += Notify;
         Transfers.Changed += OnTransferChanged;
         Displays.ResourcesRetired += Notify;
@@ -81,7 +88,7 @@ internal sealed class PhonePreview : IDisposable
     internal CancellationToken Lifetime => token;
 
     internal bool HasActivePlaybackConnections =>
-        Sources.HasActiveWork || Displays.Count > 0 || Pc.HasActiveWork || tryGetAirPlay?.Invoke()?.Source != null;
+        LocalAppOutputMirrors.HasPhoneOutputs || Sources.HasActiveWork || Displays.Count > 0 || Pc.HasActiveWork || tryGetAirPlay?.Invoke()?.Source != null;
 
     private static void MigrateLegacyPhoneStore(string root, string targetPath)
     {
@@ -116,37 +123,63 @@ internal sealed class PhonePreview : IDisposable
     {
         if (Volatile.Read(ref closed) != 0) return;
         Discovery.RetirePendingScan();
-        _ = RefreshAfterDeviceChangeAsync();
+        _ = RefreshInBackgroundAsync();
     }
 
     internal void StartTracking()
     {
-        if (Volatile.Read(ref closed) != 0) return;
-        if (tracking == null || tracking.IsCompleted) tracking = Task.Run(TrackAsync);
+        lock (operationsGate)
+        {
+            keepTracking = true;
+            EnsureTracking();
+        }
     }
 
-    private async Task TrackAsync()
+    private void EnsureTracking()
+    {
+        if (Volatile.Read(ref closed) != 0 || trackingLifetime != null) return;
+        var lifetime = trackingLifetime = CancellationTokenSource.CreateLinkedTokenSource(token);
+        var prior = tracking;
+        tracking = Task.Run(async () =>
+        {
+            try
+            {
+                if (prior != null) await prior.ConfigureAwait(false);
+                if (!lifetime.IsCancellationRequested) await TrackAsync(lifetime.Token).ConfigureAwait(false);
+            }
+            finally
+            {
+                lock (operationsGate)
+                {
+                    if (ReferenceEquals(trackingLifetime, lifetime)) trackingLifetime = null;
+                    lifetime.Dispose();
+                }
+            }
+        });
+    }
+
+    private async Task TrackAsync(CancellationToken cancel)
     {
         try
         {
             await Adb.TrackDevicesAsync(devices =>
             {
                 Discovery.RetirePendingScan();
-                _ = RefreshAfterDeviceChangeAsync();
-            }, token).ConfigureAwait(false);
+                _ = Volatile.Read(ref keepTracking) ? RefreshInBackgroundAsync() : RefreshSavedTransportsAsync(cancel);
+            }, cancel).ConfigureAwait(false);
         }
-        catch (OperationCanceledException) when (token.IsCancellationRequested) { }
+        catch (OperationCanceledException) when (cancel.IsCancellationRequested) { }
         catch (Exception error) { Error = TranslateError(error); Notify(); }
     }
 
-    private async Task RefreshAfterDeviceChangeAsync()
+    internal async Task RefreshInBackgroundAsync(string? reconnectProfileId = null, CancellationToken reconnectToken = default)
     {
-        try { await RefreshAsync(restore: true).ConfigureAwait(false); }
+        try { await RefreshAsync(restore: true, reconnectProfileId, reconnectToken).ConfigureAwait(false); }
         catch (OperationCanceledException) when (token.IsCancellationRequested) { }
         catch (Exception error) { Error = TranslateError(error); Notify(); }
     }
 
-    internal async Task RefreshAsync(bool restore = false)
+    internal async Task RefreshAsync(bool restore = false, string? reconnectProfileId = null, CancellationToken reconnectToken = default)
     {
         await scans.WaitAsync(token).ConfigureAwait(false);
         try
@@ -160,35 +193,26 @@ internal sealed class PhonePreview : IDisposable
             _ = ProbeOutputsIfConnectedAsync(devices, force: false, token: token);
             if (!restore) return;
 
-            var savedRoutes = Settings.GetSavedSources();
-            if (savedRoutes.Length > 0)
+            string? attemptedPhone = null;
+            if (reconnectProfileId != null && !reconnectToken.IsCancellationRequested &&
+                Store.Profile is { LastDevice: { } saved } selected && selected.Id == reconnectProfileId &&
+                Connections.Get(saved).State == AndroidManagedConnectionState.Offline)
             {
-                // Recover saved wireless phones that have not re-appeared yet.
-                foreach (var route in savedRoutes)
-                {
-                    if (Connections.ResolveKey(route.DeviceKey) != null) continue;
-                    var savedProfile = Store.Profiles.FirstOrDefault(p => AndroidDeviceIdentity.StableKey(p.LastDevice) == route.DeviceKey);
-                    if (savedProfile?.LastDevice is { } lastDev)
-                    {
-                        await RecoverMissingWirelessAsync(lastDev, Discovery.Devices ?? devices, deadline.Token).ConfigureAwait(false);
-                    }
-                }
-
-                foreach (var route in savedRoutes)
-                {
-                    var online = Connections.ResolveKey(route.DeviceKey);
-                    if (online == null || Sources.Sources.Any(s => s.App.Package == route.Package && AndroidDeviceIdentity.Matches(s.Device, online)))
-                        continue;
-                    var profile = Store.FindProfile(online);
-                    if (profile == null || profile.ManuallyDisconnected) continue;
-                    var app = route.Package == AndroidApp.DeviceAudioPackage
-                        ? AndroidApp.DeviceAudio
-                        : profile.RetainedApps.FirstOrDefault(a => a.Package == route.Package)
-                            ?? new AndroidApp(route.Package, route.Package, -1, "");
-                    try { await Sources.ResumeAsync(online, app, route.Outputs).ConfigureAwait(false); }
-                    catch (Exception error) { ExceptionDiagnostics.Record("NativePhone.Resume", error); }
-                }
+                using var opening = CancellationTokenSource.CreateLinkedTokenSource(reconnectToken, deadline.Token);
+                await RecoverMissingWirelessAsync(saved, devices, opening.Token, discoverFromUsb: true).ConfigureAwait(false);
+                if (!reconnectToken.IsCancellationRequested) attemptedPhone = AndroidDeviceIdentity.StableKey(saved);
             }
+
+            var restoreKeys = Settings.ExternalAudio.Where(p => p.Resume && p.App != null).Select(p => p.DeviceKey!)
+                .Concat(Settings.GetSavedSources().Select(r => r.DeviceKey)).Distinct();
+            foreach (string key in restoreKeys)
+            {
+                if (key == attemptedPhone || Connections.ResolveKey(key) != null) continue;
+                var profile = Store.Profiles.FirstOrDefault(p => AndroidDeviceIdentity.StableKey(p.LastDevice) == key);
+                if (profile?.LastDevice is { } lastDev)
+                    await RecoverMissingWirelessAsync(lastDev, Discovery.Devices ?? devices, deadline.Token).ConfigureAwait(false);
+            }
+            QueueSourceReconciliation();
         }
         finally
         {
@@ -198,15 +222,16 @@ internal sealed class PhonePreview : IDisposable
         }
     }
 
-    internal async Task<bool> RecoverMissingWirelessAsync(AndroidDevice? device, IReadOnlyList<AndroidDevice> devices, CancellationToken cancel)
+    internal async Task<bool> RecoverMissingWirelessAsync(AndroidDevice? device, IReadOnlyList<AndroidDevice> devices, CancellationToken cancel,
+        bool discoverFromUsb = false, string? advertisedAddress = null)
     {
-        if (device == null || AndroidDeviceIdentity.StableKey(device) is not { } key
+        if (cancel.IsCancellationRequested || device == null || AndroidDeviceIdentity.StableKey(device) is not { } key
             || Connections.Resolve(device) != null)
             return false;
 
         var profile = Store.FindProfile(device);
         if (profile == null || profile.ManuallyDisconnected || Store.IsRemoved(device)
-            || profile.WirelessReconnectTarget(discoverFromUsb: false) is not { } target)
+            || profile.WirelessReconnectTarget(discoverFromUsb) is not { } target)
             return false;
 
         long revision = Connections.Revision;
@@ -218,7 +243,7 @@ internal sealed class PhonePreview : IDisposable
         }
         try
         {
-            var result = await Wireless.ReconnectAsync(target, profile.LastWirelessAddress, attempt.Token, devices,
+            var result = await Wireless.ReconnectAsync(target, advertisedAddress ?? profile.LastWirelessAddress, attempt.Token, devices,
                 retryMissingIdentity: !HasActivePlaybackConnections).ConfigureAwait(false);
             attempt.Token.ThrowIfCancellationRequested();
             if (Connections.Revision != revision || Store.IsRemoved(device) || Store.IsRemoved(result.Device)
@@ -226,7 +251,8 @@ internal sealed class PhonePreview : IDisposable
                 || Store.FindProfile(device)?.ManuallyDisconnected != false)
                 return false;
             attempt.Token.ThrowIfCancellationRequested();
-            if (!Discovery.PublishConnection(result, discoveryRevision, current => Connections.AcceptRecovery(current, profile.Id, revision)))
+            if (!Discovery.PublishConnection(result, discoveryRevision,
+                current => !attempt.IsCancellationRequested && Connections.AcceptRecovery(current, profile.Id, revision)))
                 return false;
             await ProbeOutputsIfConnectedAsync([result.Device], token: attempt.Token).ConfigureAwait(false);
             return true;
@@ -312,8 +338,9 @@ internal sealed class PhonePreview : IDisposable
         }
     }
 
-    private void OnPcPlaybackDisconnected(AndroidDevice device)
+    internal void OnPcPlaybackDisconnected(AndroidDevice device)
     {
+        if (token.IsCancellationRequested || Store.IsRemoved(device)) return;
         _ = Task.Run(async () =>
         {
             try
@@ -475,7 +502,7 @@ internal sealed class PhonePreview : IDisposable
 
         try
         {
-            await CleanupManagedPhoneAsync(aliases).ConfigureAwait(false);
+            await CleanupManagedPhoneAsync(aliases, removed: false).ConfigureAwait(false);
             using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token);
             deadline.CancelAfter(TimeSpan.FromSeconds(15));
             if (unpair)
@@ -509,7 +536,7 @@ internal sealed class PhonePreview : IDisposable
         Notify();
         try
         {
-            await CleanupManagedPhoneAsync(aliases).ConfigureAwait(false);
+            await CleanupManagedPhoneAsync(aliases, removed: true).ConfigureAwait(false);
         }
         finally
         {
@@ -519,12 +546,15 @@ internal sealed class PhonePreview : IDisposable
         await Store.FlushAsync().ConfigureAwait(false);
     }
 
-    private async Task CleanupManagedPhoneAsync(IReadOnlyList<AndroidDevice> aliases)
+    private async Task CleanupManagedPhoneAsync(IReadOnlyList<AndroidDevice> aliases, bool removed)
     {
         foreach (var alias in aliases.DistinctBy(AndroidDeviceIdentity.Key))
         {
-            Settings.ForgetPhoneRoutes(alias);
+            Settings.RetireExternalPhone(alias, removed);
+            if (removed) Settings.ForgetPhoneRoutes(alias);
+            else Settings.ForgetSourceRoutes(alias);
             await Task.WhenAll(
+                LocalAppOutputMirrors.PhoneRemovedAsync(alias),
                 Sources.RemovePhoneAsync(alias),
                 Displays.CloseDeviceAsync(alias),
                 Pc.StopPhoneAsync(alias),
@@ -821,6 +851,7 @@ internal sealed class PhonePreview : IDisposable
     private void OnStoreChanged()
     {
         Sources.SyncSmartVolume((d, p) => Store.IsSmartVolumeEnabled(d, p));
+        QueueSourceReconciliation();
         owner.TryPost(() => { if (Volatile.Read(ref closed) == 0) Clipboard.Reconcile(); });
         Notify();
     }
@@ -834,6 +865,8 @@ internal sealed class PhonePreview : IDisposable
             var cached = Discovery.CurrentDevices;
             if (cached != null)
             {
+                UpdatePlaybackConnections();
+                QueueSourceReconciliation();
                 foreach (var profile in Store.Profiles)
                 {
                     if (profile.LastDevice is { } dev && Connections.Resolve(dev) == null && profile.OutputSinks.Count > 1)
@@ -859,17 +892,22 @@ internal sealed class PhonePreview : IDisposable
     public void Dispose()
     {
         if (Interlocked.Exchange(ref closed, 1) != 0) return;
+        Store.OutputsChanged -= OnPlaybackDevicesChanged;
+        Sources.ResourcesRetired -= QueueSourceReconciliation;
+        Sources.CaptureInterrupted -= OnPcPlaybackDisconnected;
+        Sources.BeginShutdown();
         Transfers.Changed -= OnTransferChanged;
         pendingTransfers.Clear();
         lock (displayWatches)
             foreach (var watch in displayWatches.Values) watch.CloseStatusOnUi();
         Clipboard.Dispose();
+        StopWirelessWatch();
         lifetime.Cancel();
         Task.Run(async () =>
         {
             await Transfers.CloseAsync().ConfigureAwait(false);
             if (tracking != null) await tracking.ConfigureAwait(false);
-            Sources.BeginShutdown();
+            await WaitForSourceReconciliationAsync().ConfigureAwait(false);
             await Task.WhenAll(Displays.DisposeAsync().AsTask(), Sources.DisposeAsync().AsTask(), Pc.DisposeAsync().AsTask()).ConfigureAwait(false);
             await Store.FlushAsync().ConfigureAwait(false);
             await Settings.FlushAsync().ConfigureAwait(false);
@@ -895,6 +933,9 @@ internal sealed class PhonePreview : IDisposable
 internal sealed partial class ApplicationHost
 {
     private PhonePreview? phone;
+    private AndroidAudioSettingsStore? externalAudioSettings;
+    private AndroidAudioSettingsStore ExternalAudioSettings => externalAudioSettings ??=
+        new(Path.Combine(_environment.DataDirectory, "android-audio.json"));
     internal bool HasPhone => phone != null;
     internal bool HasAirPlay => airPlay != null;
     internal PhonePreview Phone
@@ -904,9 +945,10 @@ internal sealed partial class ApplicationHost
             if (phone != null) return phone;
             var created = new PhonePreview(_environment.DataDirectory, _window, this, _config,
                 _audio.ExternalAudio != null ? _audio.ExternalAudio.AcquireLocalSilenceLease : null,
-                () => HasAirPlay ? AirPlay : null);
+                () => HasAirPlay ? AirPlay : null, ExternalAudioSettings);
             created.Changed += OnExternalSourcesChanged;
             phone = created;
+            EnsureExternalOutputTopology();
             return created;
         }
     }
@@ -916,9 +958,11 @@ internal sealed partial class ApplicationHost
         {
             if (airPlay != null) return airPlay;
             var created = new AirPlayPreview(_environment.IsPackaged,
-                (pcm, endpoint, cancel) => Phone.CreatePhonePcmPlayer(pcm, endpoint, cancel));
+                (pcm, endpoint, cancel) => PcRoutingApi.CreatePhonePcmPlayer(pcm, endpoint, cancel),
+                ExternalAudioSettings, _config, TryPost);
             created.Changed += OnExternalSourcesChanged;
             airPlay = created;
+            EnsureExternalOutputTopology();
             return created;
         }
     }
@@ -926,23 +970,33 @@ internal sealed partial class ApplicationHost
 
     private void OnExternalSourcesChanged()
     {
-        _audio.InvalidateAppsCache();
         NotifyAudioVisualChanged();
+    }
+
+    private IDisposable? externalOutputTopology;
+    private void EnsureExternalOutputTopology()
+    {
+        if (!_resident || externalOutputTopology != null) return;
+        try { externalOutputTopology = ProductAudio.WatchDevices(OnExternalOutputTopologyChanged); }
+        catch (Exception error) { ExceptionDiagnostics.Record("ExternalAudio.WatchOutputs", error); }
+    }
+
+    private void OnExternalOutputTopologyChanged()
+    {
+        phone?.QueueSourceReconciliation(refreshRoutes: true);
+        airPlay?.QueueOutputRecovery();
     }
 
     private void RestoreFull()
     {
-        string settingsPath = Path.Combine(_environment.DataDirectory, "android-audio.json");
-        bool hasSavedRoutes = false;
-        if (File.Exists(settingsPath))
-        {
-            var settings = new AndroidAudioSettingsStore(settingsPath);
-            hasSavedRoutes = settings.GetSavedSources().Length != 0;
-        }
+        var settings = ExternalAudioSettings;
+        bool hasSavedRoutes = settings.GetSavedSources().Length != 0 || settings.ExternalAudio.Any(p =>
+            p.App != null && p.Resume || p.App == null && settings.AirPlayEnabled && p.Outputs.Any(AndroidOutputIdentity.IsPhoneOutput));
 
         string clipboardPath = Path.Combine(_environment.DataDirectory, "phone-clipboard.json");
         var preferences = File.Exists(clipboardPath) ? ClipboardPreferences.TryLoad(clipboardPath) : null;
 
+        if (settings.ExternalAudio.Any(choice => choice.App != null && choice.Visible)) _ = Phone;
         if (hasSavedRoutes || preferences is { Enabled.Length: > 0 } or { Archived.Length: > 0 })
         {
             var p = Phone;
@@ -952,18 +1006,24 @@ internal sealed partial class ApplicationHost
                 if (hasSavedRoutes || p.Clipboard.Enabled)
                 {
                     p.StartTracking();
-                    _ = p.RefreshAsync(restore: hasSavedRoutes);
+                    _ = p.RefreshInBackgroundAsync();
                 }
             });
         }
+        if (settings.AirPlayEnabled)
+            _window.TryPost(() => _ = AirPlay.SetReceivingAsync(_config, enabled: true));
     }
 
     private void StopFull()
     {
+        externalOutputTopology?.Dispose();
         if (phone != null) phone.Changed -= OnExternalSourcesChanged;
         if (airPlay != null) airPlay.Changed -= OnExternalSourcesChanged;
-        phone?.Dispose();
         airPlay?.Dispose();
+        phone?.Dispose();
+        externalAudioSettings?.FlushAsync().GetAwaiter().GetResult();
+        _audio.ExternalAudio?.Dispose();
+        _audio.ExternalAudio = null;
     }
 
     private void FullSignal(ShellSignal signal)

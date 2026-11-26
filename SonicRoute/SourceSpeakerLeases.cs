@@ -17,6 +17,7 @@ internal sealed class SourceSpeakerLeases(Func<int, (string? Endpoint, bool Acti
     internal Func<int, string, Action, ILocalPlaybackWatch>? ObservePlayback { get; init; }
 
     internal bool OwnsEndpoint(string endpoint) => _speakers.ContainsKey(endpoint);
+    internal bool HasReservations => !_speakers.IsEmpty;
 
     // Do not take the audio routing lock from a Core Audio callback.
     internal void NoteUnmuted(string endpoint)

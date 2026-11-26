@@ -17,13 +17,14 @@ namespace SonicRoute.Native.Product.Views;
 
 /// <summary>
 /// High-fidelity Direct2D Quick Panel window matching WPF QuickPanelModernWindow 1.36.
-/// Zero idle timers: 160ms entrance animation stops on completion; 50ms peak meter runs ONLY while visible and stops immediately in OnHidden/OnClosed.
+/// The entrance animation stops on completion. The peak meter runs only while visible.
 /// </summary>
 internal sealed class QuickPanelWindow : LayeredWindow
 {
     private static readonly int[] PresetPercentages = [25, 50, 75, 100];
     private static readonly StringComparer IdCmp = StringComparer.OrdinalIgnoreCase;
-    private const int EntranceDurationMs = 160;
+    private const int EntranceDurationMs = 210;
+    private const float ExpandedDeviceInset = 10f;
 
     private sealed class AppRowState
     {
@@ -36,13 +37,19 @@ internal sealed class QuickPanelWindow : LayeredWindow
         public int Volume = 100;
         public bool Muted;
         public bool Available = true;
+        public bool CanMeasurePeak => Available && !Muted;
         public float Peak;
+        public float PaintedPeak;
+        public bool PeakVisible;
+#if SONICROUTE_PHONE
+        public bool ExternalPeakTarget;
+#endif
         public bool Expanded;
         public string NativeOutputId = AudioService.SystemDefaultDeviceId;
         public Endpoint[] OutputDevices = [];
         public HashSet<string> SelectedOutputs = new(IdCmp);
         public string? OutputAnchor;
-        public string NativeInputId = AudioService.SystemDefaultDeviceId;
+        public string NativeInputId = AudioService.SystemDefaultInputDeviceId;
         public string? CachedOutputLabel;
         public byte[]? ExternalIconBgra;
         public int ExtIconW, ExtIconH, ExtIconVer;
@@ -60,6 +67,7 @@ internal sealed class QuickPanelWindow : LayeredWindow
 
     protected override UiHitMap InputMap => _hit;
     protected override float InputOffsetY => _drawnSlideY;
+    protected override bool ShowOwnedWindowTooltips => false;
     private readonly UiHitMap _hit = new();
     private readonly UiScrollState _scroll = new();
     private readonly Dictionary<string, (byte[] Pixels, int W, int H, int Ver)> _extIconCache = new(StringComparer.Ordinal);
@@ -101,8 +109,14 @@ internal sealed class QuickPanelWindow : LayeredWindow
     private bool _loading;
     private bool _refreshQueued;
     private bool _eventsSubscribed;
-    private bool _peakReadInFlight;
-    private int[] _peakPids = [];
+    private PanelPeakMeter? _peakMeter;
+    private readonly HashSet<int> _peakTargets = [];
+    private bool _localPeakDecay;
+#if SONICROUTE_PHONE
+    private bool _externalPeakSubscribed;
+    private bool _externalPeakSampling;
+    private int _externalPeakWakePending;
+#endif
     private int _timerInterval;
     private int _draggingRowIdx = -1;
     private bool _draggingMaster;
@@ -140,8 +154,7 @@ internal sealed class QuickPanelWindow : LayeredWindow
 
     private bool _animatingEntrance;
     private long _entranceStartTick;
-    private float _entranceOpacity = 1f;
-    private float _entranceSlideY;
+    private float _entranceProgress = 1f;
 
     internal event Action? OnDismissRequested;
     internal bool IsPinned => _pinned;
@@ -181,6 +194,11 @@ internal sealed class QuickPanelWindow : LayeredWindow
         if (IsVisible)
         {
             ApplyConfiguredBounds();
+            if (!_config.ShowAppPeakMeter)
+            {
+                StopPeakSampling();
+                UpdateAnimationTimer();
+            }
             RefreshData();
             Invalidate();
         }
@@ -192,24 +210,15 @@ internal sealed class QuickPanelWindow : LayeredWindow
         EnsureCreated(L10n.T("Qp.Panel"));
         ApplyConfiguredBounds();
 
-        if (!IsVisible)
-        {
-            _animatingEntrance = true;
-            _entranceStartTick = Environment.TickCount64;
-            _entranceOpacity = 0.05f;
-            _entranceSlideY = 10f;
-            Show(activate: true);
-        }
-        else
-        {
-            _animatingEntrance = false;
-            _entranceOpacity = 1f;
-            _entranceSlideY = 0f;
-            Show(activate: true);
-        }
+        bool entering = !IsVisible && ClientAreaAnimationsEnabled();
+        _animatingEntrance = entering;
+        _entranceProgress = entering ? 0f : 1f;
 
+        Show(activate: true);
         RefreshData();
         SyncCompanionsVisibility();
+        // Start the shared clock after the visible windows have presented their first frame.
+        if (entering) _entranceStartTick = Environment.TickCount64;
     }
 
     internal bool IsAdjusting => _adjustMode;
@@ -295,11 +304,15 @@ internal sealed class QuickPanelWindow : LayeredWindow
                 }
                 catch { }
 
-                var apps = _host.Audio.Apps();
+                var apps = _host.Audio.Apps(refresh: false, includeOfflineExternal: true);
                 foreach (var app in apps)
                 {
                     if (!app.IsExternal && app.ProcessName is { } proc && _config.HiddenPanelApps.Contains(proc, IdCmp))
                         continue;
+#if SONICROUTE_PHONE
+                    if (app.IsExternal && _host.Audio.ExternalAudio?.IsQuickPanelSourceVisible(app, _config) != true)
+                        continue;
+#endif
 
                     int pid = checked((int)app.ProcessId);
                     string label = !string.IsNullOrWhiteSpace(app.ProcessName)
@@ -310,7 +323,7 @@ internal sealed class QuickPanelWindow : LayeredWindow
 
                     int vol = 0;
                     bool muted = false;
-                    bool avail = true;
+                    bool avail = !app.IsExternalOffline;
                     try
                     {
                         var vs = _host.Audio.Volume(app);
@@ -334,7 +347,7 @@ internal sealed class QuickPanelWindow : LayeredWindow
                     bool expanded = string.Equals(expandedId, app.Identity, StringComparison.Ordinal);
                     string nativeOut = AudioService.SystemDefaultDeviceId;
                     HashSet<string> selectedOuts = new(IdCmp);
-                    string nativeIn = AudioService.SystemDefaultDeviceId;
+                    string nativeIn = AudioService.SystemDefaultInputDeviceId;
 
                     if (expanded || needOutputName)
                     {
@@ -357,7 +370,7 @@ internal sealed class QuickPanelWindow : LayeredWindow
                         {
                             string? persistedIn = _host.Audio.ReadRoute(pid, Flow.Capture);
                             nativeIn = string.IsNullOrWhiteSpace(persistedIn) || AudioService.IsSystemDefault(persistedIn)
-                                ? AudioService.SystemDefaultDeviceId
+                                ? AudioService.SystemDefaultInputDeviceId
                                 : AudioPolicyConfig.UnpackDeviceId(persistedIn);
                         }
                         catch { }
@@ -448,7 +461,7 @@ internal sealed class QuickPanelWindow : LayeredWindow
 
                 foreach (var row in _rows)
                 {
-                    row.Peak = _smoothedPeaks.GetValueOrDefault(row.Identity);
+                    row.Peak = row.CanMeasurePeak ? _smoothedPeaks.GetValueOrDefault(row.Identity) : 0f;
                     if (row.IsExternal && row.App.ExternalIconPng is { Length: > 0 } png)
                     {
                         if (TryGetExternalIcon(row.Identity, png, out var bgra, out int w, out int h, out int ver))
@@ -461,7 +474,6 @@ internal sealed class QuickPanelWindow : LayeredWindow
                     }
                 }
 
-                UpdatePeakTargets();
                 if (IsVisible) Invalidate();
                 if (_refreshQueued && IsVisible)
                 {
@@ -474,12 +486,115 @@ internal sealed class QuickPanelWindow : LayeredWindow
 
     private void UpdatePeakTargets()
     {
-        _peakPids = _rows.Where(static r => !r.IsExternal && r.Pid > 0 && r.Available && !r.Muted)
-            .Select(static r => r.Pid).Distinct().ToArray();
+        if (!_config.ShowAppPeakMeter)
+        {
+            if (_peakMeter != null) StopPeakSampling();
+            UpdateAnimationTimer();
+            return;
+        }
+
+        _peakTargets.Clear();
+        _localPeakDecay = false;
+#if SONICROUTE_PHONE
+        bool hasExternal = false;
+#endif
         foreach (var row in _rows)
-            if (row.Muted || !row.Available) row.Peak = 0f;
+        {
+            if (!row.PeakVisible || !row.CanMeasurePeak) row.Peak = 0f;
+#if SONICROUTE_PHONE
+            if (row.IsExternal)
+            {
+                bool eligible = row.PeakVisible && row.CanMeasurePeak;
+                _externalPeakSampling |= eligible && !row.ExternalPeakTarget;
+                row.ExternalPeakTarget = eligible;
+                hasExternal |= eligible;
+                continue;
+            }
+#endif
+            if (!row.PeakVisible) continue;
+            if (!row.IsExternal && row.Available && row.Pid > 0)
+            {
+                // Keep muted sessions subscribed so an external unmute can restart sampling.
+                _peakTargets.Add(row.Pid);
+                _localPeakDecay |= row.Peak > 0f;
+            }
+        }
+
+        (_peakMeter ??= new PanelPeakMeter(OnLocalPeakChanged)).SetTargets(_peakTargets);
+#if SONICROUTE_PHONE
+        SubscribeExternalPeak(hasExternal);
+#endif
         UpdateAnimationTimer();
     }
+
+    private void OnLocalPeakChanged(PanelPeakMeter meter, bool refreshCatalog)
+    {
+        _host.TryPost(() =>
+        {
+            if (!ReferenceEquals(_peakMeter, meter) || !IsVisible || IsDisposed || !_config.ShowAppPeakMeter) return;
+            if (refreshCatalog) RefreshData();
+            UpdateAnimationTimer();
+        });
+    }
+
+    private void StopPeakSampling()
+    {
+        _peakMeter?.Dispose();
+        _peakMeter = null;
+        _localPeakDecay = false;
+        foreach (var row in _rows)
+        {
+            row.Peak = 0f;
+            row.PaintedPeak = 0f;
+            row.PeakVisible = false;
+#if SONICROUTE_PHONE
+            row.ExternalPeakTarget = false;
+#endif
+        }
+#if SONICROUTE_PHONE
+        SubscribeExternalPeak(false);
+#endif
+    }
+
+#if SONICROUTE_PHONE
+    private void SubscribeExternalPeak(bool enable)
+    {
+        if (enable == _externalPeakSubscribed) return;
+        _externalPeakSubscribed = enable;
+        _externalPeakSampling = enable;
+        if (enable) ExternalAudioBridge.PeakActivity += OnExternalPeakActivity;
+        else ExternalAudioBridge.PeakActivity -= OnExternalPeakActivity;
+    }
+
+    private void OnExternalPeakActivity()
+    {
+        if (Interlocked.Exchange(ref _externalPeakWakePending, 1) != 0) return;
+        if (!_host.TryPost(() =>
+        {
+            Interlocked.Exchange(ref _externalPeakWakePending, 0);
+            if (!_externalPeakSubscribed || !IsVisible || IsDisposed || !_config.ShowAppPeakMeter) return;
+            _externalPeakSampling = true;
+            UpdateAnimationTimer();
+        }))
+            Interlocked.Exchange(ref _externalPeakWakePending, 0);
+    }
+
+    private bool ReadExternalPeaks()
+    {
+        if (!_externalPeakSampling || _host.Audio.ExternalAudio is not { } bridge) return false;
+        bool keepSampling = false;
+        bool changed = false;
+        foreach (var row in _rows)
+        {
+            if (!row.IsExternal || !row.PeakVisible || !row.CanMeasurePeak) continue;
+            var (active, peak) = bridge.ReadPeak(row.App.ExternalSourceId);
+            changed |= UpdateRowPeak(row, peak);
+            keepSampling |= active || row.Peak > 0f;
+        }
+        _externalPeakSampling = keepSampling;
+        return changed;
+    }
+#endif
 
     private void UpdateAnimationTimer()
     {
@@ -487,7 +602,11 @@ internal sealed class QuickPanelWindow : LayeredWindow
         if (IsVisible && !IsDisposed)
         {
             if (_animatingEntrance) interval = 16;
-            else if (_config.ShowAppPeakMeter && _peakPids.Length != 0) interval = 50;
+            else if (_config.ShowAppPeakMeter && (_peakMeter?.IsSampling == true || _localPeakDecay
+#if SONICROUTE_PHONE
+                || _externalPeakSampling
+#endif
+                )) interval = 50;
         }
         if (_timerInterval == interval) return;
         StopAnimationTimer();
@@ -499,7 +618,6 @@ internal sealed class QuickPanelWindow : LayeredWindow
     {
         base.OnShown();
         SubscribeEvents(true);
-        UpdateAnimationTimer();
     }
 
     protected override void OnHidden()
@@ -508,6 +626,7 @@ internal sealed class QuickPanelWindow : LayeredWindow
         StopAnimationTimer();
         _timerInterval = 0;
         _animatingEntrance = false;
+        StopPeakSampling();
         if (_adjustMode)
         {
             _adjustMode = false;
@@ -527,6 +646,7 @@ internal sealed class QuickPanelWindow : LayeredWindow
         StopAnimationTimer();
         _timerInterval = 0;
         _animatingEntrance = false;
+        StopPeakSampling();
         if (_adjustMode)
         {
             _adjustMode = false;
@@ -561,51 +681,45 @@ internal sealed class QuickPanelWindow : LayeredWindow
         {
             float t = Math.Clamp((Environment.TickCount64 - _entranceStartTick) / (float)EntranceDurationMs, 0f, 1f);
             float inv = 1f - t;
-            float ease = 1f - inv * inv * inv; // CubicEase-Out
-            _entranceOpacity = 0.05f + 0.95f * ease;
-            _entranceSlideY = (1f - ease) * 10f;
+            _entranceProgress = 1f - inv * inv * inv; // CubicEase-Out
             if (t >= 1f)
             {
                 _animatingEntrance = false;
-                _entranceOpacity = 1f;
-                _entranceSlideY = 0f;
                 UpdateAnimationTimer();
             }
+            UpdateCompanionEntranceOpacity();
             Invalidate();
             return;
         }
 
-        if (_peakReadInFlight || _peakPids.Length == 0 || !_config.ShowAppPeakMeter) return;
-        int[] pids = _peakPids;
+        if (!_config.ShowAppPeakMeter) return;
+        bool changed = ReadLocalPeaks();
+#if SONICROUTE_PHONE
+        changed |= ReadExternalPeaks();
+#endif
+        if (changed) Invalidate();
+        UpdateAnimationTimer();
+    }
 
-        _peakReadInFlight = true;
-        _ = Task.Run(() =>
+    private bool ReadLocalPeaks()
+    {
+        if (_peakMeter is not { } meter || (!meter.IsSampling && !_localPeakDecay)) return false;
+        bool changed = false;
+        _localPeakDecay = false;
+        foreach (var row in _rows)
         {
-            Dictionary<int, float>? read = null;
-            try { read = _host.Audio.ReadPeaks(pids); }
-            catch { }
+            if (row.IsExternal || !row.PeakVisible || !row.CanMeasurePeak) continue;
+            changed |= UpdateRowPeak(row, meter.Read(row.Pid));
+            _localPeakDecay |= row.Peak > 0f;
+        }
+        meter.Sample();
+        return changed;
+    }
 
-            _host.TryPost(() =>
-            {
-                _peakReadInFlight = false;
-                if (!IsVisible || IsDisposed) return;
-                bool changed = false;
-                foreach (var row in _rows)
-                {
-                    if (row.IsExternal) continue;
-                    float target = read != null && !row.Muted && read.TryGetValue(row.Pid, out float v) ? v : 0f;
-                    float prev = row.Peak;
-                    float next = target >= prev ? target : prev * 0.72f;
-                    if (next < 0.005f) next = 0f;
-                    if (MathF.Abs(next - prev) > 0.008f)
-                    {
-                        row.Peak = next;
-                        changed = true;
-                    }
-                }
-                if (changed) Invalidate();
-            });
-        });
+    private static bool UpdateRowPeak(AppRowState row, float peak)
+    {
+        UiPrimitives.UpdateVolumePeak(ref row.Peak, peak);
+        return UiPrimitives.HasVolumePeakChanged(row.PaintedPeak, row.Peak);
     }
 
     protected override string GetWindowTitle() => L10n.T("Qp.Panel");
@@ -613,8 +727,9 @@ internal sealed class QuickPanelWindow : LayeredWindow
     protected override void OnRender(D2dTarget g, float widthDip, float heightDip)
     {
         _hit.Clear();
-        _drawnSlideY = _animatingEntrance ? _entranceSlideY : 0f;
-        UiThemePalette theme = _animatingEntrance ? ScaleThemeOpacity(_theme, _entranceOpacity) : _theme;
+        foreach (var row in _rows) row.PeakVisible = false;
+        _drawnSlideY = _animatingEntrance ? (1f - _entranceProgress) * 10f : 0f;
+        UiThemePalette theme = _animatingEntrance ? ScaleThemeOpacity(_theme, 0.05f + 0.95f * _entranceProgress) : _theme;
         if (_animatingEntrance)
         {
             g.PushTransform(new D2dMatrix3x2(1f, 0f, 0f, 1f, 0f, _drawnSlideY));
@@ -627,6 +742,7 @@ internal sealed class QuickPanelWindow : LayeredWindow
         finally
         {
             if (_animatingEntrance) g.PopTransform();
+            UpdatePeakTargets();
         }
     }
 
@@ -655,7 +771,7 @@ internal sealed class QuickPanelWindow : LayeredWindow
         float titleWidth = D2dSharedContext.Instance.MeasureText(BuildIdentity.DisplayName, UiMetrics.FontFamily,
             14f, 700, innerW, 28f, false).Width;
         var titleRect = new UiRect(padX, y, titleWidth + 4f, 28f);
-        _hit.Add("qp.title", titleRect, UiCursorKind.Hand, PinTitleTooltip());
+        _hit.Add("qp.title", titleRect, UiCursorKind.Hand);
         if (_hit.IsHover("qp.title") || _hit.IsActive("qp.title"))
             g.FillRoundedRect(titleRect, 4f, theme.NavHover);
         g.DrawText(BuildIdentity.DisplayName, titleRect, _pinned ? theme.Accent : theme.TextPrimary,
@@ -666,8 +782,7 @@ internal sealed class QuickPanelWindow : LayeredWindow
         var phoneRect = new UiRect(rx - phoneBtnW, y - 1f, phoneBtnW, 28f);
         bool phoneOpen = _phoneCompanion is { IsVisible: true };
         UiPrimitives.DrawSecondaryButton(g, theme, _hit, "qp.phone", phoneRect, "",
-            radius: 8f, icon: UiIcon.Phone, active: phoneOpen,
-            tooltip: phoneOpen ? L10n.T("Phone.ClosePhoneAudio") : L10n.T("Phone.OpenPhoneAudio"));
+            radius: 8f, icon: UiIcon.Phone, active: phoneOpen);
         rx = phoneRect.X - 6f;
 #endif
 
@@ -682,14 +797,14 @@ internal sealed class QuickPanelWindow : LayeredWindow
         const float expBtnSize = 32f;
         var outputsToggleRect = new UiRect(padX + innerW - expBtnSize, y, expBtnSize, expBtnSize);
         bool outPopOpen = _outputVolumesPopup is { IsVisible: true };
-        _hit.Add("qp.outputs", outputsToggleRect, UiCursorKind.Hand, L10n.T("Qp.ExpandOutputVolumes"));
+        _hit.Add("qp.outputs", outputsToggleRect, UiCursorKind.Hand);
         g.FillRoundedRect(outputsToggleRect, 8f, outPopOpen ? theme.NavSelected : _hit.IsHover("qp.outputs") ? theme.NavHover : theme.SurfaceBg);
         g.DrawRoundedRect(outputsToggleRect, 8f, outPopOpen || _hit.IsHover("qp.outputs") ? theme.Accent : theme.Border, 1f);
         g.DrawIcon(UiIcon.ChevronUp, new UiRect(outputsToggleRect.CenterX - 5f, outputsToggleRect.CenterY - 5f, 10f, 10f),
             outPopOpen ? theme.Accent : theme.TextSecondary, 1.8f, outPopOpen ? 180f : 0f);
 
         var masterComboRect = new UiRect(padX, y, MathF.Max(60f, outputsToggleRect.X - 6f - padX), 32f);
-        _hit.Add("qp.masterdev", masterComboRect, UiCursorKind.Hand, devName);
+        _hit.Add("qp.masterdev", masterComboRect, UiCursorKind.Hand);
         bool comboHot = _hit.IsHover("qp.masterdev");
         bool comboOpen = _comboPopup is { IsDisposed: false, IsVisible: true };
         g.FillRoundedRect(masterComboRect, 8f, theme.SurfaceBg);
@@ -747,13 +862,11 @@ internal sealed class QuickPanelWindow : LayeredWindow
         float collapsedHeight = legacyLayout ? UiMetrics.QuickPanelCompactRowHeight : UiMetrics.QuickPanelFullRowHeight;
         var collapsed = new RowLayout(collapsedHeight, [], []);
         AppRowState? expandedRow = _expandedAppId == null ? null : _rows.Find(static r => r.Expanded);
-        RowLayout expanded = expandedRow == null ? collapsed : MeasureExpandedRow(expandedRow, collapsedHeight, showInputsInPanel, listRect.Width);
+        // Device pills can use the space up to the scroll track independently of the slider row's padding.
+        const float deviceTrackGap = 2f;
+        float deviceWidth = MathF.Max(60f, listRect.Width - UiMetrics.ScrollBarWidth - deviceTrackGap - ExpandedDeviceInset);
+        RowLayout expanded = expandedRow == null ? collapsed : MeasureExpandedRow(expandedRow, collapsedHeight, showInputsInPanel, deviceWidth);
         float totalContentH = collapsedHeight * _rows.Count + expanded.TotalH - collapsedHeight;
-        if (expandedRow != null && totalContentH > listRect.Height)
-        {
-            expanded = MeasureExpandedRow(expandedRow, collapsedHeight, showInputsInPanel, listRect.Width - UiMetrics.ScrollBarWidth - 4f);
-            totalContentH = collapsedHeight * (_rows.Count - 1) + expanded.TotalH;
-        }
 
         _scroll.ViewportHeight = listRect.Height;
         _scroll.ContentHeight = totalContentH;
@@ -776,7 +889,8 @@ internal sealed class QuickPanelWindow : LayeredWindow
                 if (curY + layout.TotalH >= listRect.Y && curY <= listRect.Bottom)
                 {
                     bool isCurrent = currentApp != null && string.Equals(row.Identity, currentApp.Identity, StringComparison.OrdinalIgnoreCase);
-                    RenderAppRow(g, theme, row, new UiRect(listRect.X, curY, rowW, layout.TotalH), legacyLayout, isCurrent, layout.OutPills, layout.InPills);
+                    RenderAppRow(g, theme, row, new UiRect(listRect.X, curY, rowW, layout.TotalH),
+                        legacyLayout, isCurrent, deviceWidth, layout.OutPills, layout.InPills);
                 }
                 curY += layout.TotalH;
             }
@@ -840,19 +954,18 @@ internal sealed class QuickPanelWindow : LayeredWindow
     private readonly record struct RowLayout(float TotalH, IReadOnlyList<(string Id, string Label, UiRect Rect, bool IsExit)> OutPills,
         IReadOnlyList<(string Id, string Label, UiRect Rect)> InPills);
 
-    private RowLayout MeasureExpandedRow(AppRowState row, float collapsedHeight, bool showInputs, float rowWidth)
+    private RowLayout MeasureExpandedRow(AppRowState row, float collapsedHeight, bool showInputs, float deviceWidth)
     {
         float headerH = collapsedHeight - 2f;
         var outPills = new List<(string, string, UiRect, bool)>();
         var inPills = new List<(string, string, UiRect)>();
-        float devX = 26f;
-        float devW = MathF.Max(60f, rowWidth - devX);
+        float devX = ExpandedDeviceInset;
         float y = headerH + 4f;
 
         // Output group label + wrapped pills
         y += 20f;
         var outChoices = BuildOutputChoicesForRow(row);
-        float outH = LayoutWrappedPills(outChoices, hasTrailingExit: row.IsExternal, devX, y, devW, outPills);
+        float outH = LayoutWrappedPills(outChoices, hasTrailingExit: row.IsExternal, devX, y, deviceWidth, outPills);
         y += outH;
 
         // Input group when ExperimentalMic && MicInPanel && !IsExternal
@@ -861,7 +974,7 @@ internal sealed class QuickPanelWindow : LayeredWindow
             y += 8f;
             y += 20f;
             var inChoices = BuildInputChoices();
-            float inH = LayoutWrappedPills(inChoices, devX, y, devW, inPills);
+            float inH = LayoutWrappedPills(inChoices, devX, y, deviceWidth, inPills);
             y += inH;
         }
 
@@ -931,12 +1044,12 @@ internal sealed class QuickPanelWindow : LayeredWindow
     {
         var choices = new List<(string Id, string Name)>(row.OutputDevices.Length + 1);
         const string defaultId = AudioService.SystemDefaultDeviceId;
-        if (!_config.HiddenOutputDevices.Contains(defaultId))
+        if (_config.IsDeviceShown(EDataFlow.eRender, defaultId))
             choices.Add((defaultId, Label(defaultId, L10n.T("Dev.SystemDefaultOut"))));
 
         foreach (var d in row.OutputDevices)
         {
-            if (_config.HiddenOutputDevices.Contains(d.Id)) continue;
+            if (!_config.IsDeviceShown(EDataFlow.eRender, d.PreferenceId)) continue;
             choices.Add((d.Id, Label(d.Id, d.Name)));
         }
         return choices;
@@ -947,13 +1060,13 @@ internal sealed class QuickPanelWindow : LayeredWindow
 
     private List<(string Id, string Name)> BuildInputChoices()
     {
-        var choices = new List<(string Id, string Name)>(_inputs.Length + 1)
-        {
-            (AudioService.SystemDefaultDeviceId, L10n.T("Dev.SystemDefaultIn"))
-        };
+        var choices = new List<(string Id, string Name)>(_inputs.Length + 1);
+        const string defaultId = AudioService.SystemDefaultInputDeviceId;
+        if (_config.IsDeviceShown(EDataFlow.eCapture, defaultId))
+            choices.Add((defaultId, L10n.T("Dev.SystemDefaultIn")));
         foreach (var d in _inputs)
         {
-            if (_config.HiddenInputDevices.Contains(d.Id)) continue;
+            if (!_config.IsDeviceShown(EDataFlow.eCapture, d.PreferenceId)) continue;
             choices.Add((d.Id, _config.DeviceNames.GetValueOrDefault(d.Id, d.Name)));
         }
         return choices;
@@ -967,6 +1080,14 @@ internal sealed class QuickPanelWindow : LayeredWindow
         return false;
     }
 
+    private void DrawAppSlider(D2dTarget g, UiThemePalette theme, AppRowState row, string id, UiRect rect)
+    {
+        row.PeakVisible = !_hit.VisiblePart(rect).IsEmpty;
+        row.PaintedPeak = row.Peak;
+        UiPrimitives.DrawVolumeSlider(g, theme, _hit, id, rect, row.Volume / 100f, row.Peak, row.Muted,
+            _config.ShowAppPeakMeter, enabled: row.Available, compact: true, dimUnavailable: row.App.IsExternalOffline);
+    }
+
     private void RenderAppRow(
         D2dTarget g,
         UiThemePalette theme,
@@ -974,6 +1095,7 @@ internal sealed class QuickPanelWindow : LayeredWindow
         UiRect rowBounds,
         bool legacyLayout,
         bool isCurrent,
+        float deviceWidth,
         IReadOnlyList<(string Id, string Label, UiRect Rect, bool IsExit)> outPills,
         IReadOnlyList<(string Id, string Label, UiRect Rect)> inPills)
     {
@@ -993,9 +1115,8 @@ internal sealed class QuickPanelWindow : LayeredWindow
         // 30x30 Icon button on left + 18x18 real icon + 8x8 AccentInverse mute dot
         var iconBtnRect = new UiRect(headerRect.X + 4f, headerRect.CenterY - 15f, 30f, 30f);
         string iconHitId = $"qp.appmute:{row.HitKey}";
-        string iconTip = string.IsNullOrEmpty(row.App.SourceLabel) ? row.DisplayName : $"{row.DisplayName} ({row.App.SourceLabel})";
-        _hit.Add(iconHitId, iconBtnRect, UiCursorKind.Hand, iconTip);
-        if (_hit.IsHover(iconHitId))
+        _hit.Add(iconHitId, iconBtnRect, row.Available ? UiCursorKind.Hand : UiCursorKind.Arrow, row.DisplayName);
+        if (row.Available && _hit.IsHover(iconHitId))
         {
             g.FillRoundedRect(iconBtnRect, 6f, theme.NavHover);
         }
@@ -1012,13 +1133,19 @@ internal sealed class QuickPanelWindow : LayeredWindow
         {
             g.DrawBgraBitmap($"qp.icon:{row.App.ProcessName ?? row.Pid.ToString(CultureInfo.InvariantCulture)}", bmp.BgraPixels, bmp.Width, bmp.Height, iconBox);
         }
+#if SONICROUTE_PHONE
+        else if (row.App.ProcessName == "airplay:receiver")
+            g.DrawIcon(UiIcon.AirPlay, iconBox, theme.TextSecondary, 1.6f);
+        else if (row.App.ProcessName == "android:sonicroute:device-audio")
+            g.DrawIcon(UiIcon.Phone, iconBox, theme.TextSecondary, 1.6f);
+#endif
         else
         {
             string ch = string.IsNullOrEmpty(row.DisplayName) ? "♪" : row.DisplayName[..1].ToUpperInvariant();
             g.DrawText(ch, iconBox, theme.TextPrimary, 12.5f, 600, UiTextAlign.Center, UiVertAlign.Center);
         }
 
-        if (row.Muted)
+        if (row.Available && row.Muted)
         {
             g.FillEllipse(iconBtnRect.Right - 5f, iconBtnRect.Y + 6f, 4f, 4f, theme.AccentInverse);
         }
@@ -1029,7 +1156,7 @@ internal sealed class QuickPanelWindow : LayeredWindow
         float expandH = legacyLayout ? (showCompactOutName ? 24f : 20f) : 32f;
         var expandRect = new UiRect(headerRect.Right - expandW - 2f, headerRect.CenterY - expandH * 0.5f, expandW, expandH);
         string expandId = $"qp.expand:{row.HitKey}";
-        _hit.Add(expandId, expandRect, UiCursorKind.Hand, L10n.T("Qp.ExpandDevices"));
+        _hit.Add(expandId, expandRect, UiCursorKind.Hand);
         if (row.Expanded) g.FillRoundedRect(expandRect, 6f, theme.NavSelected);
         else if (_hit.IsHover(expandId)) g.FillRoundedRect(expandRect, 6f, theme.NavHover);
 
@@ -1054,9 +1181,7 @@ internal sealed class QuickPanelWindow : LayeredWindow
         if (legacyLayout)
         {
             var sliderRect = new UiRect(midX, headerRect.CenterY - 16f, midW, 32f);
-            UiPrimitives.DrawVolumeSlider(g, theme, _hit, sliderId, sliderRect,
-                row.Volume / 100f, row.Peak, row.Muted, _config.ShowAppPeakMeter && !row.IsExternal,
-                style: UiSliderStyle.PanelRow, enabled: row.Available);
+            DrawAppSlider(g, theme, row, sliderId, sliderRect);
         }
         else
         {
@@ -1069,18 +1194,15 @@ internal sealed class QuickPanelWindow : LayeredWindow
             g.DrawText(title, nameRect, row.Available ? theme.TextPrimary : theme.TextSecondary, 11.5f, isCurrent ? 700 : 600, UiTextAlign.Leading, UiVertAlign.Center);
 
             var sliderRect = new UiRect(midX, headerRect.Y + 18f, midW, 32f);
-            UiPrimitives.DrawVolumeSlider(g, theme, _hit, sliderId, sliderRect,
-                row.Volume / 100f, row.Peak, row.Muted, _config.ShowAppPeakMeter && !row.IsExternal,
-                style: UiSliderStyle.PanelRow, enabled: row.Available);
+            DrawAppSlider(g, theme, row, sliderId, sliderRect);
         }
 
         // Expanded device wrap-grid
         if (!row.Expanded) return;
 
-        float devX = rowBounds.X + 26f;
-        float devW = MathF.Max(60f, rowBounds.Right - devX);
+        float devX = rowBounds.X + ExpandedDeviceInset;
         float outLabelY = headerRect.Bottom + 4f;
-        g.DrawText(L10n.T("Qp.Output"), new UiRect(devX, outLabelY, devW, 16f), theme.TextSecondary, 11f, 600, UiTextAlign.Leading, UiVertAlign.Center);
+        g.DrawText(L10n.T("Qp.Output"), new UiRect(devX, outLabelY, deviceWidth, 16f), theme.TextSecondary, 11f, 600, UiTextAlign.Leading, UiVertAlign.Center);
 
         foreach (var (devId, label, relRect, isExit) in outPills)
         {
@@ -1088,7 +1210,7 @@ internal sealed class QuickPanelWindow : LayeredWindow
             if (isExit)
             {
                 string exitId = $"qp.appexit:{row.HitKey}";
-                _hit.Add(exitId, btnRect, UiCursorKind.Hand, L10n.T("Phone.StopReceivingApp"));
+                _hit.Add(exitId, btnRect, UiCursorKind.Hand);
                 bool exitHot = _hit.IsHover(exitId);
                 g.FillRoundedRect(btnRect, 7f, theme.SurfaceBg);
                 g.DrawRoundedRect(btnRect, 7f, exitHot ? theme.Fail : theme.Border, 1f);
@@ -1097,15 +1219,21 @@ internal sealed class QuickPanelWindow : LayeredWindow
             }
 
             string hitId = $"qp.appdev:{row.HitKey}:{devId}";
-            _hit.Add(hitId, btnRect, UiCursorKind.Hand, label);
+            if (row.Available) _hit.Add(hitId, btnRect, UiCursorKind.Hand);
 
             bool isNative = IdCmp.Equals(row.NativeOutputId, devId);
             bool isMirror = !isNative && row.SelectedOutputs.Contains(devId);
-            bool hot = _hit.IsHover(hitId);
+            bool hot = row.Available && _hit.IsHover(hitId);
 
             UiColor bg = isNative ? theme.DeviceNativeBg : isMirror ? theme.Overlay : theme.SurfaceBg;
             UiColor fg = isNative ? theme.DeviceNativeFg : theme.TextPrimary;
             UiColor brd = isNative ? theme.Accent : hot ? theme.Accent : isMirror ? theme.DeviceMirrorBorder : theme.Border;
+            if (!row.Available)
+            {
+                bg = theme.SurfaceBg;
+                fg = theme.TextSecondary;
+                brd = theme.Border;
+            }
 
             g.FillRoundedRect(btnRect, 7f, bg);
             g.DrawRoundedRect(btnRect, 7f, brd, 1f);
@@ -1115,13 +1243,13 @@ internal sealed class QuickPanelWindow : LayeredWindow
         if (inPills.Count > 0)
         {
             float inLabelY = inPills[0].Rect.Y - 20f + rowBounds.Y;
-            g.DrawText(L10n.T("Qp.Input"), new UiRect(devX, inLabelY, devW, 16f), theme.TextSecondary, 11f, 600, UiTextAlign.Leading, UiVertAlign.Center);
+            g.DrawText(L10n.T("Qp.Input"), new UiRect(devX, inLabelY, deviceWidth, 16f), theme.TextSecondary, 11f, 600, UiTextAlign.Leading, UiVertAlign.Center);
 
             foreach (var (devId, label, relRect) in inPills)
             {
                 var btnRect = relRect.Offset(rowBounds.X, rowBounds.Y);
                 string hitId = $"qp.appin:{row.HitKey}:{devId}";
-                _hit.Add(hitId, btnRect, UiCursorKind.Hand, label);
+                _hit.Add(hitId, btnRect, UiCursorKind.Hand);
 
                 bool isNativeIn = IdCmp.Equals(row.NativeInputId, devId);
                 bool hot = _hit.IsHover(hitId);
@@ -1150,7 +1278,7 @@ internal sealed class QuickPanelWindow : LayeredWindow
     private void DrawToolButton(D2dTarget g, UiThemePalette theme, string id, UiRect rect, string label,
         bool enabled = true, bool active = false)
     {
-        if (enabled) _hit.Add(id, rect, UiCursorKind.Hand, label);
+        if (enabled) _hit.Add(id, rect, UiCursorKind.Hand);
         bool hovered = enabled && _hit.IsHover(id);
         if (hovered || _hit.IsActive(id))
             g.FillRoundedRect(rect, 8f, theme.NavHover);
@@ -1252,7 +1380,7 @@ internal sealed class QuickPanelWindow : LayeredWindow
 
         if (leftDown && _draggingMaster)
         {
-            int val = UiPrimitives.SliderValueFromX(_draggingSliderRect, xDip);
+            int val = UiPrimitives.VolumeSliderValueFromX(_draggingSliderRect, xDip);
             if (_masterVolume != val)
             {
                 _masterVolume = val;
@@ -1266,7 +1394,7 @@ internal sealed class QuickPanelWindow : LayeredWindow
         if (leftDown && _draggingRowIdx >= 0 && _draggingRowIdx < _rows.Count)
         {
             var row = _rows[_draggingRowIdx];
-            int val = UiPrimitives.SliderValueFromX(_draggingSliderRect, xDip, UiSliderStyle.PanelRow);
+            int val = UiPrimitives.VolumeSliderValueFromX(_draggingSliderRect, xDip, compact: true);
             if (row.Volume != val)
             {
                 row.Volume = val;
@@ -1350,7 +1478,7 @@ internal sealed class QuickPanelWindow : LayeredWindow
         {
             _draggingMaster = true;
             _draggingSliderRect = hit.Value.Bounds;
-            int val = UiPrimitives.SliderValueFromX(_draggingSliderRect, e.X);
+            int val = UiPrimitives.VolumeSliderValueFromX(_draggingSliderRect, e.X);
             _masterVolume = val;
             QueueMasterVolume(val);
             SyncMasterToOutputPopup(val, null);
@@ -1364,7 +1492,7 @@ internal sealed class QuickPanelWindow : LayeredWindow
             {
                 _draggingRowIdx = rIdx;
                 _draggingSliderRect = hit.Value.Bounds;
-                int val = UiPrimitives.SliderValueFromX(_draggingSliderRect, e.X, UiSliderStyle.PanelRow);
+                int val = UiPrimitives.VolumeSliderValueFromX(_draggingSliderRect, e.X, compact: true);
                 _rows[rIdx].Volume = val;
                 QueueAppVolume(_rows[rIdx], val);
                 Invalidate();
@@ -1375,7 +1503,7 @@ internal sealed class QuickPanelWindow : LayeredWindow
 #if SONICROUTE_PHONE
         if (hit.Value.Id.StartsWith("qp.appmute:", StringComparison.Ordinal) && TryGetAppIndex(hit.Value.Id.AsSpan(11), out int dragIdx))
         {
-            if (dragIdx >= 0 && dragIdx < _rows.Count && (_rows[dragIdx].IsExternal || _phoneCompanion is { IsVisible: true }))
+            if (dragIdx >= 0 && dragIdx < _rows.Count && _rows[dragIdx].Available && (_rows[dragIdx].IsExternal || _phoneCompanion is { IsVisible: true }))
             {
                 _pendingDragRowIdx = dragIdx;
                 _appDragStartDipX = e.X;
@@ -1617,19 +1745,6 @@ internal sealed class QuickPanelWindow : LayeredWindow
         if (!active) CheckAutoDismiss();
     }
 
-    private string PinTitleTooltip() => L10n.CurrentLanguage switch
-    {
-        "zh-CN" => _pinned ? "取消固定，切换窗口时关闭面板" : "固定面板，切换窗口时保持打开",
-        "zh-TW" => _pinned ? "取消固定，切換視窗時關閉面板" : "固定面板，切換視窗時保持開啟",
-        "ja-JP" => _pinned ? "固定を解除して、ウィンドウを切り替えるとパネルを閉じる" : "パネルを固定して、ウィンドウを切り替えても開いたままにする",
-        "ko-KR" => _pinned ? "고정 해제하고 다른 창으로 전환하면 패널 닫기" : "다른 창으로 전환해도 패널을 열어 두기",
-        "de-DE" => _pinned ? "Anheften aufheben und das Panel beim Fensterwechsel schließen" : "Panel beim Wechsel zu einem anderen Fenster geöffnet lassen",
-        "fr-FR" => _pinned ? "Désépingler et fermer le panneau lors du changement de fenêtre" : "Garder le panneau ouvert lors du changement de fenêtre",
-        "es-ES" => _pinned ? "Desfijar el panel y cerrarlo al cambiar de ventana" : "Mantener el panel abierto al cambiar de ventana",
-        "ru-RU" => _pinned ? "Открепить панель и закрывать её при смене окна" : "Оставлять панель открытой при смене окна",
-        _ => _pinned ? "Unpin and close the panel when switching windows" : "Keep the panel open when switching windows",
-    };
-
     private void CheckAutoDismiss()
     {
         if (_pinned || _adjustMode || HasOpenModal || !IsVisible) return;
@@ -1826,7 +1941,6 @@ internal sealed class QuickPanelWindow : LayeredWindow
         if (!row.Available) return;
 
         row.Muted = !row.Muted;
-        UpdatePeakTargets();
         Invalidate();
         var app = row.App;
         _host.SubmitPanelAudio(() =>
@@ -1841,7 +1955,6 @@ internal sealed class QuickPanelWindow : LayeredWindow
                     if (current == null) return;
                     current.Muted = st.Muted;
                     if (st.Percent >= 0) current.Volume = st.Percent;
-                    UpdatePeakTargets();
                     if (IsVisible) Invalidate();
                 });
             }
@@ -1877,12 +1990,12 @@ internal sealed class QuickPanelWindow : LayeredWindow
                 var selected = _host.Audio.GetSelectedOutputs(app).ToHashSet(IdCmp);
                 if (selected.Count == 0) selected.Add(route);
 
-                string inputRoute = AudioService.SystemDefaultDeviceId;
+                string inputRoute = AudioService.SystemDefaultInputDeviceId;
                 if (includeInputs)
                 {
                     string? pin = _host.Audio.ReadRoute(checked((int)app.ProcessId), Flow.Capture);
                     inputRoute = string.IsNullOrWhiteSpace(pin) || AudioService.IsSystemDefault(pin)
-                        ? AudioService.SystemDefaultDeviceId
+                        ? AudioService.SystemDefaultInputDeviceId
                         : AudioPolicyConfig.UnpackDeviceId(pin);
                 }
 
@@ -1907,6 +2020,7 @@ internal sealed class QuickPanelWindow : LayeredWindow
     {
         if (rowIdx < 0 || rowIdx >= _rows.Count) return;
         var row = _rows[rowIdx];
+        if (!row.Available) return;
 
         var choices = BuildOutputChoicesForRow(row);
         string[] order = choices.Select(c => c.Id).ToArray();
@@ -1968,7 +2082,7 @@ internal sealed class QuickPanelWindow : LayeredWindow
         else
 #endif
         {
-            write = !ctrl && !shift && !PcRoutingApi.IsPhoneOutputDevice(devId)
+            write = !ctrl && !shift
                 ? _host.CurrentApp.SelectOutputAsync(row.Pid, devId, FeedbackKind.PanelWarning)
                 : _host.CurrentApp.SetOutputsAsync(row.Pid, preferred, nextOutputs, FeedbackKind.PanelWarning);
         }
@@ -2019,20 +2133,12 @@ internal sealed class QuickPanelWindow : LayeredWindow
         var row = _rows[rowIdx];
         if (!row.IsExternal) return;
 #if SONICROUTE_PHONE
-        string? sourceId = row.App.ExternalSourceId;
-        if (string.IsNullOrWhiteSpace(sourceId)) return;
         _ = Task.Run(async () =>
         {
             try
             {
-                if (_host.HasPhone && _host.Phone.Sources.FindSource(sourceId) is { } androidSrc)
-                {
-                    await _host.Phone.Sources.RemoveAsync(androidSrc.Id).ConfigureAwait(false);
-                }
-                else if (_host.HasAirPlay && _host.AirPlay.Source is { } ap && string.Equals(ap.Id, sourceId, StringComparison.Ordinal))
-                {
-                    _host.AirPlay.Disconnect();
-                }
+                if (_host.Audio.ExternalAudio is { } bridge)
+                    await bridge.StopExternalSourceAsync(row.App).ConfigureAwait(false);
             }
             catch (Exception ex) { ExceptionDiagnostics.Record("Panel.Disconnect", ex); _host.TryPost(_host.ReportAudioWriteFailure); }
             _host.TryPost(() => { if (IsVisible && !IsDisposed) RefreshData(); });
@@ -2073,7 +2179,7 @@ internal sealed class QuickPanelWindow : LayeredWindow
 
     private void OpenMasterDeviceCombo(UiRect anchor)
     {
-        var visibleOutputs = _outputs.Where(d => !_config.HiddenOutputDevices.Contains(d.Id)).ToArray();
+        var visibleOutputs = _outputs.Where(d => _config.IsDeviceShown(EDataFlow.eRender, d.PreferenceId)).ToArray();
         var choices = visibleOutputs
             .Select(d => new ComboChoice(d.Id, _config.DeviceNames.GetValueOrDefault(d.Id, d.Name)
                 + (IdCmp.Equals(d.Id, _defaultOutputId) ? L10n.T("Ov.Default") : ""), UiIcon.Headphones))
@@ -2157,6 +2263,16 @@ internal sealed class QuickPanelWindow : LayeredWindow
         {
             _outputVolumesPopup.Hide();
         }
+    }
+
+    internal void ApplyCompanionEntrance(LayeredWindow companion) => companion.SetDockedEntrance(this, _entranceProgress);
+
+    private void UpdateCompanionEntranceOpacity()
+    {
+#if SONICROUTE_PHONE
+        if (_phoneCompanion is { IsVisible: true } phone) ApplyCompanionEntrance(phone);
+#endif
+        if (_outputVolumesPopup is { IsVisible: true } outputs) ApplyCompanionEntrance(outputs);
     }
 
     private void OnOutputPopupEndpointChanged(string? deviceId, int? volume, bool? muted)

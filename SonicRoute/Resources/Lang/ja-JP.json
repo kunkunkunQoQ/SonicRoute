@@ -667,6 +667,7 @@
   "Phone.PairAndConnect": "ペア設定して接続",
   "Phone.ConnectedStatus": "接続済み",
   "Phone.ProcessingStatus": "処理しています…",
+  "Phone.DragAppOrder": "アプリアイコンをドラッグして並べ替えます。端に近づけるとスクロールし、Esc キーでキャンセルできます。",
   "Phone.QuickPanelAppsTitle": "クイックパネルに表示するアプリ",
   "Phone.SmartVolumeTitle": "スマート音量調整",
   "Phone.ClipboardSyncTitle": "クリップボードの同期",

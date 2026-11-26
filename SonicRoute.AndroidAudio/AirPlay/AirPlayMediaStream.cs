@@ -160,6 +160,8 @@ internal sealed class AirPlayMediaStream : IAsyncDisposable
                 int waitMs = Math.Clamp((queued - target) * 1000 / (2 * AndroidAudio.AndroidPcmSource.SampleRate), 12, 100);
                 await Task.Delay(waitMs, token).ConfigureAwait(false);
             }
+            if (_output.State.State == AndroidAudio.CaptureState.Starting && _output.HasSavedOutputs && Accepts(timestamp))
+                await _output.PreparePlaybackAsync(token).ConfigureAwait(false);
             Publish(timestamp, decrypted.AsSpan(0, payloadSize), samples, ref revision);
         }
     }
@@ -192,8 +194,16 @@ internal sealed class AirPlayMediaStream : IAsyncDisposable
             ushort sequence = BinaryPrimitives.ReadUInt16BigEndian(packet.AsSpan(2));
             if (_lastSequence is ushort previous && unchecked((short)(sequence - previous)) <= 0) continue;
             _lastSequence = sequence;
-            Publish(BinaryPrimitives.ReadUInt32BigEndian(packet.AsSpan(4)), decrypted.AsSpan(0, payloadSize), samples, ref revision);
+            uint timestamp = BinaryPrimitives.ReadUInt32BigEndian(packet.AsSpan(4));
+            if (_output.State.State == AndroidAudio.CaptureState.Starting && _output.HasSavedOutputs && Accepts(timestamp))
+                await _output.PreparePlaybackAsync(token).ConfigureAwait(false);
+            Publish(timestamp, decrypted.AsSpan(0, payloadSize), samples, ref revision);
         }
+    }
+
+    private bool Accepts(uint timestamp)
+    {
+        lock (_gate) return _playing && (_discardUntil is not uint cutoff || unchecked((int)(timestamp - cutoff)) >= 0);
     }
 
     private int Decrypt(ReadOnlySpan<byte> packet, Span<byte> output)

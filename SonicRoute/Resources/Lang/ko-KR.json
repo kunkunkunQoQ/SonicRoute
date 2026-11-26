@@ -667,6 +667,7 @@
   "Phone.PairAndConnect": "페어링 및 연결",
   "Phone.ConnectedStatus": "연결됨",
   "Phone.ProcessingStatus": "처리 중…",
+  "Phone.DragAppOrder": "앱 아이콘을 끌어 순서를 바꿉니다. 가장자리 근처에서 스크롤하며 Esc 키로 취소할 수 있습니다.",
   "Phone.QuickPanelAppsTitle": "빠른 패널에 표시할 앱",
   "Phone.SmartVolumeTitle": "스마트 볼륨 조절",
   "Phone.ClipboardSyncTitle": "클립보드 동기화",

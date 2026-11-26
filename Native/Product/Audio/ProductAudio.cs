@@ -91,6 +91,9 @@ internal sealed partial class ProductAudio : IDisposable
     internal List<AudioAppInfo> Apps() => Apps(refresh: false);
 
     internal List<AudioAppInfo> Apps(bool refresh)
+        => Apps(refresh, includeOfflineExternal: false);
+
+    internal List<AudioAppInfo> Apps(bool refresh, bool includeOfflineExternal)
     {
         List<AudioAppInfo> list;
         lock (_catalogGate)
@@ -119,7 +122,7 @@ internal sealed partial class ProductAudio : IDisposable
             }
         }
 #if SONICROUTE_PHONE
-        ExternalAudio?.AppendExternalApps(list);
+        ExternalAudio?.AppendExternalApps(list, includeOfflineExternal);
 #endif
         return list;
     }

@@ -178,7 +178,7 @@ internal sealed class ThemePageView : IViewPage
         g.DrawText($"{cfg.BackgroundOpacity}%", badgeRect, t.TextPrimary, 14f, 600, UiTextAlign.Center, UiVertAlign.Center);
 
         _opacitySliderRect = new UiRect(inner.X + 36f, rowY + 2f, MathF.Max(60f, badgeRect.X - inner.X - 50f), 30f);
-        UiPrimitives.DrawVolumeSlider(g, t, hit, "th.opacity", _opacitySliderRect, cfg.BackgroundOpacity / 100f, 0f, false, false);
+        UiPrimitives.DrawValueSlider(g, t, hit, "th.opacity", _opacitySliderRect, cfg.BackgroundOpacity / 100f);
 
         g.DrawText(L10n.T("St.OpacityHint"), new UiRect(inner.X + 36f, rowY + 40f, inner.Width - 36f, 20f), t.TextSecondary, 11.5f, 400);
     }
@@ -367,7 +367,7 @@ internal sealed class ThemePageView : IViewPage
         var valRect = new UiRect(rect.Right - 62f, rect.Y, 62f, rect.Height);
         g.DrawText(valText, valRect, t.TextSecondary, 12.5f, 400, UiTextAlign.Trailing, UiVertAlign.Center);
         var sliderRect = new UiRect(rect.X + 118f, rect.Y, MathF.Max(60f, valRect.X - rect.X - 134f), rect.Height);
-        UiPrimitives.DrawVolumeSlider(g, t, hit, id, sliderRect, Math.Clamp(norm01, 0f, 1f), 0f, false, false);
+        UiPrimitives.DrawValueSlider(g, t, hit, id, sliderRect, Math.Clamp(norm01, 0f, 1f));
         return sliderRect;
     }
 
@@ -500,7 +500,7 @@ internal sealed class ThemePageView : IViewPage
         {
             case "opacity":
             {
-                int v = UiPrimitives.SliderValueFromX(_opacitySliderRect, x);
+                int v = UiPrimitives.ValueSliderValueFromX(_opacitySliderRect, x);
                 if (cfg.BackgroundOpacity != v)
                 {
                     cfg.BackgroundOpacity = v;
@@ -510,7 +510,7 @@ internal sealed class ThemePageView : IViewPage
             }
             case "osdW":
             {
-                float t = UiPrimitives.SliderValueFromX(_osdWidthSliderRect, x) / 100f;
+                float t = UiPrimitives.ValueSliderValueFromX(_osdWidthSliderRect, x) / 100f;
                 int v = Math.Clamp((int)MathF.Round(180f + t * (600f - 180f)), 180, 600);
                 if (cfg.OsdWidth != v)
                 {
@@ -521,7 +521,7 @@ internal sealed class ThemePageView : IViewPage
             }
             case "osdFont":
             {
-                float t = UiPrimitives.SliderValueFromX(_osdFontSliderRect, x) / 100f;
+                float t = UiPrimitives.ValueSliderValueFromX(_osdFontSliderRect, x) / 100f;
                 double v = Math.Round(0.7 + t * (2.0 - 0.7), 2);
                 if (Math.Abs(cfg.OsdFontScale - v) > 0.005)
                 {
@@ -532,7 +532,7 @@ internal sealed class ThemePageView : IViewPage
             }
             case "osdFin":
             {
-                float t = UiPrimitives.SliderValueFromX(_osdFadeInSliderRect, x) / 100f;
+                float t = UiPrimitives.ValueSliderValueFromX(_osdFadeInSliderRect, x) / 100f;
                 int v = Math.Clamp((int)MathF.Round(t * 50f) * 10, 0, 500);
                 if (cfg.OsdFadeInMs != v)
                 {
@@ -543,7 +543,7 @@ internal sealed class ThemePageView : IViewPage
             }
             case "osdFout":
             {
-                float t = UiPrimitives.SliderValueFromX(_osdFadeOutSliderRect, x) / 100f;
+                float t = UiPrimitives.ValueSliderValueFromX(_osdFadeOutSliderRect, x) / 100f;
                 int v = Math.Clamp((int)MathF.Round(t * 20f) * 50, 0, 1000);
                 if (cfg.OsdFadeOutMs != v)
                 {
@@ -554,7 +554,7 @@ internal sealed class ThemePageView : IViewPage
             }
             case "panelH":
             {
-                float t = UiPrimitives.SliderValueFromX(_panelHeightSliderRect, x) / 100f;
+                float t = UiPrimitives.ValueSliderValueFromX(_panelHeightSliderRect, x) / 100f;
                 int v = Math.Clamp(350 + (int)MathF.Round(t * 50f) * 10, 350, 850);
                 if (cfg.QuickPanelHeight != v)
                 {

@@ -667,6 +667,7 @@
   "Phone.PairAndConnect": "Pair and connect",
   "Phone.ConnectedStatus": "Connected",
   "Phone.ProcessingStatus": "Processing…",
+  "Phone.DragAppOrder": "Drag the app icon to reorder. Drag near an edge to scroll. Press Esc to cancel.",
   "Phone.QuickPanelAppsTitle": "Device apps shown in the quick panel",
   "Phone.SmartVolumeTitle": "Smart Volume",
   "Phone.ClipboardSyncTitle": "Clipboard sync",

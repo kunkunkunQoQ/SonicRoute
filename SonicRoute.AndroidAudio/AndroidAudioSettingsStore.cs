@@ -27,7 +27,7 @@ public sealed record AndroidAppAudioSettings(int Volume = 100, string? OutputId 
 internal sealed record AndroidSavedSourceRoute(string DeviceKey, string Package, string?[] Outputs);
 
 /// <summary>Phone application and streaming preferences, independent of the desktop configuration.</summary>
-public sealed class AndroidAudioSettingsStore
+public sealed partial class AndroidAudioSettingsStore
 {
     private readonly object _gate = new();
     private readonly Dictionary<string, AndroidAppAudioSettings> _apps = new(StringComparer.Ordinal);
@@ -75,6 +75,7 @@ public sealed class AndroidAudioSettingsStore
                 };
             }
             _additionalFields = saved.AdditionalFields;
+            LoadExternalAudio(saved);
             if (saved.Streams != null)
                 foreach (var entry in saved.Streams)
                     if (!string.IsNullOrEmpty(entry.Key) && entry.Value != null) _streams[entry.Key] = entry.Value.Normalize();
@@ -350,10 +351,16 @@ public sealed class AndroidAudioSettingsStore
     internal sealed record SettingsFile(int Version, Dictionary<string, AndroidAppAudioSettings> Apps,
         Dictionary<string, AndroidStreamSettings>? Streams = null)
     {
+        public ExternalAudioPreference[]? ExternalAudio { get; init; }
+        public AirPlayReceiverPreference? AirPlayReceiver { get; init; }
         [System.Text.Json.Serialization.JsonExtensionData]
         public Dictionary<string, JsonElement>? AdditionalFields { get; set; }
     }
 
     private SettingsFile FileState(Dictionary<string, AndroidAppAudioSettings> apps, Dictionary<string, AndroidStreamSettings> streams) =>
-        new(3, apps, streams) { AdditionalFields = _additionalFields };
+        new(3, apps, streams)
+        {
+            AdditionalFields = _additionalFields, ExternalAudio = _externalAudio.Length == 0 ? null : _externalAudio,
+            AirPlayReceiver = _airPlayReceiver,
+        };
 }

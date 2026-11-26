@@ -48,7 +48,7 @@ internal sealed class AppsPageView : IViewPage
     private bool _selectedMuted;
     private float _selectedPeak;
     private string _nativeOutput = AudioService.SystemDefaultDeviceId;
-    private string _nativeInput = AudioService.SystemDefaultDeviceId;
+    private string _nativeInput = AudioService.SystemDefaultInputDeviceId;
     private HashSet<string> _selectedOutputs = new(IdCmp);
     private HashSet<string>? _pendingOutputs;
     private string? _pendingPrimary;
@@ -429,11 +429,12 @@ internal sealed class AppsPageView : IViewPage
                 ? (app.SourceLabel ?? "")
                 : (!string.IsNullOrWhiteSpace(app.ProcessName) ? app.ProcessName! : $"PID {app.ProcessId}");
             var textRect = new UiRect(iconRect.Right + 8f, rowRect.CenterY - 17f, MathF.Max(10f, rowRect.Right - iconRect.Right - 20f), rowRect.Height - 8f);
-            g.DrawText(label, new UiRect(textRect.X, textRect.Y, textRect.Width, 17f), t.TextPrimary, 12.5f, selected ? 600 : 400);
+            g.DrawText(label, new UiRect(textRect.X, textRect.Y, textRect.Width, 17f),
+                app.IsExternalOffline ? t.TextSecondary : t.TextPrimary, 12.5f, selected ? 600 : 400);
             g.DrawText(sub, new UiRect(textRect.X, textRect.Y + 20f, textRect.Width, 14f), t.TextSecondary, 10.5f);
 
             bool isMuted = _mutedByIdentity.GetValueOrDefault(app.Identity);
-            if (isMuted)
+            if (isMuted && !app.IsExternalOffline)
                 g.FillEllipse(rowRect.Right - 8f, rowRect.CenterY, 3f, 3f, t.Fail);
             else if (app.HasActiveSession)
                 g.FillEllipse(rowRect.Right - 8f, rowRect.CenterY, 3f, 3f, t.Success);
@@ -545,8 +546,9 @@ internal sealed class AppsPageView : IViewPage
         g.DrawText(L10n.T("Apps.Output"), new UiRect(outCol.X, outCol.Y, outCol.Width, 18f), t.TextSecondary, 13f, 600);
         _outputComboRect = new UiRect(outCol.X, outCol.Y + 22f, outCol.Width, 36f);
         string displayedPrimary = GetDisplayedPrimaryOutput();
-        bool outputReady = hasApp && _outputChoicesIdentity == app!.Identity;
-        string currentOutLabel = outputReady ? DeviceLabel(displayedPrimary, Flow.Render) : "";
+        bool outputKnown = hasApp && _outputChoicesIdentity == app!.Identity;
+        bool outputReady = outputKnown && !app!.IsExternalOffline;
+        string currentOutLabel = outputKnown ? DeviceLabel(displayedPrimary, Flow.Render) : "";
         UiPrimitives.DrawComboBox(g, t, hit, "apps.out.combo", _outputComboRect, currentOutLabel, enabled: outputReady);
         if (outputReady) _clicks["apps.out.combo"] = () => OpenOutputCombo(app!);
 
@@ -601,7 +603,8 @@ internal sealed class AppsPageView : IViewPage
 
         g.DrawText(L10n.T("Apps.Volume"), new UiRect(c3In.X, c3In.Y, c3In.Width, 18f), t.TextSecondary, 13f, 600);
         float volRowY = c3In.Y + 22f;
-        bool volReady = hasApp && _selectedVolume >= 0;
+        bool volumeKnown = hasApp && _selectedVolume >= 0;
+        bool volReady = volumeKnown && !app!.IsExternalOffline;
         string muteText = _selectedMuted ? L10n.T("Qp.Unmute") : L10n.T("Qp.Mute");
         float muteW = MathF.Max(78f, D2dSharedContext.Instance.MeasureText(muteText, UiMetrics.FontFamily, 12f, _selectedMuted ? 600 : 400, 120f, 28f, false).Width + 40f);
         var muteBtnRect = new UiRect(c3In.X, volRowY + 2f, muteW, 28f);
@@ -614,17 +617,17 @@ internal sealed class AppsPageView : IViewPage
 
         var pctRect = new UiRect(c3In.Right - 48f, volRowY, 46f, 32f);
         int shownVol = _draggingVolume ? _dragVolumeVal : Math.Max(0, _selectedVolume);
-        string pctText = volReady ? $"{shownVol}%" : "—";
-        g.DrawText(pctText, pctRect, t.TextPrimary, 13f, 600, UiTextAlign.Trailing, UiVertAlign.Center);
+        string pctText = volumeKnown ? $"{shownVol}%" : "—";
+        g.DrawText(pctText, pctRect, volReady ? t.TextPrimary : t.TextSecondary, 13f, 600, UiTextAlign.Trailing, UiVertAlign.Center);
 
         _volumeSliderRect = new UiRect(muteBtnRect.Right + 10f, volRowY, MathF.Max(40f, pctRect.X - muteBtnRect.Right - 14f), 32f);
         UiPrimitives.DrawVolumeSlider(
             g, t, hit, "apps.vol.slider", _volumeSliderRect,
-            volReady ? shownVol / 100f : 0f,
+            volumeKnown ? shownVol / 100f : 0f,
             _selectedPeak,
             _selectedMuted,
             _actions.Config.ShowAppPeakMeter,
-            enabled: volReady);
+            enabled: volReady, dimUnavailable: app?.IsExternalOffline == true);
 
         y += card3H + 8f;
 
@@ -655,8 +658,9 @@ internal sealed class AppsPageView : IViewPage
         if (hasProcName) _clicks["apps.ctrl.showPanel"] = ToggleShowInQuickPanel;
 
         var resetRouteBtn = new UiRect(sw2Row.Right + 8f, ctrlY + 2f, ctrlColW, 28f);
-        UiPrimitives.DrawSecondaryButton(g, t, hit, "apps.ctrl.resetRoute", resetRouteBtn, L10n.T("Dev.SystemDefault"), enabled: hasApp, fontSize: 12f, icon: UiIcon.Reset, tooltip: L10n.T("Act.ResetAllApps"));
-        if (hasApp) _clicks["apps.ctrl.resetRoute"] = ResetSelectedAppRoutes;
+        bool canResetRoute = hasApp && !app!.IsExternalOffline;
+        UiPrimitives.DrawSecondaryButton(g, t, hit, "apps.ctrl.resetRoute", resetRouteBtn, L10n.T("Dev.SystemDefault"), enabled: canResetRoute, fontSize: 12f, icon: UiIcon.Reset, tooltip: L10n.T("Act.ResetAllApps"));
+        if (canResetRoute) _clicks["apps.ctrl.resetRoute"] = ResetSelectedAppRoutes;
 
         hit.PopClip();
         g.PopClip();
@@ -670,9 +674,9 @@ internal sealed class AppsPageView : IViewPage
         hit.Add(id, rect, enabled ? UiCursorKind.Hand : UiCursorKind.Arrow, tooltip ?? label);
         bool hot = enabled && hit.IsHover(id);
 
-        UiColor bg = isNative ? t.DeviceNativeBg : isMirror ? t.Overlay : t.SurfaceBg;
-        UiColor fg = isNative ? t.DeviceNativeFg : t.TextPrimary;
-        UiColor border = isNative ? t.Accent : isMirror ? t.DeviceMirrorBorder : hot ? t.Accent : t.Border;
+        UiColor bg = enabled && isNative ? t.DeviceNativeBg : enabled && isMirror ? t.Overlay : t.SurfaceBg;
+        UiColor fg = !enabled ? t.TextSecondary : isNative ? t.DeviceNativeFg : t.TextPrimary;
+        UiColor border = enabled && (isNative || hot) ? t.Accent : enabled && isMirror ? t.DeviceMirrorBorder : t.Border;
 
         g.FillRoundedRect(rect, 9f, bg);
         g.DrawRoundedRect(rect, 9f, border, 1f);
@@ -717,6 +721,19 @@ internal sealed class AppsPageView : IViewPage
             return;
         }
 
+#if SONICROUTE_PHONE
+        UiIcon? externalIcon = app.ProcessName switch
+        {
+            "airplay:receiver" => UiIcon.AirPlay,
+            "android:sonicroute:device-audio" => UiIcon.Phone,
+            _ => null,
+        };
+        if (externalIcon is { } glyph)
+        {
+            g.DrawIcon(glyph, rect.Deflate(rect.Width * 0.19f), t.TextSecondary, 1.6f);
+            return;
+        }
+#endif
         string lbl = GetAppDisplayLabel(app);
         string initial = lbl.Length > 0 ? StringInfo.GetNextTextElement(lbl).ToUpperInvariant() : "?";
         g.DrawText(initial, rect, t.TextPrimary, rect.Height * 0.48f, 600, UiTextAlign.Center, UiVertAlign.Center);
@@ -726,7 +743,7 @@ internal sealed class AppsPageView : IViewPage
     {
         if (_draggingVolume && leftDown)
         {
-            int next = UiPrimitives.SliderValueFromX(_volumeSliderRect, x);
+            int next = UiPrimitives.VolumeSliderValueFromX(_volumeSliderRect, x);
             if (next != _dragVolumeVal)
             {
                 _dragVolumeVal = next;
@@ -740,7 +757,8 @@ internal sealed class AppsPageView : IViewPage
 
 #if SONICROUTE_PHONE
         if (leftDown && _phoneScroll.DragMove(y)) return true;
-        if (_showingPhone && _phonePage != null && !_appsListRect.Contains(x, y) && !_phoneListRect.Contains(x, y))
+        if (_showingPhone && _phonePage != null && (_phonePage.IsReorderingPinnedApp ||
+            (!_appsListRect.Contains(x, y) && !_phoneListRect.Contains(x, y))))
             return _phonePage.OnPointerMove(x, y, leftDown);
 #endif
         return false;
@@ -770,10 +788,10 @@ internal sealed class AppsPageView : IViewPage
         if (targetId == "apps.phone.scroll" && _phoneScroll.BeginDrag(e.Y)) return true;
 #endif
 
-        if (_selectedApp != null && _selectedVolume >= 0 && targetId == "apps.vol.slider")
+        if (_selectedApp is { IsExternalOffline: false } && _selectedVolume >= 0 && targetId == "apps.vol.slider")
         {
             _draggingVolume = true;
-            _dragVolumeVal = UiPrimitives.SliderValueFromX(_volumeSliderRect, e.X);
+            _dragVolumeVal = UiPrimitives.VolumeSliderValueFromX(_volumeSliderRect, e.X);
             ApplySliderVolume(_dragVolumeVal);
             return true;
         }
@@ -826,6 +844,10 @@ internal sealed class AppsPageView : IViewPage
             _actions.Host.FlushVolumeWrites();
 
         if (wasDragging) return true;
+#if SONICROUTE_PHONE
+        if (_showingPhone && _phonePage is { IsReorderingPinnedApp: true })
+            return _phonePage.OnPointerUp(e, clickId);
+#endif
 
         if (clickId != null && _clicks.TryGetValue(clickId, out var click))
         {
@@ -842,7 +864,11 @@ internal sealed class AppsPageView : IViewPage
 
     public bool OnMouseWheel(float x, float y, float delta, bool horizontal)
     {
-        if (_volumeCardRect.Contains(x, y) && _selectedApp != null && _selectedVolume >= 0)
+#if SONICROUTE_PHONE
+        if (_showingPhone && _phonePage is { IsReorderingPinnedApp: true })
+            return _phonePage.OnMouseWheel(x, y, delta, horizontal);
+#endif
+        if (_volumeCardRect.Contains(x, y) && _selectedApp is { IsExternalOffline: false } && _selectedVolume >= 0)
         {
             int step = Math.Clamp(_actions.Config.VolumeStep, 1, 20);
             int next = Math.Clamp(_selectedVolume + (delta > 0 ? step : -step), 0, 100);
@@ -914,9 +940,9 @@ internal sealed class AppsPageView : IViewPage
         {
             try
             {
-                var outs = _actions.Host.Audio.RenderDevicesWithPhone(selectedSnapshot);
+                var outs = _actions.Host.Audio.RenderDevicesWithPhone(selectedSnapshot, includePhoneCurrent: true);
                 var ins = readMic ? ProductAudio.Devices(Flow.Capture) : Array.Empty<Endpoint>();
-                var apps = _actions.Host.Audio.Apps(forceAppsRefresh);
+                var apps = _actions.Host.Audio.Apps(forceAppsRefresh, includeOfflineExternal: true);
                 var mutedMap = new Dictionary<string, bool>(apps.Count, StringComparer.Ordinal);
                 foreach (var a in apps)
                 {
@@ -928,7 +954,7 @@ internal sealed class AppsPageView : IViewPage
                 bool muted = false;
                 float peak = 0f;
                 string natOut = AudioService.SystemDefaultDeviceId;
-                string natIn = AudioService.SystemDefaultDeviceId;
+                string natIn = AudioService.SystemDefaultInputDeviceId;
                 HashSet<string> selOuts = new(IdCmp) { AudioService.SystemDefaultDeviceId };
 
                 var liveSelected = targetIdentity != null ? apps.FirstOrDefault(a => a.Identity == targetIdentity) : null;
@@ -962,13 +988,13 @@ internal sealed class AppsPageView : IViewPage
                         {
                             string? persistedIn = _actions.Host.Audio.ReadRoute((int)liveSelected.ProcessId, Flow.Capture);
                             natIn = string.IsNullOrWhiteSpace(persistedIn) || AudioService.IsSystemDefault(persistedIn)
-                                ? AudioService.SystemDefaultDeviceId
+                                ? AudioService.SystemDefaultInputDeviceId
                                 : AudioPolicyConfig.UnpackDeviceId(persistedIn);
                         }
                         catch { }
                     }
 
-                    if (readPeak && !liveSelected.IsExternal)
+                    if (readPeak && !muted && !liveSelected.IsExternal)
                     {
                         try
                         {
@@ -1001,7 +1027,7 @@ internal sealed class AppsPageView : IViewPage
                             _selectedApp = liveSelected;
                             if (vol >= 0 && !_draggingVolume && volumeAtRead == _actions.Host.AppVolumeRevision && !_actions.Host.HasPendingVolume(liveSelected)) _selectedVolume = vol;
                             if (vol >= 0 && !_draggingVolume) _selectedMuted = muted;
-                            _selectedPeak = peak;
+                            _selectedPeak = _actions.Config.ShowAppPeakMeter && !_selectedMuted ? peak : 0f;
                             _nativeOutput = natOut;
                             if (_pendingInput == null) _nativeInput = natIn;
                             _selectedOutputs = selOuts;
@@ -1039,7 +1065,8 @@ internal sealed class AppsPageView : IViewPage
 
     private void KickPeakBurst()
     {
-        if (!_active || !_actions.Config.ShowAppPeakMeter || _selectedApp is not { IsExternal: false, HasActiveSession: true })
+        if (!_active || !_actions.Config.ShowAppPeakMeter || _selectedMuted ||
+            _selectedApp is not { IsExternal: false, HasActiveSession: true })
         {
             StopPeakBurst();
             return;
@@ -1051,7 +1078,7 @@ internal sealed class AppsPageView : IViewPage
     private void ScheduleNextPeakTick()
     {
         if (_peakTimer != null || !_active || _peakBurstRemaining <= 0
-            || !_actions.Config.ShowAppPeakMeter
+            || !_actions.Config.ShowAppPeakMeter || _selectedMuted
             || _selectedApp is not { IsExternal: false, HasActiveSession: true })
         {
             return;
@@ -1071,7 +1098,7 @@ internal sealed class AppsPageView : IViewPage
     {
         _peakTimer = null;
         if (!_active || _peakInFlight || _peakBurstRemaining <= 0
-            || !_actions.Config.ShowAppPeakMeter
+            || !_actions.Config.ShowAppPeakMeter || _selectedMuted
             || _selectedApp is not { IsExternal: false, HasActiveSession: true } app)
         {
             return;
@@ -1079,6 +1106,7 @@ internal sealed class AppsPageView : IViewPage
 
         _peakBurstRemaining--;
         int pid = (int)app.ProcessId;
+        int state = _stateGen;
         _peakInFlight = true;
 
         _ = Task.Run(() =>
@@ -1090,15 +1118,10 @@ internal sealed class AppsPageView : IViewPage
             _actions.Host.TryPost(() =>
             {
                 _peakInFlight = false;
-                if (!_active || _selectedApp?.ProcessId != (uint)pid) return;
-                float next = read >= _selectedPeak ? read : _selectedPeak * 0.72f;
-                if (next < 0.005f) next = 0f;
-                if (MathF.Abs(next - _selectedPeak) > 0.008f)
-                {
-                    _selectedPeak = next;
+                if (_active && state == _stateGen && _actions.Config.ShowAppPeakMeter && !_selectedMuted &&
+                    UiPrimitives.UpdateVolumePeak(ref _selectedPeak, read))
                     _actions.Invalidate();
-                }
-                if (_peakBurstRemaining > 0 && (_selectedPeak > 0.01f || read > 0.01f))
+                if (_selectedPeak > 0f || state != _stateGen)
                     ScheduleNextPeakTick();
             });
         });
@@ -1198,6 +1221,7 @@ internal sealed class AppsPageView : IViewPage
     {
         var selectedApps = _apps.Where(a => _multiSelected.Contains(a.Identity)).ToList();
         if (selectedApps.Count == 0) selectedApps.Add(primary);
+        var availableApps = selectedApps.Where(a => !a.IsExternalOffline).ToList();
         bool multi = selectedApps.Count > 1;
         bool primaryMuted = _mutedByIdentity.GetValueOrDefault(primary.Identity);
 
@@ -1207,11 +1231,11 @@ internal sealed class AppsPageView : IViewPage
             items.Add(new UiMenuItem { Text = L10n.T("Apps.Rename"), Icon = UiIcon.Edit, Click = BeginInlineRename });
         }
 
-        items.Add(new UiMenuItem
+        if (availableApps.Count != 0) items.Add(new UiMenuItem
         {
             Text = primaryMuted ? L10n.T("Qp.Unmute") : L10n.T("Qp.Mute"),
             Icon = UiIcon.Speaker,
-            Click = () => BatchToggleMute(selectedApps, !primaryMuted),
+            Click = () => BatchToggleMute(availableApps, !primaryMuted),
         });
 
         var withProc = selectedApps.Where(a => !string.IsNullOrWhiteSpace(a.ProcessName)).ToList();
@@ -1244,13 +1268,16 @@ internal sealed class AppsPageView : IViewPage
             });
         }
 
-        items.Add(UiMenuItem.Separator());
-        items.Add(new UiMenuItem
+        if (availableApps.Count != 0)
         {
-            Text = L10n.T("Dev.SystemDefault"),
-            Icon = UiIcon.Reset,
-            Click = () => BatchResetRoutes(selectedApps),
-        });
+            items.Add(UiMenuItem.Separator());
+            items.Add(new UiMenuItem
+            {
+                Text = L10n.T("Dev.SystemDefault"),
+                Icon = UiIcon.Reset,
+                Click = () => BatchResetRoutes(availableApps),
+            });
+        }
 
         _actions.ShowMenuAtCursor(items);
     }
@@ -1433,7 +1460,7 @@ internal sealed class AppsPageView : IViewPage
     {
         if (app.Identity != _selectedIdentity || app.Identity != _outputChoicesIdentity) return;
         var primary = GetDisplayedPrimaryOutput();
-        var choices = BuildOutputChoices(primary);
+        var choices = BuildOutputChoices();
         var list = choices.Select(c => new ComboChoice(c.Id, c.Label)).ToArray();
         _actions.ShowCombo(_outputComboRect, list, primary, picked =>
         {
@@ -1517,7 +1544,7 @@ internal sealed class AppsPageView : IViewPage
             int pid = (int)app.ProcessId;
             // Enqueue on the input thread so single clicks and Ctrl/Shift requests reach the
             // same per-process owner in the order they were made.
-            write = !ctrl && !shift && !PcRoutingApi.IsPhoneOutputDevice(deviceId)
+            write = !ctrl && !shift
                 ? _actions.Host.CurrentApp.SelectOutputAsync(pid, deviceId, FeedbackKind.AppsWarning)
                 : _actions.Host.CurrentApp.SetOutputsAsync(pid, preferred, nextOutputs, FeedbackKind.AppsWarning);
         }
@@ -1691,19 +1718,19 @@ internal sealed class AppsPageView : IViewPage
         public string ShortLabel { get; } = UiPrimitives.ShortDeviceName(Label);
     }
 
-    private DeviceChoice[] BuildOutputChoices(string? includePrimary = null)
+    private DeviceChoice[] BuildOutputChoices()
     {
         if (_outputChoicesIdentity != _selectedIdentity) return [];
         var cfg = _actions.Config;
         var list = new List<DeviceChoice>();
-        if (!cfg.HiddenOutputDevices.Contains(AudioService.SystemDefaultDeviceId))
+        if (cfg.IsDeviceShown(EDataFlow.eRender, AudioService.SystemDefaultDeviceId))
         {
             list.Add(new DeviceChoice(AudioService.SystemDefaultDeviceId, DeviceLabel(AudioService.SystemDefaultDeviceId, Flow.Render)));
         }
 
         foreach (var ep in _outputs)
         {
-            if (cfg.HiddenOutputDevices.Contains(ep.Id) && !IdCmp.Equals(includePrimary, ep.Id))
+            if (!cfg.IsDeviceShown(EDataFlow.eRender, ep.PreferenceId))
                 continue;
             list.Add(new DeviceChoice(ep.Id, DeviceLabel(ep.Id, Flow.Render, ep.Name)));
         }
@@ -1714,12 +1741,12 @@ internal sealed class AppsPageView : IViewPage
     {
         var cfg = _actions.Config;
         var list = new List<DeviceChoice>();
-        if (!cfg.HiddenInputDevices.Contains(AudioService.SystemDefaultDeviceId) || IdCmp.Equals(_nativeInput, AudioService.SystemDefaultDeviceId))
-            list.Add(new DeviceChoice(AudioService.SystemDefaultDeviceId, L10n.T("Dev.SystemDefaultIn")));
+        if (cfg.IsDeviceShown(EDataFlow.eCapture, AudioService.SystemDefaultInputDeviceId))
+            list.Add(new DeviceChoice(AudioService.SystemDefaultInputDeviceId, L10n.T("Dev.SystemDefaultIn")));
 
         foreach (var ep in _inputs)
         {
-            if (cfg.HiddenInputDevices.Contains(ep.Id) && !IdCmp.Equals(_nativeInput, ep.Id))
+            if (!cfg.IsDeviceShown(EDataFlow.eCapture, ep.PreferenceId))
                 continue;
             list.Add(new DeviceChoice(ep.Id, DeviceLabel(ep.Id, Flow.Capture, ep.Name)));
         }

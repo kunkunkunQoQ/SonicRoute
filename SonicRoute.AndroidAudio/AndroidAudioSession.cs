@@ -36,6 +36,7 @@ public sealed class AndroidAudioSession : IAsyncDisposable, SonicRoute.AirPlay.I
     private CancellationToken _sourceLifetime;
     public event Action<AndroidAudioState>? Changed;
     internal event Action<string?[]?>? OutputSelectionCommitted;
+    internal event Action? PlaybackSelectionCommitted;
     public AndroidAudioState State => Volatile.Read(ref _state);
     public AndroidPcmSource? Pcm => Volatile.Read(ref _pcm);
     public long PacketsDecoded => _receiver?.PacketsDecoded ?? 0;
@@ -319,8 +320,11 @@ public sealed class AndroidAudioSession : IAsyncDisposable, SonicRoute.AirPlay.I
                 await ApplyOutputsLockedAsync(desired, explicitSelection, timing).ConfigureAwait(false);
             using var commit = timing?.Measure("state_commit");
             if (restore == null && State.State == CaptureState.Receiving)
+            {
                 OutputSelectionCommitted?.Invoke(explicitSelection && desired.Distinct(StringComparer.OrdinalIgnoreCase).Count() > 1
                     ? CurrentSelection() : null);
+                PlaybackSelectionCommitted?.Invoke();
+            }
             if (State.State == CaptureState.Receiving && !previous.ToHashSet(StringComparer.OrdinalIgnoreCase).SetEquals(CurrentSelection()))
             {
                 _outputHistory.Insert(0, previous);
@@ -375,10 +379,17 @@ public sealed class AndroidAudioSession : IAsyncDisposable, SonicRoute.AirPlay.I
         }
     }
 
-    private string?[] CurrentSelection()
+    internal string?[] CurrentSelection()
     {
         string?[] outputs = [State.OutputId, .. Volatile.Read(ref _extraIds)];
         return UsesSourcePhonePlayback && !outputs.Contains(SourcePhoneOutputId) ? [.. outputs, SourcePhoneOutputId] : outputs;
+    }
+
+    internal async Task<bool> IsFailedAsync()
+    {
+        await _operations.WaitAsync().ConfigureAwait(false);
+        try { return State.State == CaptureState.Failed; }
+        finally { _operations.Release(); }
     }
 
     private async Task RecoverExternalOutputAsync(IPcmPlayer failed, int generation, Exception reason)

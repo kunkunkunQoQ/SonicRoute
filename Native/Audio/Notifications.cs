@@ -34,8 +34,11 @@ internal sealed partial class Notice : IDeviceNotifications, IEndpointNotificati
     private readonly object _gate = new();
     private bool _stopped;
     private readonly Action? _changed;
+    private readonly Action<bool, Guid>? _endpointMute;
+    private readonly bool _stateOnly;
     private int _queued;
-    internal Notice(Action? changed = null) => _changed = changed;
+    internal Notice(Action? changed = null, bool stateOnly = false, Action<bool, Guid>? endpointMute = null)
+        => (_changed, _stateOnly, _endpointMute) = (changed, stateOnly, endpointMute);
     private void Deliver()
     {
         Interlocked.Exchange(ref _queued, 0);
@@ -78,10 +81,16 @@ internal sealed partial class Notice : IDeviceNotifications, IEndpointNotificati
     public int OnDeviceRemoved(nint id) { Interlocked.Increment(ref Removed); return Signal(); }
     public int OnDefaultDeviceChanged(int flow,int role,nint id) => Signal();
     public int OnPropertyValueChanged(nint id,PropertyKey key) => Signal();
-    public int OnNotify(nint notification) => Signal();
+    public int OnNotify(nint notification)
+    {
+        if (_endpointMute == null) return Signal();
+        if (notification != 0 && !Volatile.Read(ref _stopped))
+            _endpointMute(Marshal.ReadInt32(notification, 16) != 0, Marshal.PtrToStructure<Guid>(notification));
+        return 0;
+    }
     public int OnDisplayNameChanged(nint name,nint context) => 0;
     public int OnIconPathChanged(nint path,nint context) => 0;
-    public int OnSimpleVolumeChanged(float level,int mute,nint context) => Signal();
+    public int OnSimpleVolumeChanged(float level,int mute,nint context) => _stateOnly ? 0 : Signal();
     public int OnChannelVolumeChanged(uint count,nint levels,uint channel,nint context) => 0;
     public int OnGroupingParamChanged(nint grouping,nint context) => 0;
     public int OnStateChanged(int state) => Signal();

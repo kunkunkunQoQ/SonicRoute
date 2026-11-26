@@ -18,27 +18,43 @@ internal sealed class AirPlayPreview : IDisposable
     private readonly SemaphoreSlim _operations = new(1, 1);
     private readonly bool _isPackaged;
     private readonly Func<AndroidPcmSource, string, CancellationToken, IPcmPlayer>? _phonePlayerFactory;
+    private readonly AndroidAudioSettingsStore? _preferences;
+    private readonly AppConfig? _config;
+    private readonly Func<Action, bool>? _tryPost;
     private AirPlayReceiver? _receiver;
     private AirPlayStatus _inactive = new(AirPlayStage.Off);
     private AirPlayStatus? _transition;
     private int _disposed;
+    private bool _watchingNetwork;
+    private int _networkQueued;
+    private int _checkNetworkOnRelease;
+    private readonly object _recoveryGate = new();
+    private Task _outputRecovery = Task.CompletedTask;
+    private bool _recoveringOutputs, _outputRecoveryPending;
 
-    internal AirPlayPreview(bool isPackaged = false, Func<AndroidPcmSource, string, CancellationToken, IPcmPlayer>? phonePlayerFactory = null)
+    internal AirPlayPreview(bool isPackaged = false, Func<AndroidPcmSource, string, CancellationToken, IPcmPlayer>? phonePlayerFactory = null,
+        AndroidAudioSettingsStore? preferences = null, AppConfig? config = null, Func<Action, bool>? tryPost = null)
     {
         _isPackaged = isPackaged;
         _phonePlayerFactory = phonePlayerFactory;
+        _preferences = preferences;
+        _config = config;
+        _tryPost = tryPost;
     }
 
     internal event Action? Changed;
     internal AirPlayStatus Status => Volatile.Read(ref _transition) ?? Volatile.Read(ref _receiver)?.Status ?? Volatile.Read(ref _inactive);
     internal AirPlayAudioOutput? Source => Volatile.Read(ref _receiver)?.Source;
     internal int Port => Volatile.Read(ref _receiver)?.Port ?? 0;
+    internal bool Enabled => _preferences?.AirPlayEnabled ?? Status.Stage is AirPlayStage.Waiting or AirPlayStage.Connected;
 
-    internal async Task SetReceivingAsync(AppConfig config, bool enabled)
+    internal async Task SetReceivingAsync(AppConfig config, bool enabled, bool restart = false)
     {
         ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
         var stage = Status.Stage;
-        if (stage is AirPlayStage.Starting or AirPlayStage.Stopping || enabled == (stage is AirPlayStage.Waiting or AirPlayStage.Connected))
+        if (stage is AirPlayStage.Starting or AirPlayStage.Stopping)
+            return;
+        if (!restart && enabled == (stage is AirPlayStage.Waiting or AirPlayStage.Connected) && enabled == Enabled)
             return;
 
         var transition = new AirPlayStatus(enabled ? AirPlayStage.Starting : AirPlayStage.Stopping);
@@ -47,6 +63,8 @@ internal sealed class AirPlayPreview : IDisposable
 
         try
         {
+            _preferences?.SetAirPlayEnabled(enabled);
+            WatchNetwork(enabled);
             NotifyChanged();
             await _operations.WaitAsync().ConfigureAwait(false);
             try
@@ -58,7 +76,7 @@ internal sealed class AirPlayPreview : IDisposable
                 {
                     if (_receiver is { } existing)
                     {
-                        if (existing.Status.Stage != AirPlayStage.Off)
+                        if (existing.Status.Stage != AirPlayStage.Off && (!restart || existing.Status.Stage == AirPlayStage.Connected))
                             return;
                         Volatile.Write(ref _receiver, null);
                         await CloseAsync(existing).ConfigureAwait(false);
@@ -76,7 +94,9 @@ internal sealed class AirPlayPreview : IDisposable
                             player: CreatePlayer,
                             preferHevc: config.AirPlayVideoDecoder == 2,
                             requireCode: config.AirPlayRequireCode,
-                            useStorePorts: _isPackaged);
+                            useStorePorts: _isPackaged,
+                            preferences: _preferences,
+                            resolveOutputs: ExternalAudioBridge.ResolveAvailableOutputs);
                         receiver.Changed += ReceiverChanged;
                         receiver.DisplayChanged += ReceiverChanged;
                         Volatile.Write(ref _receiver, receiver);
@@ -119,7 +139,38 @@ internal sealed class AirPlayPreview : IDisposable
     internal void ShowMirror() => Volatile.Read(ref _receiver)?.ShowMirror();
     internal void SetMirrorTopmost(bool value) => Volatile.Read(ref _receiver)?.SetMirrorTopmost(value);
     internal void SetMirrorFullscreen(bool value) => Volatile.Read(ref _receiver)?.SetMirrorFullscreen(value);
-    internal void Disconnect() { if (Source is { } source) Volatile.Read(ref _receiver)?.Disconnect(source.Id); }
+    internal void Disconnect(string? expectedSource = null)
+    {
+        if (Source is { } source && (expectedSource == null || expectedSource == source.Id))
+            Volatile.Read(ref _receiver)?.Disconnect(source.Id);
+    }
+
+    private void WatchNetwork(bool enabled)
+    {
+        if (_config == null || _tryPost == null || _watchingNetwork == enabled) return;
+        if (enabled) NetworkChange.NetworkAddressChanged += OnNetworkChanged;
+        else NetworkChange.NetworkAddressChanged -= OnNetworkChanged;
+        _watchingNetwork = enabled;
+    }
+
+    private void OnNetworkChanged(object? sender, EventArgs args)
+    {
+        if (_tryPost == null || Interlocked.Exchange(ref _networkQueued, 1) != 0) return;
+        if (!_tryPost(() =>
+        {
+            Volatile.Write(ref _networkQueued, 0);
+            if (Volatile.Read(ref _disposed) != 0 || !Enabled || _config == null) return;
+            var stage = Status.Stage;
+            if (stage == AirPlayStage.Connected)
+            {
+                Volatile.Write(ref _checkNetworkOnRelease, 1);
+                return;
+            }
+            if (stage is AirPlayStage.Off or AirPlayStage.Failed
+                || stage == AirPlayStage.Waiting && Volatile.Read(ref _receiver)?.MatchesInterfaces() == false)
+                _ = SetReceivingAsync(_config, enabled: true, restart: true);
+        })) Volatile.Write(ref _networkQueued, 0);
+    }
 
     internal static string DefaultName
     {
@@ -135,7 +186,52 @@ internal sealed class AirPlayPreview : IDisposable
             ? _phonePlayerFactory(pcm, endpoint, token)
             : new WasapiPcmPlayer(pcm, endpoint);
 
-    private void ReceiverChanged() => NotifyChanged();
+    private void ReceiverChanged()
+    {
+        if (Status.Stage == AirPlayStage.Waiting && Interlocked.Exchange(ref _checkNetworkOnRelease, 0) != 0)
+            OnNetworkChanged(null, EventArgs.Empty);
+        NotifyChanged();
+    }
+
+    internal void QueueOutputRecovery()
+    {
+        if (Source?.PreferenceKey?.StartsWith(ExternalAudioPreference.AirPlayPrefix + "id:", StringComparison.Ordinal) != true) return;
+        lock (_recoveryGate)
+        {
+            if (Volatile.Read(ref _disposed) != 0) return;
+            _outputRecoveryPending = true;
+            if (_recoveringOutputs) return;
+            _recoveringOutputs = true;
+            _outputRecovery = Task.Run(RestoreOutputsAsync);
+        }
+    }
+
+    private async Task RestoreOutputsAsync()
+    {
+        while (true)
+        {
+            lock (_recoveryGate)
+            {
+                if (!_outputRecoveryPending || Volatile.Read(ref _disposed) != 0)
+                {
+                    _recoveringOutputs = false;
+                    return;
+                }
+                _outputRecoveryPending = false;
+            }
+            try
+            {
+                if (Source is not { } source || _preferences?.FindExternalAudio(source.PreferenceKey) is not { Visible: true } choice) continue;
+                var available = ExternalAudioBridge.ResolveAvailableOutputs(choice.Outputs);
+                if (!((IMultiOutputAudioSession)source).GetOutputs().ToHashSet(StringComparer.OrdinalIgnoreCase).SetEquals(available))
+                    await source.RestoreOutputsAsync(available, () => ReferenceEquals(Source, source)
+                        && ReferenceEquals(_preferences.FindExternalAudio(choice.Key)?.Outputs, choice.Outputs)).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) { }
+            catch (Exception error) { ExceptionDiagnostics.Record("AirPlay.RecoverOutputs", error); }
+        }
+    }
+
     private void NotifyChanged()
     {
         if (Changed is not { } handlers) return;
@@ -173,6 +269,7 @@ internal sealed class AirPlayPreview : IDisposable
     public void Dispose()
     {
         if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
+        WatchNetwork(false);
         _operations.Wait();
         try
         {
@@ -181,6 +278,7 @@ internal sealed class AirPlayPreview : IDisposable
                 CloseAsync(receiver).GetAwaiter().GetResult();
         }
         finally { _operations.Release(); }
+        _outputRecovery.GetAwaiter().GetResult();
     }
 }
 #endif

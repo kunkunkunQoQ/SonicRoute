@@ -44,6 +44,57 @@ public static class AndroidMdnsDiscovery
     internal static Task<IReadOnlyList<AndroidMdnsService>> DiscoverAllAsync(TimeSpan duration, CancellationToken token) =>
         CollectAsync(AdbTypes, duration, settleOnFirst: true, token);
 
+    // A known offline phone can announce a new TLS port after reboot. Listen for
+    // unsolicited advertisements while recovery is pending, without sending probes.
+    internal static Task WatchConnectionsAsync(Func<AndroidMdnsService, Task> onService, CancellationToken token)
+    {
+        var addresses = SelectCandidateAddresses(null);
+        return Task.WhenAll(WatchFamilyAsync(addresses, ipv6: false, onService, token),
+            WatchFamilyAsync(addresses, ipv6: true, onService, token));
+    }
+
+    private static async Task WatchFamilyAsync(IPAddress[] addresses, bool ipv6, Func<AndroidMdnsService, Task> onService, CancellationToken token)
+    {
+        var family = ipv6 ? AddressFamily.InterNetworkV6 : AddressFamily.InterNetwork;
+        var any = ipv6 ? IPAddress.IPv6Any : IPAddress.Any;
+        var locals = addresses.Where(a => a.AddressFamily == family).ToArray();
+        if (locals.Length == 0) return;
+        try
+        {
+            using var socket = new Socket(family, SocketType.Dgram, ProtocolType.Udp);
+            socket.ExclusiveAddressUse = false;
+            socket.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
+            socket.Bind(new IPEndPoint(any, 5353));
+            bool joined = false;
+            foreach (var local in locals)
+            {
+                try
+                {
+                    if (ipv6)
+                        socket.SetSocketOption(SocketOptionLevel.IPv6, SocketOptionName.AddMembership, new IPv6MulticastOption(new IPAddress(MulticastV6), local.ScopeId));
+                    else socket.SetSocketOption(SocketOptionLevel.IP, SocketOptionName.AddMembership, new MulticastOption(MulticastV4, local));
+                    joined = true;
+                }
+                catch (SocketException) { }
+            }
+            if (!joined) return;
+            byte[] buffer = new byte[4096];
+            var remote = new IPEndPoint(any, 0);
+            while (!token.IsCancellationRequested)
+            {
+                SocketReceiveFromResult packet;
+                try { packet = await socket.ReceiveFromAsync(buffer, SocketFlags.None, remote, token).ConfigureAwait(false); }
+                catch (SocketException error) when (error.SocketErrorCode == SocketError.MessageSize) { continue; }
+                var peer = (IPEndPoint)packet.RemoteEndPoint;
+                if (peer.Port != 5353 || buffer.AsSpan(0, packet.ReceivedBytes).IndexOf("_adb-tls-connect"u8) < 0) continue;
+                foreach (var service in ParseResponse(buffer.AsSpan(0, packet.ReceivedBytes), peer.Address))
+                    if (service.Type == ConnectType) await onService(service).ConfigureAwait(false);
+            }
+        }
+        catch (OperationCanceledException) when (token.IsCancellationRequested) { }
+        catch (SocketException) { }
+    }
+
     private static async Task<IReadOnlyList<AndroidMdnsService>> CollectAsync(string[] types, TimeSpan duration, bool settleOnFirst,
         CancellationToken token)
     {

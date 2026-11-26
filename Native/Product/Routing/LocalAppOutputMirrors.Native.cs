@@ -14,7 +14,7 @@ internal static partial class LocalAppOutputMirrors
     {
         private readonly AutoResetEvent _renderWake = new(false);
         private readonly MirrorMeasurement _measurement = new();
-        internal MirrorStatus Snapshot() => _measurement.Snapshot(ProcessId, Sinks.Select(s => s.DesktopPlayer.Status()).ToArray());
+        internal MirrorStatus Snapshot() => _measurement.Snapshot(ProcessId, Sinks.Select(s => s.DesktopPlayer?.Status()).OfType<MirrorSinkStatus>().ToArray());
 
         private Task CaptureNativeAsync(Action started) => Task.Factory.StartNew(() =>
         {
@@ -36,7 +36,7 @@ internal static partial class LocalAppOutputMirrors
             while (capture.WaitForPacket(Timeout.Infinite))
             {
                 capture.DrainBytes(dispatch);
-                foreach (var sink in Sinks) sink.DesktopPlayer.Drain();
+                foreach (var sink in Sinks) sink.DesktopPlayer?.Drain();
             }
         }, _stop.Token, TaskCreationOptions.LongRunning, TaskScheduler.Default);
     }

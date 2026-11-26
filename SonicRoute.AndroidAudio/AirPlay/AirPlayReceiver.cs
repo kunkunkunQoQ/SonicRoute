@@ -10,7 +10,7 @@ namespace SonicRoute.AirPlay;
 internal enum AirPlayStage { Off, Starting, Waiting, Connected, Failed, Stopping }
 internal sealed record AirPlayStatus(AirPlayStage Stage, string? Name = null, string? Sender = null, string? ErrorKey = null,
     int? NetworkError = null, bool Mirroring = false, bool MirrorAudioUnavailable = false,
-    bool Topmost = false, bool Fullscreen = false, string? Code = null, AirPlayMetadata? Metadata = null);
+    bool Topmost = false, bool Fullscreen = false, string? Code = null, AirPlayMetadata? Metadata = null, string? SenderId = null);
 internal sealed class AirPlayNoNetworkException() : InvalidOperationException("No active IPv4 LAN interface.");
 
 /// <summary>An on-demand AirPlay receiver for audio and screen mirroring.</summary>
@@ -32,6 +32,8 @@ internal sealed class AirPlayReceiver : IAsyncDisposable
     private readonly AirPlayDiscovery.Lan[] _lan;
     private readonly Func<AndroidPcmSource, string?, CancellationToken, IPcmPlayer> _player;
     private readonly Func<Action, IDisposable> _watchDefault;
+    private readonly AndroidAudioSettingsStore? _preferences;
+    private readonly Func<string?[], string?[]>? _resolveOutputs;
     private readonly byte[] _info;
     private readonly object _sessionGate = new();
     private Session? _active;
@@ -48,15 +50,19 @@ internal sealed class AirPlayReceiver : IAsyncDisposable
     internal int MirrorFrames => Volatile.Read(ref _active)?.MirrorFrames ?? 0;
     internal int Port => ((IPEndPoint)_listener.LocalEndpoint).Port;
     internal Task Completion => _run;
+    internal bool MatchesInterfaces() => _lan.ToHashSet().SetEquals(AirPlayDiscovery.ReadInterfaces());
 
     // Only the test harness asks for loopback. Production never changes Windows firewall rules.
     internal AirPlayReceiver(string name, bool loopback = false,
         Func<AndroidPcmSource, string?, CancellationToken, IPcmPlayer>? player = null, Func<Action, IDisposable>? watchDefault = null,
-        bool preferHevc = false, bool requireCode = false, bool useStorePorts = false)
+        bool preferHevc = false, bool requireCode = false, bool useStorePorts = false,
+        AndroidAudioSettingsStore? preferences = null, Func<string?[], string?[]>? resolveOutputs = null)
     {
         if (!ChaCha20Poly1305.IsSupported) throw new PlatformNotSupportedException("AirPlay control encryption is unavailable.");
         _player = player ?? ((pcm, endpoint, _) => new WasapiPcmPlayer(pcm, endpoint));
         _watchDefault = watchDefault ?? DefaultOutputNotifications.Subscribe;
+        _preferences = preferences;
+        _resolveOutputs = resolveOutputs;
         _lan = loopback ? [] : AirPlayDiscovery.ReadInterfaces();
         if (!loopback && _lan.Length == 0) throw new AirPlayNoNetworkException();
         _showWindow = !loopback;
@@ -67,12 +73,12 @@ internal sealed class AirPlayReceiver : IAsyncDisposable
         _ports = new AirPlayListenerPorts(useStorePorts);
         try
         {
-            _identity = new AirPlayIdentity(name, _signingKey.PublicKey, _hevc, requireCode);
+            _identity = new AirPlayIdentity(name, _signingKey.PublicKey, _hevc, requireCode, preferences?.AirPlayId);
             _info = _identity.Info();
             _status = WaitingStatus(null);
             _listener = _ports.StartTcp(loopback ? IPAddress.Loopback : IPAddress.Any, 8);
             if (!loopback) _discovery = new AirPlayDiscovery(_identity, Port, _lan);
-            _stop.CancelAfter(WaitLimit);
+            if (_preferences == null) _stop.CancelAfter(WaitLimit);
             _run = RunAsync(_stop.Token);
         }
         catch { _listener?.Stop(); _stop.Dispose(); _signingKey.Dispose(); throw; }
@@ -166,7 +172,7 @@ internal sealed class AirPlayReceiver : IAsyncDisposable
             var status = _status;
             bool audioUnavailable = mirroring && session.MirrorAudioUnavailable;
             if (status.Stage == AirPlayStage.Connected && (!mirroring || status.Mirroring && status.MirrorAudioUnavailable == audioUnavailable)) return;
-            Volatile.Write(ref _status, status with { Stage = AirPlayStage.Connected, Sender = name, ErrorKey = null,
+            Volatile.Write(ref _status, status with { Stage = AirPlayStage.Connected, Sender = name, SenderId = session.SenderId, ErrorKey = null,
                 Mirroring = mirroring, MirrorAudioUnavailable = audioUnavailable });
         }
         NotifyChanged();
@@ -178,7 +184,7 @@ internal sealed class AirPlayReceiver : IAsyncDisposable
             if (!ReferenceEquals(_active, session)) return;
             Volatile.Write(ref _active, null);
             if (_stop.IsCancellationRequested) return;
-            _stop.CancelAfter(WaitLimit);
+            if (_preferences == null) _stop.CancelAfter(WaitLimit);
             Volatile.Write(ref _status, WaitingStatus(errorKey));
         }
         NotifyChanged();
@@ -221,7 +227,11 @@ internal sealed class AirPlayReceiver : IAsyncDisposable
     internal void Disconnect(string sourceId)
     {
         var session = Volatile.Read(ref _active);
-        if (session?.Receiving?.Id == sourceId) session.Stop();
+        if (session?.Receiving is { } source && source.Id == sourceId)
+        {
+            _preferences?.StopExternalAudio(source.PreferenceKey);
+            session.Stop();
+        }
     }
 
     internal void ShowMirror() => Volatile.Read(ref _active)?.ShowMirror();
@@ -257,6 +267,7 @@ internal sealed class AirPlayReceiver : IAsyncDisposable
         private bool _paired, _claimed, _recording;
         private string? _errorKey;
         private string _sender = "AirPlay";
+        internal string? SenderId { get; private set; }
 
         internal AirPlayAudioOutput? Receiving => Volatile.Read(ref _output) is { Pcm: not null } output ? output : null;
         internal int MirrorFrames => Volatile.Read(ref _mirror)?.PresentedFrames ?? 0;
@@ -382,7 +393,7 @@ internal sealed class AirPlayReceiver : IAsyncDisposable
             switch (request.Method)
             {
                 case "SETUP":
-                    try { (code, response) = Setup(AirPlayPlist.Read(request.Body), token); type = response != null ? AirPlayRtsp.Plist : null; }
+                    try { (code, response) = Setup(AirPlayPlist.Read(request.Body), token, request.Header("X-Apple-Device-ID")); type = response != null ? AirPlayRtsp.Plist : null; }
                     catch (InvalidDataException) { code = 400; }
                     catch (NotSupportedException ex) { System.Diagnostics.Trace.WriteLine("AirPlay setup: " + ex.Message); code = 415; }
                     catch (Exception ex) when (ex is SocketException or System.Runtime.InteropServices.COMException)
@@ -519,7 +530,7 @@ internal sealed class AirPlayReceiver : IAsyncDisposable
             finally { CryptographicOperations.ZeroMemory(key); }
         }
 
-        private (int Code, byte[]? Data) Setup(Dictionary<string, object?> setup, CancellationToken token)
+        private (int Code, byte[]? Data) Setup(Dictionary<string, object?> setup, CancellationToken token, string? headerDeviceId)
         {
             if (!setup.TryGetValue("streams", out var streams))
             {
@@ -539,6 +550,9 @@ internal sealed class AirPlayReceiver : IAsyncDisposable
                 if (!receiver.Claim(this, _pairingCode)) return (453, null);
                 _claimed = true;
                 _sender = GetSenderName(setup);
+                if ((setup.GetValueOrDefault("deviceID") as string ?? headerDeviceId) is { Length: > 0 and <= 64 } senderId
+                    && !string.IsNullOrWhiteSpace(senderId) && !senderId.Any(char.IsControl))
+                    SenderId = senderId.Trim();
                 _eventListener = receiver._ports.StartTcp(local, 2);
                 _eventTask = HoldEventConnectionAsync(_eventListener, peer, token);
                 long timingPort = _mediaKey != null ? AirPlayPlist.Int(setup, "timingPort") : 0;
@@ -634,7 +648,8 @@ internal sealed class AirPlayReceiver : IAsyncDisposable
                     else
                     {
                         _output = new AirPlayAudioOutput(_sender, OutputChanged, () => StreamEnded(true, "Phone.AirPlayAudioError"),
-                            receiver._player, receiver._watchDefault, token);
+                            receiver._player, receiver._watchDefault, token, receiver._preferences,
+                            ExternalAudioPreference.AirPlayKey(SenderId, _sender), receiver._resolveOutputs);
                         _media = new AirPlayMediaStream(receiver._ports, audioType, format, audioKey!, local, peer, _output,
                             failed => StreamEnded(failed, "Phone.AirPlayAudioError"), token, audioIv);
                         if (_recording) _media.Record();

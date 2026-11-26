@@ -1,7 +1,15 @@
 #if SONICROUTE_PHONE
+#if SONICROUTE_NATIVE_PC
+using PhoneRoutingHost = SonicRoute.Native.Product.PcRoutingApi;
+using SonicRoute.Native.Audio;
+#endif
 using System.Diagnostics;
 using SonicRoute.AndroidAudio;
 using SonicRoute.Core;
+
+#if SONICROUTE_PHONE && !SONICROUTE_NATIVE_PC
+using PhoneRoutingHost = SonicRoute.AndroidAudioHost;
+#endif
 
 namespace SonicRoute;
 
@@ -110,11 +118,15 @@ internal static partial class AppPlaybackOutputs
             return true;
         }
         var historyBefore = history.Previous.ToArray();
-        var externalIds = AndroidAudioHost.GetOutputDevices().Select(phone => phone.Id).ToHashSet(Ids);
+        var externalIds = PhoneRoutingHost.GetOutputDevices().Select(phone => phone.Id).ToHashSet(Ids);
         var localIds = new HashSet<string>(Ids) { AudioService.SystemDefaultDeviceId };
         if (historyBefore.Any(c => c.Outputs.Any(id => !AndroidOutputIdentity.IsPhoneOutput(id) && !AudioService.IsSystemDefault(id))))
+#if SONICROUTE_NATIVE_PC
+            foreach (var endpoint in SonicRoute.Native.Product.ProductAudio.Devices(Flow.Render)) localIds.Add(endpoint.Id);
+#else
             using (var devices = new WasapiDeviceLease.Enumerator())
                 foreach (var lease in devices.ActiveRender()) using (lease) localIds.Add(lease.Device.ID);
+#endif
         bool Available(string id) => !Ids.Equals(id, lost) && (AndroidOutputIdentity.IsPhoneOutput(id) ? externalIds.Contains(id) : localIds.Contains(id));
         // A Windows endpoint in the current selection remains governed by native routing even while unplugged.
         var remaining = expected.Outputs.Where(id => !AndroidOutputIdentity.IsPhoneOutput(id) || Available(id)).ToArray();

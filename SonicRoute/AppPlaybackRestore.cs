@@ -1,9 +1,14 @@
 #if SONICROUTE_NATIVE_PC
 using AudioService = SonicRoute.Native.Product.PcRoutingApi;
+using PhoneRoutingHost = SonicRoute.Native.Product.PcRoutingApi;
 using ApplicationAudio = SonicRoute.Native.Product.PcRoutingApi;
 #endif
 using SonicRoute.Core;
 using SonicRoute.Core.Compat;
+
+#if SONICROUTE_PHONE && !SONICROUTE_NATIVE_PC
+using PhoneRoutingHost = SonicRoute.AndroidAudioHost;
+#endif
 
 namespace SonicRoute;
 
@@ -14,7 +19,7 @@ internal static class AppPlaybackRestore
     private static readonly Dictionary<int, Applied> AppliedRoutes = new();
     private static readonly HashSet<int> Pending = new();
     private static readonly StringComparer Ids = StringComparer.OrdinalIgnoreCase;
-#if SONICROUTE_PHONE && !SONICROUTE_NATIVE_PC
+#if SONICROUTE_PHONE
     private static HashSet<string> _pendingPhones = new(Ids);
     private static CancellationTokenSource? _phoneStop;
     private static Task _phoneWork = Task.CompletedTask;
@@ -42,7 +47,7 @@ internal static class AppPlaybackRestore
             worker = _worker;
         }
         await worker.ConfigureAwait(false);
-#if SONICROUTE_PHONE && !SONICROUTE_NATIVE_PC
+#if SONICROUTE_PHONE
         UpdatePhonePreparation(new HashSet<string>(Ids), replace: true);
         await _phoneWork.ConfigureAwait(false);
 #endif
@@ -61,8 +66,8 @@ internal static class AppPlaybackRestore
     {
         if (app == null) return outputs.Length < 2;
         if (outputs.Length < 2 && !SavedPlaybackStore.ReadAll().ContainsKey(app.Value.Key)) return true;
-#if SONICROUTE_PHONE && !SONICROUTE_NATIVE_PC
-        string? Persistent(string id) => AndroidAudioHost.GetPersistentOutputId(id);
+#if SONICROUTE_PHONE
+        string? Persistent(string id) => PhoneRoutingHost.GetPersistentOutputId(id);
         var stable = outputs.Select(Persistent).ToArray();
         if (stable.Any(id => id == null)) return false;
         var ids = stable.Select(id => id!).ToArray();
@@ -144,13 +149,13 @@ internal static class AppPlaybackRestore
             }
             try
             {
-#if SONICROUTE_PHONE && !SONICROUTE_NATIVE_PC
+#if SONICROUTE_PHONE
                 var missingPhones = new HashSet<string>(Ids);
 #endif
                 if (SavedPlaybackStore.ReadAll().Count == 0)
                 {
                     ReleaseWatch();
-#if SONICROUTE_PHONE && !SONICROUTE_NATIVE_PC
+#if SONICROUTE_PHONE
                     UpdatePhonePreparation(missingPhones, replace: true);
 #endif
                     continue;
@@ -180,15 +185,15 @@ internal static class AppPlaybackRestore
                         if (!_active) break;
                         if (AppliedRoutes.TryGetValue(pid, out var done) && done.App == app && done.Choice == choice && done.Complete && !refresh) continue;
                     }
-#if SONICROUTE_PHONE && !SONICROUTE_NATIVE_PC
+#if SONICROUTE_PHONE
                     foreach (string id in choice.Outputs)
-                        if (ApplicationAudio.IsPhoneOutputDevice(id) && AndroidAudioHost.ResolvePersistentOutputId(id) == null)
+                        if (ApplicationAudio.IsPhoneOutputDevice(id) && PhoneRoutingHost.ResolvePersistentOutputId(id) == null)
                             missingPhones.Add(id);
 #endif
                     try { await RestoreAsync(pid, app, choice).ConfigureAwait(false); }
                     catch (Exception ex) { ExceptionDiagnostics.Record("PlaybackRestore.Apply", ex); }
                 }
-#if SONICROUTE_PHONE && !SONICROUTE_NATIVE_PC
+#if SONICROUTE_PHONE
                 UpdatePhonePreparation(missingPhones, replace: scan);
 #endif
             }
@@ -196,7 +201,7 @@ internal static class AppPlaybackRestore
         }
     }
 
-#if SONICROUTE_PHONE && !SONICROUTE_NATIVE_PC
+#if SONICROUTE_PHONE
     private static void UpdatePhonePreparation(HashSet<string> missing, bool replace)
     {
         if (!replace) missing.UnionWith(_pendingPhones);
@@ -215,7 +220,7 @@ internal static class AppPlaybackRestore
             if (stop == null) return;
             try
             {
-                await AndroidAudioHost.PrepareSavedPhoneOutputsAsync(missing, stop.Token).ConfigureAwait(false);
+                await PhoneRoutingHost.PrepareSavedPhoneOutputsAsync(missing, stop.Token).ConfigureAwait(false);
                 if (!stop.IsCancellationRequested) OutputsChanged();
             }
             catch (OperationCanceledException) when (stop.IsCancellationRequested) { }
@@ -239,8 +244,8 @@ internal static class AppPlaybackRestore
         string? Available(string id)
         {
             if (_watch!.IsAvailable(id)) return id;
-#if SONICROUTE_PHONE && !SONICROUTE_NATIVE_PC
-            if (AndroidAudioHost.ResolvePersistentOutputId(id) is { } runtime && ApplicationAudio.IsPhoneOutputDevice(runtime)) return runtime;
+#if SONICROUTE_PHONE
+            if (PhoneRoutingHost.ResolvePersistentOutputId(id) is { } runtime && ApplicationAudio.IsPhoneOutputDevice(runtime)) return runtime;
 #endif
             return null;
         }

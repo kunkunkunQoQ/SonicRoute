@@ -667,6 +667,7 @@
   "Phone.PairAndConnect": "Сопрячь и подключить",
   "Phone.ConnectedStatus": "Подключено",
   "Phone.ProcessingStatus": "Обработка…",
+  "Phone.DragAppOrder": "Перетащите значок приложения, чтобы изменить порядок. У края список прокручивается. Нажмите Esc для отмены.",
   "Phone.QuickPanelAppsTitle": "На быстрой панели",
   "Phone.SmartVolumeTitle": "Умная регулировка громкости",
   "Phone.ClipboardSyncTitle": "Синхронизация буфера обмена",

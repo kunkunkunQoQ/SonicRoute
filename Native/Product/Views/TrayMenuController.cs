@@ -251,10 +251,7 @@ internal sealed class TrayMenuController
                         var devices = ProductAudio.Devices(Flow.Render);
                         return (Devices: devices, Selected: devices.Length == 0 ? null : ProductAudio.DefaultId(Flow.Render));
                     }
-                    var outputs = ProductAudio.Devices(Flow.Render).ToList();
-#if SONICROUTE_PHONE
-                    if (host.Audio.ExternalAudio is { } external) outputs.AddRange(external.GetPhoneOutputs(target.App));
-#endif
+                    var outputs = host.Audio.RenderDevicesWithPhone(target.App, includePhoneCurrent: true).ToList();
                     outputs.Insert(0, new(AudioService.SystemDefaultDeviceId, L10n.T("Dev.SystemDefaultOut")));
                     return (Devices: outputs.ToArray(), Selected: host.Audio.ReadRoute(target.App, Flow.Render) ?? AudioService.SystemDefaultDeviceId);
                 }, state =>
@@ -270,8 +267,7 @@ internal sealed class TrayMenuController
                     foreach (var device in devices)
                     {
                         bool chosen = SameDevice(device.Id, selected);
-                        if (config.HiddenOutputDevices.Contains(device.Id) &&
-                            (target == null || !chosen || AudioService.IsSystemDefault(device.Id))) continue;
+                        if (!config.IsDeviceShown(EDataFlow.eRender, device.PreferenceId)) continue;
                         string id = device.Id, name = Name(config, device);
                         rows.Add(new()
                         {
@@ -357,9 +353,9 @@ internal sealed class TrayMenuController
 #if SONICROUTE_PHONE
         if (target.App.IsExternal)
         {
-            var external = await host.Audio.SetExternalOutputsAsync(target.App, [id]).ConfigureAwait(false);
-            if (external.Text.StartsWith("error:", StringComparison.Ordinal) ||
-                !host.Audio.GetSelectedOutputs(target.App).Any(actual => SameDevice(id, actual)))
+            if (host.Audio.ExternalAudio is not { } bridge) throw new InvalidOperationException(L10n.T("Tray.AppUnavailable"));
+            var external = await bridge.SetExternalOutputAsync(target.App, id).ConfigureAwait(false);
+            if (external.Text.StartsWith("error:", StringComparison.Ordinal))
                 throw new InvalidOperationException(external.Text);
             return new(name);
         }

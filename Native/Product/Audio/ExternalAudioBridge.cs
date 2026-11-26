@@ -20,24 +20,62 @@ namespace SonicRoute.Native.Product;
 /// </summary>
 internal sealed class ExternalAudioBridge : IDisposable
 {
-    private static readonly Guid SilenceMuteContext = new("7E2A9B10-58E1-4F7C-8B4A-4B2C9C1F3E81");
     private readonly Func<PhonePreview?> _tryGetPhone;
     private readonly Func<PhonePreview> _getPhone;
     private readonly Func<AirPlayPreview?> _tryGetAirPlay;
     private readonly Action _onChanged;
-    private readonly object _silenceGate = new();
-    private readonly Dictionary<string, ReservedEndpointState> _reservedSilence = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Func<IEnumerable<string>, CancellationToken, Task>? _prepareSaved;
+    private readonly AndroidAudioSettingsStore? _preferences;
+    internal PhonePreview? ExistingPhone => _tryGetPhone();
+    internal const string AirPlaySourcePrefix = ExternalAudioPreference.AirPlayPrefix;
+
+    private static string AirPlayVisibilityKey(AirPlayStatus status) =>
+        ExternalAudioPreference.AirPlayKey(status.SenderId, status.Sender!);
+
+    internal AudioDeviceInfo? ConnectedAirPlaySender()
+    {
+        var status = _tryGetAirPlay()?.Status;
+        return status is { Stage: AirPlayStage.Connected, Sender: { Length: > 0 } sender }
+            ? new AudioDeviceInfo { Id = AirPlayVisibilityKey(status), DisplayName = sender, Flow = EDataFlow.eRender }
+            : null;
+    }
+
+    internal bool IsQuickPanelSourceVisible(AudioAppInfo app, AppConfig config)
+    {
+        if (app.ProcessName is { } process && config.HiddenPanelApps.Contains(process, StringComparer.OrdinalIgnoreCase)) return false;
+        if (!string.Equals(app.ProcessName, "airplay:receiver", StringComparison.OrdinalIgnoreCase)) return true;
+        if (app.ExternalPreferenceKey is { } key) return config.IsDeviceShown(EDataFlow.eRender, key);
+        var receiver = _tryGetAirPlay();
+        if (receiver?.Status is not { Stage: AirPlayStage.Connected } status || receiver.Source?.Id != app.ExternalSourceId)
+            return false;
+        return config.IsDeviceShown(EDataFlow.eRender, AirPlayVisibilityKey(status));
+    }
+
+    internal IEnumerable<AudioDeviceInfo> AirPlaySenders()
+    {
+        var connected = ConnectedAirPlaySender();
+        foreach (var choice in _preferences?.ExternalAudio ?? [])
+            if (choice.App == null && choice.Visible && choice.Key != connected?.Id)
+                yield return new AudioDeviceInfo { Id = choice.Key, DisplayName = choice.Name, Flow = EDataFlow.eRender };
+        if (connected != null) yield return connected;
+    }
+
+    internal Task PrepareSavedPhoneOutputsAsync(IEnumerable<string> outputs, CancellationToken token) =>
+        _prepareSaved?.Invoke(outputs, token) ?? Task.CompletedTask;
 
     internal ExternalAudioBridge(
         Func<PhonePreview?> tryGetPhone,
         Func<PhonePreview> getPhone,
         Func<AirPlayPreview?> tryGetAirPlay,
-        Action onChanged)
+        Action onChanged, Func<IEnumerable<string>, CancellationToken, Task>? prepareSaved = null,
+        AndroidAudioSettingsStore? preferences = null)
     {
         _tryGetPhone = tryGetPhone;
         _getPhone = getPhone;
         _tryGetAirPlay = tryGetAirPlay;
         _onChanged = onChanged;
+        _prepareSaved = prepareSaved;
+        _preferences = preferences;
         AppDisplayName.ExternalNameResolver = ResolveExternalDisplayName;
     }
 
@@ -66,37 +104,121 @@ internal sealed class ExternalAudioBridge : IDisposable
         return null;
     }
 
-    internal void AppendExternalApps(List<AudioAppInfo> result)
+    internal void AppendExternalApps(List<AudioAppInfo> result, bool includeOffline = true)
     {
-        if (_tryGetPhone() is { } phone)
+        var phone = _tryGetPhone();
+        var airPlay = _tryGetAirPlay()?.Source;
+        var sources = phone?.Sources.Sources ?? [];
+        if (!includeOffline)
         {
-            foreach (var source in phone.Sources.Sources)
+            foreach (var source in sources)
+                if (source.Session.State.State == CaptureState.Receiving)
+                    result.Add(AndroidCard(source.App, phone!.Store.GetDisplayName(source.Device),
+                        ExternalAudioPreference.AndroidKey(source.Device, source.App.Package), source));
+            if (airPlay != null) result.Add(AirPlayCard(airPlay.Name, airPlay.PreferenceKey, airPlay));
+            return;
+        }
+        var added = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var choice in _preferences?.ExternalAudio ?? phone?.Settings.ExternalAudio ?? [])
+        {
+            if (!choice.Visible) continue;
+            if (choice.App is { } app)
             {
-                string deviceName = phone.Store.GetDisplayName(source.Device);
-                result.Add(new AudioAppInfo
-                {
-                    ProcessId = 0,
-                    ExternalSourceId = source.Id,
-                    ProcessName = "android:" + source.App.Package,
-                    DisplayName = source.App.IsDeviceAudio ? deviceName : source.App.Name,
-                    SourceLabel = string.Format(L10n.T("Phone.FromDevice"), deviceName),
-                    ExternalIconPng = source.App.IconPng,
-                    HasActiveSession = source.Session.State.State == CaptureState.Receiving,
-                });
+                var profile = phone?.Store.Profiles.FirstOrDefault(p => AndroidDeviceIdentity.StableKey(p.LastDevice) == choice.DeviceKey);
+                if (profile == null || phone == null) continue;
+                var live = sources.FirstOrDefault(source => source.App.Package == app.Package &&
+                    AndroidDeviceIdentity.MatchesSavedDevice(profile.LastDevice, source.Device));
+                string name = phone.Store.GetProfileDisplayName(profile);
+                result.Add(AndroidCard(live?.App ?? app, name, choice.Key, live));
+                if (live != null) added.Add(live.Id);
+            }
+            else
+            {
+                var live = airPlay?.PreferenceKey == choice.Key ? airPlay : null;
+                result.Add(AirPlayCard(live?.Name ?? choice.Name, choice.Key, live));
+                if (live != null) added.Add(live.Id);
             }
         }
-        if (_tryGetAirPlay()?.Source is { } airPlay)
+        if (phone != null)
         {
-            result.Add(new AudioAppInfo
-            {
-                ProcessId = 0,
-                ExternalSourceId = airPlay.Id,
-                ProcessName = "airplay:receiver",
-                DisplayName = airPlay.Name,
-                SourceLabel = "AirPlay",
-                HasActiveSession = airPlay.Pcm != null,
-            });
+            foreach (var source in sources)
+                if (!added.Contains(source.Id))
+                    result.Add(AndroidCard(source.App, phone.Store.GetDisplayName(source.Device),
+                        ExternalAudioPreference.AndroidKey(source.Device, source.App.Package), source));
         }
+        if (airPlay != null && !added.Contains(airPlay.Id))
+            result.Add(AirPlayCard(airPlay.Name, airPlay.PreferenceKey, airPlay));
+    }
+
+    private static AudioAppInfo AndroidCard(AndroidApp app, string phoneName, string? key, AndroidAudioSource? live) =>
+        new()
+        {
+            ProcessId = 0, ExternalSourceId = live?.Id ?? key, ExternalPreferenceKey = key,
+            ProcessName = "android:" + app.Package, DisplayName = app.IsDeviceAudio ? phoneName : app.Name,
+            SourceLabel = string.Format(L10n.T("Phone.FromDevice"), phoneName), ExternalIconPng = app.IconPng,
+            HasActiveSession = live?.Session.State.State == CaptureState.Receiving,
+            IsExternalOffline = live?.Session.State.State != CaptureState.Receiving,
+        };
+
+    private static AudioAppInfo AirPlayCard(string name, string? key, AirPlayAudioOutput? live) =>
+        new()
+        {
+            ProcessId = 0, ExternalSourceId = live?.Id ?? key, ExternalPreferenceKey = key, ProcessName = "airplay:receiver",
+            DisplayName = name, SourceLabel = "AirPlay", HasActiveSession = live != null, IsExternalOffline = live == null,
+        };
+
+    private ExternalAudioPreference? FindPreference(AudioAppInfo app) =>
+        (_preferences ?? _tryGetPhone()?.Settings)?.FindExternalAudio(app.ExternalPreferenceKey);
+
+    internal async Task StopExternalSourceAsync(AudioAppInfo app)
+    {
+        string? id = app.ExternalSourceId;
+        if (id == null) return;
+        var phone = _tryGetPhone();
+        if (phone?.Sources.FindSource(id) is { } live)
+            await phone.Sources.RemoveAsync(live.Id).ConfigureAwait(false);
+        else if (_tryGetAirPlay() is { } airPlay && airPlay.Source is { } sender
+            && (sender.Id == id || sender.PreferenceKey != null && sender.PreferenceKey == app.ExternalPreferenceKey))
+            airPlay.Disconnect(sender.Id);
+        else if (FindPreference(app) is { } choice)
+        {
+            if (choice.App != null && phone?.Store.Profiles.FirstOrDefault(p => AndroidDeviceIdentity.StableKey(p.LastDevice) == choice.DeviceKey)
+                ?.LastDevice is { } device)
+                await phone.Sources.RemoveApplicationAsync(device, choice.App.Package).ConfigureAwait(false);
+            else _preferences?.StopExternalAudio(choice.Key);
+            phone?.QueueSourceReconciliation(refreshRoutes: false);
+            _onChanged();
+        }
+    }
+
+    internal static string?[] ResolveAvailableOutputs(string?[] desired)
+    {
+        if (desired.Length == 1 && desired[0] == null) return desired;
+        HashSet<string>? windows = null;
+        var active = new List<string?>(desired.Length);
+        foreach (string? id in desired)
+        {
+            if (id == null || id == AndroidAudioSession.SourcePhoneOutputId) active.Add(id);
+            else if (AndroidOutputIdentity.IsPhoneOutput(id))
+            {
+                if (PcRoutingApi.ResolvePersistentOutputId(id) is { } available) active.Add(available);
+            }
+            else
+            {
+                if (windows == null)
+                {
+                    try { windows = ProductAudio.Devices(Flow.Render).Select(e => e.Id).ToHashSet(StringComparer.OrdinalIgnoreCase); }
+                    catch (Exception error)
+                    {
+                        ExceptionDiagnostics.Record("ExternalAudio.ResolveOutputs", error);
+                        windows = new(StringComparer.OrdinalIgnoreCase);
+                    }
+                }
+                var endpoint = AudioPolicyConfig.UnpackDeviceId(id);
+                if (windows.Contains(endpoint)) active.Add(endpoint);
+            }
+        }
+        return active.Count == 0 ? [null] : active.ToArray();
     }
 
     internal IPhoneAudioSession? FindSession(string? externalSourceId)
@@ -109,11 +231,24 @@ internal sealed class ExternalAudioBridge : IDisposable
         return null;
     }
 
+    internal static event Action? PeakActivity
+    {
+        add => AndroidPcmSource.PeakActivity += value;
+        remove => AndroidPcmSource.PeakActivity -= value;
+    }
+
+    internal (bool Active, float Peak) ReadPeak(string? sourceId)
+    {
+        var session = FindSession(sourceId);
+        return session?.State is { State: CaptureState.Receiving, Muted: false, Volume: > 0 } && session.Pcm is { } pcm
+            ? pcm.ReadMeterPeak() : (false, 0f);
+    }
+
     internal VolumeState ReadExternalVolume(AudioAppInfo app)
     {
         var session = FindSession(app.ExternalSourceId);
         if (session == null || session.State.State != CaptureState.Receiving)
-            return new(-1, false, 0);
+            return FindPreference(app) is { } saved ? new(saved.Volume, saved.Muted, 0) : new(-1, false, 0);
         return new(session.State.Volume, session.State.Muted, 1);
     }
 
@@ -145,6 +280,8 @@ internal sealed class ExternalAudioBridge : IDisposable
     internal string[] GetExternalOutputs(AudioAppInfo app)
     {
         var session = FindSession(app.ExternalSourceId);
+        if (session?.State.State != CaptureState.Receiving && FindPreference(app) is { } saved)
+            return saved.Outputs.Select(id => id ?? AudioService.SystemDefaultDeviceId).ToArray();
         if (session is IMultiOutputAudioSession multi)
         {
             var list = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -161,9 +298,39 @@ internal sealed class ExternalAudioBridge : IDisposable
         return [string.IsNullOrWhiteSpace(single) ? AudioService.SystemDefaultDeviceId : AudioPolicyConfig.UnpackDeviceId(single)];
     }
 
+    // Settings and all-app commands use a device-qualified address, while the
+    // source handset's session records its own native playback as a local alias.
+    internal string? AddressedOutput(AudioAppInfo app, string? id)
+    {
+        if (id == AndroidAudioSession.SourcePhoneOutputId && FindSession(app.ExternalSourceId)?.State.Device is { } device)
+            return AndroidOutputIdentity.FormatDeviceId(AndroidDeviceIdentity.Key(device), AndroidOutputSink.Current.Key);
+        if (id == AndroidAudioSession.SourcePhoneOutputId && FindPreference(app)?.DeviceKey is { } key)
+            return AndroidOutputIdentity.FormatDeviceId(key, AndroidOutputSink.Current.Key);
+        return id;
+    }
+
+    internal async Task<ControlReply> SetExternalOutputAsync(AudioAppInfo app, string id)
+    {
+        var session = FindSession(app.ExternalSourceId);
+        if (session == null) return new("error: external_session_unavailable");
+        try
+        {
+            await session.SetOutputAsync(AudioService.IsSystemDefault(id) ? null : id).ConfigureAwait(false);
+            _onChanged();
+            var state = session.State;
+            if (!ReferenceEquals(session, FindSession(app.ExternalSourceId)) || state.State != CaptureState.Receiving)
+                return new("error: external_session_unavailable");
+            string? actual = AddressedOutput(app, state.OutputId ?? AudioService.SystemDefaultDeviceId);
+            return string.Equals(actual, AddressedOutput(app, id), StringComparison.OrdinalIgnoreCase)
+                ? new("ok") : new("error: output_readback_mismatch");
+        }
+        catch (Exception ex) { return new("error: " + ex.Message); }
+    }
+
     internal async Task<ControlReply> SetExternalOutputsAsync(AudioAppInfo app, string[] outputs)
     {
-        if (FindSession(app.ExternalSourceId) is not IMultiOutputAudioSession multi)
+        var session = FindSession(app.ExternalSourceId);
+        if (session is not IMultiOutputAudioSession multi)
             return new("error: external_session_unavailable");
         try
         {
@@ -173,7 +340,12 @@ internal sealed class ExternalAudioBridge : IDisposable
             if (normalized.Length == 0) normalized = [null];
             await multi.SetOutputsAsync(normalized).ConfigureAwait(false);
             _onChanged();
-            return new("ok");
+            if (!ReferenceEquals(session, FindSession(app.ExternalSourceId)) || session.State.State != CaptureState.Receiving)
+                return new("error: external_session_unavailable");
+            var requested = normalized.Select(id => AddressedOutput(app, id ?? AudioService.SystemDefaultDeviceId))
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            return requested.SetEquals(GetExternalOutputs(app).Select(id => AddressedOutput(app, id)))
+                ? new("ok") : new("error: output_readback_mismatch");
         }
         catch (Exception ex)
         {
@@ -197,7 +369,7 @@ internal sealed class ExternalAudioBridge : IDisposable
             string? alias = aliases?.GetValueOrDefault(current);
             string name = string.IsNullOrWhiteSpace(alias) ? L10n.T("Phone.NativeAudioOutput") : alias;
             if (string.IsNullOrWhiteSpace(alias) && devices.Count > 1 && !own) name += " · " + phoneName;
-            list.Add(new(own ? AndroidAudioSession.SourcePhoneOutputId : current, name));
+            list.Add(new(own ? AndroidAudioSession.SourcePhoneOutputId : current, name, VisibilityId: own ? current : null));
         }
         void AddDevice(AndroidDevice online)
         {
@@ -226,8 +398,6 @@ internal sealed class ExternalAudioBridge : IDisposable
             }
         }
         foreach (var device in devices) AddDevice(device);
-        if (source != null && !seen.Contains(AndroidDeviceIdentity.Key(source.Device)))
-            AddCurrent(AndroidDeviceIdentity.Key(source.Device), true, phone.Store.GetDisplayName(source.Device));
         return list.ToArray();
     }
 
@@ -243,9 +413,7 @@ internal sealed class ExternalAudioBridge : IDisposable
         if (!AndroidOutputIdentity.TryParseDeviceId(targetDeviceId, out string phoneKey, out _))
             return (false, -1, L10n.T("Phone.Err.InvalidPhoneOutputDevice"));
         var phone = _getPhone();
-        var connected = phone.Connections.ResolveKey(phoneKey)
-            ?? (phone.Discovery.Devices ?? []).FirstOrDefault(d => string.Equals(d.State, "device", StringComparison.Ordinal)
-                && string.Equals(AndroidDeviceIdentity.Key(d), phoneKey, StringComparison.OrdinalIgnoreCase));
+        var connected = phone.Connections.ResolveKey(phoneKey);
         if (connected == null)
             return (false, -1, L10n.T("Phone.Err.PhoneOffline"));
         var result = phone.Pc.RouteProcess(pid, targetDeviceId, connected, silenceLocal);
@@ -282,139 +450,7 @@ internal sealed class ExternalAudioBridge : IDisposable
         return null;
     }
 
-    internal IPcProcessSilenceLease? AcquireLocalSilenceLease(int pid)
-    {
-        if (pid <= 0) return null;
-        return TryAcquireEndpointLease(pid);
-    }
-
-    private sealed class ReservedEndpointState
-    {
-        internal required string EndpointId;
-        internal bool WasMuted;
-        internal int RefCount;
-    }
-
-    private sealed class NativeSilenceLease : IPcProcessSilenceLease
-    {
-        private readonly ExternalAudioBridge _bridge;
-        private readonly int _pid;
-        private readonly string _reservedEndpoint;
-        private readonly string? _prevMultimedia;
-        private readonly string? _prevConsole;
-        private int _released;
-
-        internal NativeSilenceLease(ExternalAudioBridge bridge, int pid, string reservedEndpoint, string? prevMultimedia, string? prevConsole)
-        {
-            _bridge = bridge;
-            _pid = pid;
-            _reservedEndpoint = reservedEndpoint;
-            _prevMultimedia = prevMultimedia;
-            _prevConsole = prevConsole;
-        }
-
-        public void Release(bool restorePreviousEndpoint)
-        {
-            if (Interlocked.Exchange(ref _released, 1) != 0) return;
-            _bridge.ReleaseEndpointLease(_pid, _reservedEndpoint, _prevMultimedia, _prevConsole, restorePreviousEndpoint);
-        }
-
-        public void Dispose() => Release(restorePreviousEndpoint: true);
-    }
-
-    private IPcProcessSilenceLease? TryAcquireEndpointLease(int pid)
-    {
-        try
-        {
-            using var mta = new MtaScope();
-            using var endpoints = new Endpoints();
-            var defaults = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var role in new[] { Role.Console, Role.Multimedia, Role.Communications })
-            {
-                try
-                {
-                    using var def = endpoints.Default(Flow.Render, role);
-                    defaults.Add(Endpoints.Id(def));
-                }
-                catch (COMException) { }
-            }
-            string? candidate = endpoints.Active(Flow.Render)
-                .Select(e => e.Id)
-                .FirstOrDefault(id => !defaults.Contains(id));
-            if (string.IsNullOrWhiteSpace(candidate)) return null;
-
-            string? prevMedia;
-            string? prevConsole;
-            using (var policy = new Policy())
-            {
-                prevMedia = policy.Read((uint)pid, Flow.Render, Role.Multimedia);
-                prevConsole = policy.Read((uint)pid, Flow.Render, Role.Console);
-            }
-
-            lock (_silenceGate)
-            {
-                if (!_reservedSilence.TryGetValue(candidate, out var state))
-                {
-                    using var dev = endpoints.Open(candidate);
-                    using var vol = Endpoints.Activate(dev, Endpoints.VolumeInterface);
-                    (_, bool wasMuted) = Endpoints.ReadVolume(vol, endpoint: true);
-                    if (!wasMuted) Endpoints.SetMute(vol, endpoint: true, true, SilenceMuteContext);
-                    state = new ReservedEndpointState { EndpointId = candidate, WasMuted = wasMuted, RefCount = 0 };
-                    _reservedSilence[candidate] = state;
-                }
-                state.RefCount++;
-            }
-
-            try
-            {
-                string full = AudioPolicyConfig.EnsureFullDeviceId(candidate, EDataFlow.eRender);
-                using var policy = new Policy();
-                policy.Write((uint)pid, Flow.Render, Role.Multimedia, full);
-                policy.Write((uint)pid, Flow.Render, Role.Console, full);
-            }
-            catch
-            {
-                ReleaseEndpointLease(pid, candidate, prevMedia, prevConsole, restorePreviousEndpoint: false);
-                return null;
-            }
-
-            return new NativeSilenceLease(this, pid, candidate, prevMedia, prevConsole);
-        }
-        catch (COMException)
-        {
-            return null;
-        }
-    }
-
-    private void ReleaseEndpointLease(int pid, string reservedEndpoint, string? prevMedia, string? prevConsole, bool restorePreviousEndpoint)
-    {
-        try
-        {
-            using var mta = new MtaScope();
-            if (restorePreviousEndpoint)
-            {
-                using var policy = new Policy();
-                try { policy.Write((uint)pid, Flow.Render, Role.Multimedia, prevMedia); } catch (COMException) { }
-                try { policy.Write((uint)pid, Flow.Render, Role.Console, prevConsole); } catch (COMException) { }
-            }
-
-            lock (_silenceGate)
-            {
-                if (_reservedSilence.TryGetValue(reservedEndpoint, out var state) && --state.RefCount <= 0)
-                {
-                    _reservedSilence.Remove(reservedEndpoint);
-                    if (!state.WasMuted)
-                    {
-                        using var endpoints = new Endpoints();
-                        using var dev = endpoints.Open(reservedEndpoint);
-                        using var vol = Endpoints.Activate(dev, Endpoints.VolumeInterface);
-                        Endpoints.SetMute(vol, endpoint: true, false, SilenceMuteContext);
-                    }
-                }
-            }
-        }
-        catch (COMException) { }
-    }
+    internal IPcProcessSilenceLease? AcquireLocalSilenceLease(int pid) => PhoneMirrorIsolation.AcquireLegacy(pid);
 
     public void Dispose()
     {

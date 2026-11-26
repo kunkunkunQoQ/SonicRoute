@@ -26,7 +26,7 @@ internal sealed class PcRoutingPolicy : IDisposable
     public void Dispose() { _policy.Dispose(); _mta.Dispose(); }
 }
 
-internal static class PcRoutingApi
+internal static partial class PcRoutingApi
 {
     internal const string SystemDefaultDeviceId = Core.AudioService.SystemDefaultDeviceId;
     internal static bool IsSystemDefault(string? id) => Core.AudioService.IsSystemDefault(id);
@@ -84,11 +84,15 @@ internal static class PcRoutingApi
     internal static bool IsPhoneOutputDevice(string? id) => id?.StartsWith("android-out:",StringComparison.OrdinalIgnoreCase) == true;
     internal static string[] ResolveOutputs(string[] requested, bool strict)
     {
-        var active = ProductAudio.Devices(Flow.Render).Select(d => d.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        HashSet<string>? active = null;
         var valid = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (string value in requested)
         {
             string id = PcRoutingPolicy.UnpackDeviceId(value);
+#if SONICROUTE_PHONE
+            if (IsPhoneOutputDevice(id)) { valid.Add(id); continue; }
+#endif
+            active ??= ProductAudio.Devices(Flow.Render).Select(d => d.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
             if (IsSystemDefault(id) ? active.Count > 0 : active.Contains(id)) valid.Add(id);
             else if (strict) throw new IOException(L10n.T("Ov.CurrentUnavailable"));
         }

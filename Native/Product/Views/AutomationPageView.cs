@@ -49,14 +49,7 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
     private bool _dropRuleAfter;
     private UiRect _listViewport;
 
-    // Step drag-to-reorder state
-    private readonly List<(int Index, UiRect CardRect)> _stepCardRects = new();
-    private int _dragStepIndex = -1;
-    private bool _stepDragging;
-    private float _stepDragStartY;
-    private float _stepDragPointerY;
-    private int _dropStepIndex = -1;
-    private bool _dropStepAfter;
+    private readonly UiVerticalReorder<int> _stepOrder = new();
     private UiRect _editorViewport;
 
     // Volume slider drag state
@@ -67,7 +60,7 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
     private bool _observed;
     private bool _disposed;
 
-    public bool NeedsAnimationTick => _ruleDragging || _stepDragging;
+    public bool NeedsAnimationTick => _ruleDragging || _stepOrder.NeedsScrollTick(_editorScroll, _editorViewport);
 
     public void TickAnimation()
     {
@@ -87,21 +80,9 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
                 UpdateRuleDropTarget();
             }
         }
-        else if (_stepDragging)
+        else
         {
-            const float edge = 28f;
-            if (_stepDragPointerY < _editorViewport.Y + edge)
-            {
-                _editorScroll.Offset -= 10f;
-                _editorScroll.Clamp();
-                UpdateStepDropTarget();
-            }
-            else if (_stepDragPointerY > _editorViewport.Bottom - edge)
-            {
-                _editorScroll.Offset += 10f;
-                _editorScroll.Clamp();
-                UpdateStepDropTarget();
-            }
+            _stepOrder.TickScroll(_editorScroll, _editorViewport);
         }
     }
 
@@ -140,7 +121,7 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
         _draggingVolStepIndex = -1;
         if (_ruleDragging || _dragRuleId != null)
             CommitOrCancelRuleDrag(commit: false);
-        if (_stepDragging || _dragStepIndex >= 0)
+        if (_stepOrder.Pressed)
             CommitOrCancelStepDrag(commit: false);
     }
 
@@ -165,7 +146,7 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
                 AudioAppInfo[] apps = [];
                 try
                 {
-                    outs = actions.Host.Audio.RenderDevicesWithPhone();
+                    outs = actions.Host.Audio.RenderDevicesWithPhone(includePhoneCurrent: true);
                     ins = ProductAudio.Devices(Flow.Capture);
                     apps = actions.Host.Audio.Apps().Where(app => !AudioService.IsInternalApplication(app.ProcessId, app.ProcessName)).ToArray();
                 }
@@ -216,7 +197,7 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
         _clicks.Clear();
         _fileDropTargets.Clear();
         _visibleRuleRows.Clear();
-        _stepCardRects.Clear();
+        _stepOrder.ClearRows();
         _stepVolSliders.Clear();
 
         _listViewport = _editorViewport = default;
@@ -516,7 +497,7 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
         {
             g.DrawText(L10n.T("Auto.TriggerApp"), new UiRect(ex, y, labelW - 8f, 34f), t.TextSecondary, 12.5f, 400, UiTextAlign.Leading, UiVertAlign.Center);
             var pickRect = new UiRect(inputX, y, inputW, 34f);
-            UiPrimitives.DrawComboBox(g, t, hit, "edit.trigapp.pick", pickRect, AppChoiceLabel(_editingRule.TriggerApp));
+            DrawAppPicker(g, t, hit, "edit.trigapp.pick", pickRect, _editingRule.TriggerApp);
             RegisterBtn("edit.trigapp.pick", pickRect, _editorViewport, hit, () =>
                 OpenAppPickerCombo(pickRect, _editingRule.TriggerApp, proc => { _editingRule.TriggerApp = proc; actions.Invalidate(); }));
             y += 42f;
@@ -592,6 +573,7 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
 
         _editorScroll.ContentHeight = MathF.Max(0f, y - startY);
         _editorScroll.Clamp();
+        if (_stepOrder.Retarget(_editorScroll, _editorViewport)) actions.Invalidate();
         _editorScroll.Draw(g, t, hit, "edit.scroll", _editorViewport);
 
         // Footer Save bar
@@ -616,20 +598,16 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
         float paramsH = MeasureStepParamsHeight(step);
         float cardH = pad + 34f + 10f + paramsH + pad;
         var cardRect = new UiRect(x, y, w, cardH);
-        _stepCardRects.Add((index, cardRect));
+        _stepOrder.AddRow(index, cardRect, _editorScroll.Offset);
 
-        bool isDragged = _stepDragging && _dragStepIndex == index;
+        bool isDragged = _stepOrder.IsSource(index);
         (UiColor bg, UiColor border, UiColor fg) = StepPalette(t.IsDark, step.Action);
         if (isDragged) bg = bg.WithAlphaFraction(0.55f);
 
         g.FillRoundedRect(cardRect, 10f, bg);
         g.DrawRoundedRect(cardRect, 10f, isDragged ? t.Accent : border, isDragged ? 1.8f : 1f);
 
-        if (_stepDragging && _dropStepIndex == index && _dragStepIndex != index)
-        {
-            float lineY = _dropStepAfter ? cardRect.Bottom + 4f : cardRect.Y - 4f;
-            g.DrawLine(cardRect.X, lineY, cardRect.Right, lineY, t.Accent, 2.5f);
-        }
+        _stepOrder.DrawInsertionLine(g, t, index, cardRect, gap: 4f);
 
         // Top bar: Grip + Step index badge + Action Combo + Copy + Delete
         float ty = y + pad;
@@ -701,7 +679,7 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
         {
             g.DrawText(L10n.T("Auto.TargetApp"), new UiRect(x, y, lw - 6f, 32f), t.TextSecondary, 12f, 400, UiTextAlign.Leading, UiVertAlign.Center);
             var pickRect = new UiRect(ix, y, iw, 32f);
-            UiPrimitives.DrawComboBox(g, t, hit, $"step.{index}.apppick", pickRect, AppChoiceLabel(step.TargetApp), fontSize: 12f);
+            DrawAppPicker(g, t, hit, $"step.{index}.apppick", pickRect, step.TargetApp, fontSize: 12f);
             RegisterBtn($"step.{index}.apppick", pickRect, _editorViewport, hit, () =>
                 OpenAppPickerCombo(pickRect, step.TargetApp, proc => { step.TargetApp = proc; actions.Invalidate(); }));
             y += 40f;
@@ -825,7 +803,9 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
                 var openRect = new UiRect(brRect.Right + 4f, y, choiceW, 30f);
                 string label = item.OpenWith.Length == 0 ? L10n.T("Auto.OpenWithDefault")
                     : string.IsNullOrWhiteSpace(item.OpenWithName) ? Path.GetFileNameWithoutExtension(item.OpenWith) : item.OpenWithName;
-                UiPrimitives.DrawComboBox(g, t, hit, openId, openRect, label, fontSize: 12f);
+                UiPrimitives.DrawComboBox(g, t, hit, openId, openRect, label, fontSize: 12f,
+                    appIcon: item.OpenWith.Length == 0 ? null : ComboAppIcon.ForExecutable(item.OpenWith),
+                    onAppIconLoaded: OnAppPickerIconLoaded);
                 RegisterBtn(openId, openRect, _editorViewport, hit, () => OpenWithMenu(item, openRect),
                     tooltip: string.IsNullOrEmpty(item.OpenWith) ? L10n.T("Auto.OpenWith") : item.OpenWith);
                 var rmRect = new UiRect(openRect.Right + 2f, y, 28f, 30f);
@@ -950,13 +930,10 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
             return true;
         }
 
-        if (_dragStepIndex >= 0)
+        if (_stepOrder.Pressed)
         {
-            if (!leftDown) { CommitOrCancelStepDrag(commit: _stepDragging); return true; }
-            _stepDragPointerY = y;
-            if (!_stepDragging && MathF.Abs(y - _stepDragStartY) >= 6f)
-                _stepDragging = true;
-            if (_stepDragging) UpdateStepDropTarget();
+            if (leftDown) return _stepOrder.Move(y, _editorScroll, _editorViewport);
+            CommitOrCancelStepDrag(commit: false);
             return true;
         }
 
@@ -999,16 +976,12 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
         // Step grip or volume slider drag start
         if (_editorViewport.Contains(e.X, e.Y))
         {
-            for (int i = 0; i < _stepCardRects.Count; i++)
+            const string gripPrefix = "step.grip.";
+            if (targetId?.StartsWith(gripPrefix, StringComparison.Ordinal) == true &&
+                int.TryParse(targetId.AsSpan(gripPrefix.Length), out int index) && (uint)index < (uint)_editingSteps.Count)
             {
-                int idx = _stepCardRects[i].Index;
-                if (targetId == $"step.grip.{idx}")
-                {
-                    _dragStepIndex = idx;
-                    _stepDragStartY = _stepDragPointerY = e.Y;
-                    _stepDragging = false;
-                    return true;
-                }
+                _stepOrder.Begin(index, e.Y);
+                return true;
             }
             foreach (var kv in _stepVolSliders)
             {
@@ -1043,9 +1016,10 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
             return true;
         }
 
-        if (_dragStepIndex >= 0)
+        if (_stepOrder.Pressed)
         {
-            CommitOrCancelStepDrag(commit: _stepDragging);
+            if (_stepOrder.Dragging) _stepOrder.Move(e.Y, _editorScroll, _editorViewport);
+            CommitOrCancelStepDrag(commit: true);
             return true;
         }
 
@@ -1097,7 +1071,7 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
                 CommitOrCancelRuleDrag(commit: false);
                 return true;
             }
-            if (_stepDragging || _dragStepIndex >= 0)
+            if (_stepOrder.Pressed)
             {
                 CommitOrCancelStepDrag(commit: false);
                 return true;
@@ -1162,33 +1136,16 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
         actions.Invalidate();
     }
 
-    private void UpdateStepDropTarget()
-    {
-        _dropStepIndex = -1;
-        _dropStepAfter = false;
-        foreach (var sc in _stepCardRects)
-        {
-            _dropStepIndex = sc.Index;
-            _dropStepAfter = _stepDragPointerY >= sc.CardRect.CenterY;
-            if (_stepDragPointerY < sc.CardRect.Bottom) break;
-        }
-    }
-
     private void CommitOrCancelStepDrag(bool commit)
     {
-        if (commit && _dragStepIndex >= 0 && _dropStepIndex >= 0 && _dragStepIndex != _dropStepIndex
-            && (uint)_dragStepIndex < (uint)_editingSteps.Count)
+        if (_stepOrder.End(commit) is { } drop &&
+            (uint)drop.Source < (uint)_editingSteps.Count && (uint)drop.Anchor < (uint)_editingSteps.Count)
         {
-            var step = _editingSteps[_dragStepIndex];
-            _editingSteps.RemoveAt(_dragStepIndex);
-            int target = _dropStepIndex;
-            if (_dragStepIndex < target) target--;
-            if (_dropStepAfter) target++;
-            target = Math.Clamp(target, 0, _editingSteps.Count);
+            var step = _editingSteps[drop.Source];
+            _editingSteps.RemoveAt(drop.Source);
+            int target = drop.Anchor + (drop.After ? 1 : 0) - (drop.Source < drop.Anchor ? 1 : 0);
             _editingSteps.Insert(target, step);
         }
-        _dragStepIndex = _dropStepIndex = -1;
-        _stepDragging = false;
         actions.Invalidate();
     }
 
@@ -1506,12 +1463,18 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
         });
     }
 
-    private string AppChoiceLabel(string process)
+    private void DrawAppPicker(D2dTarget g, UiThemePalette theme, UiHitMap hit, string id, UiRect rect, string process, float fontSize = 12.5f)
     {
         var app = Array.Find(_apps, a => string.Equals(a.ProcessName, process, StringComparison.OrdinalIgnoreCase));
-        if (app == null) return "";
-        return actions.Config.AppNames.TryGetValue(process, out string? alias) && !string.IsNullOrWhiteSpace(alias) ? alias : app.Label;
+        string label = actions.Config.AppNames.TryGetValue(process, out string? alias) && !string.IsNullOrWhiteSpace(alias)
+            ? alias : app?.Label ?? process;
+        ComboAppIcon? icon = app != null ? ComboAppIcon.ForApp(app, actions.Config) :
+            string.IsNullOrWhiteSpace(process) ? null : new ComboAppIcon(UiIcon.Application);
+        UiPrimitives.DrawComboBox(g, theme, hit, id, rect, label, fontSize: fontSize,
+            appIcon: icon, onAppIconLoaded: OnAppPickerIconLoaded);
     }
+
+    private void OnAppPickerIconLoaded() => actions.Host.TryPost(actions.Invalidate);
 
     private void OpenAppPickerCombo(UiRect anchor, string current, Action<string> onPick)
     {
@@ -1522,7 +1485,7 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
             string proc = app.ProcessName ?? "";
             if (string.IsNullOrWhiteSpace(proc) || !seen.Add(proc)) continue;
             string alias = actions.Config.AppNames.TryGetValue(proc, out var a) && !string.IsNullOrWhiteSpace(a) ? a : app.Label;
-            choices.Add(new(proc, $"{alias} ({proc})"));
+            choices.Add(new(proc, $"{alias} ({proc})", AppIcon: ComboAppIcon.ForApp(app, actions.Config)));
         }
         actions.ShowCombo(anchor, choices, current, p => { if (!string.IsNullOrEmpty(p.Key)) onPick(p.Key); });
     }
@@ -1566,7 +1529,8 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
             if (request != _openWithRequest || _disposed || !_observed || !_editingSteps.Any(step => step.LaunchItems.Contains(item))) return;
             choices.Insert(0, new("", L10n.T("Auto.OpenWithDefault")));
             if (item.OpenWith.Length > 0 && !choices.Any(c => string.Equals(item.OpenWith, c.Key, StringComparison.OrdinalIgnoreCase)))
-                choices.Add(new(item.OpenWith, string.IsNullOrEmpty(item.OpenWithName) ? Path.GetFileNameWithoutExtension(item.OpenWith) : item.OpenWithName));
+                choices.Add(new(item.OpenWith, string.IsNullOrEmpty(item.OpenWithName) ? Path.GetFileNameWithoutExtension(item.OpenWith) : item.OpenWithName,
+                    AppIcon: ComboAppIcon.ForExecutable(item.OpenWith)));
             const string chooseProgram = "<pick>";
             choices.Add(new(chooseProgram, L10n.T("Auto.OpenWithPick")));
             actions.ShowCombo(anchor, choices, item.OpenWith, picked =>
@@ -1591,15 +1555,18 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
     private void OpenStepDeviceCombo(UiRect anchor, AutoRuleStep step)
     {
         bool capture = AutoRuleActions.UsesCaptureDevice(step.Action);
+        var flow = capture ? Flow.Capture : Flow.Render;
         var list = new List<ComboChoice>();
         if (step.Action is AutoRuleAction.SetAppOutput or AutoRuleAction.SetAppInput)
         {
             string sysId = capture ? AudioService.SystemDefaultInputDeviceId : AudioService.SystemDefaultDeviceId;
-            list.Add(new ComboChoice(sysId, L10n.T(capture ? "Dev.SystemDefaultIn" : "Dev.SystemDefaultOut")));
+            if (actions.Config.IsDeviceShown((EDataFlow)flow, sysId))
+                list.Add(new ComboChoice(sysId, L10n.T(capture ? "Dev.SystemDefaultIn" : "Dev.SystemDefaultOut")));
         }
         var endpoints = capture ? _inputs : _outputs;
         foreach (var ep in endpoints)
         {
+            if (!actions.Config.IsDeviceShown((EDataFlow)flow, ep.PreferenceId)) continue;
             if (step.Action is not (AutoRuleAction.SetAppOutput or AutoRuleAction.SetAppInput) && PcRoutingApi.IsPhoneOutputDevice(ep.Id)) continue;
             string name = actions.Config.DeviceNames.TryGetValue(ep.Id, out var alias) && !string.IsNullOrWhiteSpace(alias) ? alias : ep.Name;
             list.Add(new ComboChoice(ep.Id, name));
@@ -1624,7 +1591,7 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
 
     private static void UpdateStepVolumeFromX(AutoRuleStep step, UiRect sliderRect, float mouseX)
     {
-        int pct = UiPrimitives.SliderValueFromX(sliderRect, mouseX);
+        int pct = UiPrimitives.VolumeSliderValueFromX(sliderRect, mouseX);
         if (AutoRuleActions.AdjustsVolume(step.Action))
             step.VolumeDelta = Math.Clamp((int)MathF.Round((pct / 100f) * 200f - 100f), -100, 100);
         else

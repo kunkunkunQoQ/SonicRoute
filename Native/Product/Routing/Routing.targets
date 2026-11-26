@@ -2,6 +2,7 @@
   <PropertyGroup><DefineConstants>$(DefineConstants);SONICROUTE_NATIVE_PC</DefineConstants></PropertyGroup>
   <ItemGroup>
     <Compile Include="$(MSBuildThisFileDirectory)../../../SonicRoute/AppPlaybackRestore.cs;$(MSBuildThisFileDirectory)../../../SonicRoute/AppPlaybackOutputs.cs;$(MSBuildThisFileDirectory)../../../SonicRoute/LocalAppOutputMirrors.cs;$(MSBuildThisFileDirectory)../../../SonicRoute/PlaybackAppIdentity.cs"/>
+    <Compile Condition="'$(SonicRouteEdition)'=='Full'" Include="$(MSBuildThisFileDirectory)../../../SonicRoute/AppPlaybackRecovery.cs;$(MSBuildThisFileDirectory)../../../SonicRoute/LocalAppOutputMirrors.Phone.cs;$(MSBuildThisFileDirectory)../../../SonicRoute/LocalSilenceLeasePool.cs;$(MSBuildThisFileDirectory)../../../SonicRoute/SourceSpeakerLeases.cs"/>
     <Compile Include="$(MSBuildThisFileDirectory)../../../shared/WindowsAudio/AudioProcessTree.cs;$(MSBuildThisFileDirectory)../../../shared/WindowsAudio/DesktopMirrorPcmSource.cs"/>
     <Compile Include="$(MSBuildThisFileDirectory)../../../shared/WindowsAudio/ProcessCaptureIdentity.cs" Condition="'$(SonicRouteEdition)'!='Full'"/>
   </ItemGroup>

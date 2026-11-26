@@ -490,12 +490,7 @@ internal static partial class AndroidAudioHost
         try { adapter = device.DeviceTopology.GetConnector(0).ConnectedToDeviceId; }
         catch (System.Runtime.InteropServices.COMException) { return false; }
         catch (InvalidOperationException) { return false; }
-        int start = adapter?.IndexOf(@"\\?\", StringComparison.Ordinal) ?? -1;
-        if (start < 0) return false;
-        string bus = adapter![(start + 4)..].Split('#', 2)[0];
-        return bus.Equals("USB", StringComparison.OrdinalIgnoreCase) || bus.Equals("HDAUDIO", StringComparison.OrdinalIgnoreCase)
-            || bus.Equals("INTELAUDIO", StringComparison.OrdinalIgnoreCase) || bus.Equals("PCI", StringComparison.OrdinalIgnoreCase)
-            || bus.StartsWith("BTH", StringComparison.OrdinalIgnoreCase) || bus.Equals("ACPI", StringComparison.OrdinalIgnoreCase);
+        return IsHardwareRenderBus(adapter);
     }
 
     private static IReadOnlyList<string> FindAvailableSilenceOutputs(IReadOnlySet<int> owned, string? reserved, Func<string, bool> isOwnedByOtherPool)
@@ -547,39 +542,11 @@ internal static partial class AndroidAudioHost
         return candidates.OrderByDescending(candidate => candidate.Rank).Select(candidate => candidate.Id).ToArray();
     }
 
-    private static bool IsMonitorOrInput(string? name) => name != null && (
-        name.Contains("Microphone", StringComparison.OrdinalIgnoreCase) || name.Contains("麦克风", StringComparison.Ordinal)
-        || name.Contains("麥克風", StringComparison.Ordinal) || name.Contains("Sidetone", StringComparison.OrdinalIgnoreCase)
-        || name.Contains("Side Tone", StringComparison.OrdinalIgnoreCase) || name.Contains("侧音", StringComparison.Ordinal)
-        || name.Contains("側音", StringComparison.Ordinal) || name.EndsWith(" Input", StringComparison.OrdinalIgnoreCase)
-        || name.Contains(" Input (", StringComparison.OrdinalIgnoreCase));
-
     private static bool VerifyWindowsPlaybackRoute(int processId, string targetId, bool wasActive, IReadOnlySet<int> owners)
     {
         using var devices = new WasapiDeviceLease.Enumerator();
         return WaitForPlaybackMigration(wasActive, () => ReadPlaybackState(devices, processId, targetId, owners),
             static () => Thread.Sleep(100));
-    }
-
-    // A player briefly closes its old session before reopening it on the requested
-    // endpoint (or on the old one). A gap alone does not prove that it migrated.
-    internal static bool WaitForPlaybackMigration(bool wasActive, Func<(bool TargetSafe, bool TargetActive, bool OtherActive)> observe, Action wait)
-    {
-        const int maxSamples = 16, stableSamples = 4;
-        int consecutive = 0;
-        for (int sample = 0; sample < maxSamples; sample++)
-        {
-            var state = observe();
-            if (!state.TargetSafe) return false;
-            wasActive |= state.TargetActive || state.OtherActive;
-            if (!state.OtherActive && (!wasActive || state.TargetActive))
-            {
-                if (++consecutive == stableSamples) return true;
-            }
-            else consecutive = 0;
-            if (sample + 1 < maxSamples) wait();
-        }
-        return false;
     }
 
     private static (bool TargetSafe, bool TargetActive, bool OtherActive) ReadPlaybackState(WasapiDeviceLease.Enumerator devices,

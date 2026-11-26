@@ -19,6 +19,7 @@ internal sealed class LocalSilenceLeasePool
     private readonly Func<int, (string? Multimedia, string? Console), bool> _applyRoute;
     // The two routing paths must not reserve the same output concurrently.
     internal static readonly object Gate = new();
+    internal bool HasReservations => !_reservations.IsEmpty;
     private readonly ConcurrentDictionary<string, Reservation> _reservations = new(StringComparer.OrdinalIgnoreCase);
     internal Func<int, string, bool, IReadOnlySet<int>, bool>? VerifyPlaybackRoute { get; init; }
     internal Func<int, string, Action, ILocalPlaybackWatch>? ObservePlayback { get; init; }

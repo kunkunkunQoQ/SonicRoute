@@ -33,7 +33,8 @@ internal static unsafe class OpenWithChoices
                 string exe = ReadName(handler, 3);
                 if (!exe.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) || !File.Exists(exe) || !paths.Add(exe)) continue;
                 string label = ReadName(handler, 4);
-                choices.Add(new(exe, string.IsNullOrWhiteSpace(label) ? Path.GetFileNameWithoutExtension(exe) : label));
+                choices.Add(new(exe, string.IsNullOrWhiteSpace(label) ? Path.GetFileNameWithoutExtension(exe) : label,
+                    AppIcon: ComboAppIcon.ForExecutable(exe)));
             }
         }
         return choices;

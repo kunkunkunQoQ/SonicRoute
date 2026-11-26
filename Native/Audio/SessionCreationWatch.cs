@@ -10,7 +10,7 @@ internal partial interface ISessionCreated
 }
 
 [GeneratedComClass]
-internal sealed unsafe partial class SessionCreatedSink(Action<int> notify) : ISessionCreated
+internal sealed unsafe partial class SessionCreatedSink(Action<int> notify, bool includeSystem) : ISessionCreated
 {
     private Action<int>? _notify = notify;
     internal void Stop() => Interlocked.Exchange(ref _notify, null);
@@ -26,7 +26,7 @@ internal sealed unsafe partial class SessionCreatedSink(Action<int> notify) : IS
             if (hr < 0 || owned == 0) return 0;
             uint pid = 0;
             hr = ((delegate* unmanaged[Stdcall]<nint,uint*,int>)Com.Slot(owned,14))(owned,&pid);
-            if (hr >= 0 && pid is > 0 and <= int.MaxValue) emit((int)pid);
+            if (hr >= 0 && pid <= int.MaxValue && (pid > 0 || includeSystem)) emit((int)pid);
         }
         catch { /* COM callbacks never unwind managed exceptions into the audio engine. */ }
         finally { Com.Release(owned); }
@@ -39,10 +39,10 @@ internal sealed unsafe class SessionCreationWatch : IDisposable
     private readonly Com _manager;
     private readonly SessionCreatedSink _sink;
     private nint _callback;
-    internal SessionCreationWatch(Com device, Action<int> notify)
+    internal SessionCreationWatch(Com device, Action<int> notify, bool includeSystem = false)
     {
         _manager = Endpoints.Activate(device, Endpoints.SessionManager);
-        _sink = new(notify);
+        _sink = new(notify, includeSystem);
         bool registered = false;
         try
         {

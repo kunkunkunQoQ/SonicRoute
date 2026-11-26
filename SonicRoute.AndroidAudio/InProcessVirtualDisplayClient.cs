@@ -148,12 +148,13 @@ public sealed class InProcessVirtualDisplayClient : IVirtualDisplayClient
             int initW = windowSize is { } ws && ws.IsValid() ? ws.Width : Math.Max(240, streamHeader.Width);
             int initH = windowSize is { } ws2 && ws2.IsValid() ? ws2.Height : Math.Max(240, streamHeader.Height);
             string aumid = BuildWindowAppUserModelId(AndroidDeviceIdentity.Key(device), app.Package);
+            byte[]? iconPng = app.IsDeviceAudio ? WicIconLoader.LoadDefaultPhoneIconPng() : app.IconPng;
 
             _window = new NativeVideoWindow(
                 app.Name,
                 isMirrorMode: app.IsDeviceAudio,
                 preferText: app.Category != "games",
-                app.IconPng,
+                iconPng,
                 x, y,
                 initW, initH,
                 aumid);

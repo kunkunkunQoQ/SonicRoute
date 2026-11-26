@@ -3,7 +3,7 @@ using System.Collections.Generic;
 
 namespace SonicRoute.Native.Ui;
 
-internal readonly record struct ComboChoice(string Key, string Label, UiIcon? Icon = null);
+internal readonly record struct ComboChoice(string Key, string Label, UiIcon? Icon = null, ComboAppIcon? AppIcon = null);
 
 /// <summary>
 /// Floating scrollable dropdown popup matching WPF App.xaml RoundedComboBox + RoundedComboItem.
@@ -20,6 +20,7 @@ internal sealed class ComboPopupWindow : LayeredWindow
     private readonly IReadOnlyList<ComboChoice> _choices;
     private readonly string _selectedKey;
     private readonly Action<ComboChoice> _onSelected;
+    private readonly Action? _onAppIconLoaded;
     private readonly UiScrollState _scroll = new();
     private readonly UiHitMap _hit = new();
     private int _hoverIndex = -1;
@@ -36,13 +37,15 @@ internal sealed class ComboPopupWindow : LayeredWindow
         IReadOnlyList<ComboChoice> choices,
         string selectedKey,
         Action<ComboChoice> onSelected,
-        LayeredWindow owner)
+        LayeredWindow owner,
+        Func<Action, bool>? tryPost)
         : base(180f, 120f, 1f, 1f)
     {
         _theme = theme;
         _choices = choices;
         _selectedKey = selectedKey;
         _onSelected = onSelected;
+        if (tryPost != null) _onAppIconLoaded = () => tryPost(Invalidate);
         TopMost = true;
         ToolWindow = true;
         DestroyOnClose = true;
@@ -65,9 +68,10 @@ internal sealed class ComboPopupWindow : LayeredWindow
         UiRect comboRectDip,
         IReadOnlyList<ComboChoice> choices,
         string selectedKey,
-        Action<ComboChoice> onSelected)
+        Action<ComboChoice> onSelected,
+        Func<Action, bool>? tryPost = null)
     {
-        var pop = new ComboPopupWindow(theme, choices, selectedKey, onSelected, owner);
+        var pop = new ComboPopupWindow(theme, choices, selectedKey, onSelected, owner, tryPost);
         var topLeft = owner.DipToScreenPx(comboRectDip.X, comboRectDip.Y);
         var bottomRight = owner.DipToScreenPx(comboRectDip.Right, comboRectDip.Bottom);
         var center = owner.DipToScreenPx(comboRectDip.CenterX, comboRectDip.CenterY);
@@ -132,20 +136,26 @@ internal sealed class ComboPopupWindow : LayeredWindow
             float iy = view.Y + i * ItemH - _scroll.Offset;
             if (iy + ItemH < view.Y || iy > view.Bottom) continue;
             var r = new UiRect(view.X, iy, itemW, ItemH);
-            bool sel = _choices[i].Key == _selectedKey;
+            var choice = _choices[i];
+            bool sel = choice.Key == _selectedKey;
             bool hot = i == _hoverIndex || i == _focusedIndex;
             var inner = r.Deflate(4f);
             if (sel || hot) g.FillRoundedRect(inner, 7f, _theme.Accent);
             UiColor ink = sel || hot ? _theme.OnAccent : _theme.TextPrimary;
             var label = inner.Deflate(10f, 0f);
-            if (_choices[i].Icon is UiIcon icon)
+            if (choice.AppIcon is { } appIcon)
+            {
+                appIcon.Draw(g, new UiRect(label.X, label.CenterY - 8f, 16f, 16f), ink, _onAppIconLoaded);
+                label = label.Deflate(22f, 0, 0, 0);
+            }
+            else if (choice.Icon is UiIcon icon)
             {
                 g.DrawIcon(icon, new UiRect(label.X, label.CenterY - 7f, 14f, 14f), ink);
                 label = label.Deflate(20f, 0, 0, 0);
             }
             // The full label stays available to the tooltip, type-ahead and selection callbacks.
-            _hit.Add(_choices[i].Key, UiHitMap.Intersect(view, r), UiCursorKind.Arrow, _choices[i].Label);
-            g.DrawText(_choices[i].Label, label, ink, 13f, 400, UiTextAlign.Leading, UiVertAlign.Center, wrap: false, ellipsis: true);
+            _hit.Add(choice.Key, UiHitMap.Intersect(view, r), UiCursorKind.Arrow, choice.Label);
+            g.DrawText(choice.Label, label, ink, 13f, 400, UiTextAlign.Leading, UiVertAlign.Center, wrap: false, ellipsis: true);
         }
         g.PopClip();
 

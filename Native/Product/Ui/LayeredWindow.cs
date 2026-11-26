@@ -133,6 +133,8 @@ internal abstract unsafe class LayeredWindow : IDisposable
     private bool _repeatTimer;
     private bool _paintPending;
     private bool _animTimerActive;
+    private float _dockedEntrance = 1f;
+    private bool _dockedVertical, _dockedBeforeOwner;
     private UiCursorKind _cursor = UiCursorKind.Arrow;
 
     public nint Handle { get; private set; }
@@ -595,6 +597,24 @@ internal abstract unsafe class LayeredWindow : IDisposable
         PresentSurface(wPx, hPx, null);
     }
 
+    internal void SetDockedEntrance(LayeredWindow owner, float progress)
+    {
+        if (_dockedEntrance >= 1f && progress >= 1f) return;
+        int left = owner.LeftPx - (LeftPx + WidthPx);
+        int right = LeftPx - (owner.LeftPx + owner.WidthPx);
+        int above = owner.TopPx - (TopPx + HeightPx);
+        int below = TopPx - (owner.TopPx + owner.HeightPx);
+        bool vertical = Math.Max(above, below) > Math.Max(left, right);
+        bool beforeOwner = vertical ? above > below : left > right;
+        if (_dockedEntrance == progress &&
+            (progress >= 1f || (vertical == _dockedVertical && beforeOwner == _dockedBeforeOwner))) return;
+        _dockedEntrance = progress;
+        _dockedVertical = vertical;
+        _dockedBeforeOwner = beforeOwner;
+        if (IsVisible && !_disposed && !_boundsPending && _memDc != 0)
+            Invalidate();
+    }
+
     private void DrawSurface(int wPx, int hPx, bool reserveHeight = false)
     {
         _paintPending = false;
@@ -611,9 +631,19 @@ internal abstract unsafe class LayeredWindow : IDisposable
         var editor = ActiveEditor;
         _target.Editor = editor is { IsOpen: true } ? editor : null;
         _target.Editor?.BeginLayout();
+        float width = wPx / DpiScale, height = hPx / DpiScale;
+        bool expanding = _dockedEntrance < 1f;
+        if (expanding)
+        {
+            float scale = 0.68f + 0.32f * _dockedEntrance;
+            float offset = _dockedBeforeOwner ? 1f - scale : 0f;
+            _target.PushTransform(_dockedVertical
+                ? new D2dMatrix3x2(1f, 0f, 0f, scale, 0f, height * offset)
+                : new D2dMatrix3x2(scale, 0f, 0f, 1f, width * offset, 0f));
+        }
         try
         {
-            OnRender(_target, wPx / DpiScale, hPx / DpiScale);
+            OnRender(_target, width, height);
             if (InputMap is { ShowFocus: true } focus && focus.TryGetFocus(out _, out var visible))
             {
                 var ring = visible.Offset(0, InputOffsetY).Deflate(1.5f);
@@ -626,6 +656,7 @@ internal abstract unsafe class LayeredWindow : IDisposable
         }
         finally
         {
+            if (expanding) _target.PopTransform();
             _target.Editor = null;
             _target.EndDraw();
         }
@@ -635,7 +666,9 @@ internal abstract unsafe class LayeredWindow : IDisposable
     {
         var size = new Size { Cx = wPx, Cy = hPx };
         var src = new Point { X = 0, Y = 0 };
-        var blend = new BlendFunction { BlendOp = 0, BlendFlags = 0, SourceConstantAlpha = 255, AlphaFormat = 1 };
+        byte opacity = _dockedEntrance >= 1f ? byte.MaxValue
+            : (byte)MathF.Round(byte.MaxValue * (0.24f + 0.76f * _dockedEntrance));
+        var blend = new BlendFunction { BlendOp = 0, BlendFlags = 0, SourceConstantAlpha = opacity, AlphaFormat = 1 };
         bool applied = UpdateLayeredWindow(Handle, 0, (nint)dest, ref size, _memDc, ref src, 0, ref blend, 2 /*ULW_ALPHA*/);
         if (ActiveEditor is { IsOpen: true } editor) editor.FinishLayout(this);
         return applied;
@@ -702,6 +735,15 @@ internal abstract unsafe class LayeredWindow : IDisposable
     protected virtual void OnPointerLeave() { }
     protected virtual UiHitMap? InputMap => null;
     protected virtual float InputOffsetY => 0;
+    protected virtual bool ShowOwnedWindowTooltips => true;
+
+    private bool TooltipsAllowedByOwner()
+    {
+        for (nint owner = OwnerHandle; Instances.TryGetValue(owner, out var window); owner = window.OwnerHandle)
+            if (!window.ShowOwnedWindowTooltips) return false;
+        return true;
+    }
+
     protected virtual bool ActivateFocused(UiHitItem item, UiPointerEventArgs e) => false;
     protected virtual void OnPointerDown(UiPointerEventArgs e) { }
     protected virtual void OnPointerUp(UiPointerEventArgs e) { }
@@ -757,7 +799,7 @@ internal abstract unsafe class LayeredWindow : IDisposable
 
             case WmNcHitTest:
             {
-                if (win.ClickThrough) return -1; /*HTTRANSPARENT*/
+                if (win.ClickThrough || win._dockedEntrance < 1f) return -1; /*HTTRANSPARENT*/
                 int sx = unchecked((short)((long)lParam & 0xFFFF));
                 int sy = unchecked((short)(((long)lParam >> 16) & 0xFFFF));
                 var pt = new Point { X = sx, Y = sy };
@@ -888,7 +930,7 @@ internal abstract unsafe class LayeredWindow : IDisposable
                 (win._pointerX, win._pointerY) = (x, y);
                 win.UpdateScrollRepeat(false);
                 win.OnPointerMove(x, y, ((uint)wParam & 0x0001) != 0);
-                if (win.IsVisible && (wParam & 0x73u) == 0 &&
+                if (win.IsVisible && (wParam & 0x73u) == 0 && win.TooltipsAllowedByOwner() &&
                     win.InputMap?.HitTest(x, y - win.InputOffsetY) is { Tooltip.Length: > 0 } hovered)
                 {
                     win._tooltip ??= new WindowTooltip(hwnd);

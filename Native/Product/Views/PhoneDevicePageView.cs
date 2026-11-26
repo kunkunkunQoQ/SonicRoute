@@ -20,9 +20,12 @@ namespace SonicRoute.Native.Product.Views;
 /// </summary>
 internal sealed partial class PhoneDevicePageView : IViewPage
 {
+    private const string PinnedAppGrip = "phone.order:";
     private readonly IViewHostActions _actions;
     private readonly UiScrollState _scroll = new();
     private readonly UiScrollState _fileScroll = new();
+    private readonly UiVerticalReorder<string> _pinnedOrder = new();
+    private string? _pinnedOrderProfile;
     private readonly ReceiveDirectorySettings _pcReceiveFolder;
     private UiHitMap _hit = new();
     private readonly AirPlayReceiverViewControl _airPlay;
@@ -87,7 +90,10 @@ internal sealed partial class PhoneDevicePageView : IViewPage
     internal bool IsConnectionPage => _showConnection || _actions.Host.Phone.Store.Profile.LastDevice == null;
     private bool CanShowQr => _active && !_busy && IsConnectionPage && !_airPlayConnectionChoice;
     private bool UseHevc => _streamSettings.VideoDecoder == AndroidStreamSettings.WindowsHevcDecoder;
-    public bool NeedsAnimationTick => false;
+    internal bool IsReorderingPinnedApp => _pinnedOrder.Pressed;
+    public bool NeedsAnimationTick => _pinnedOrder.NeedsScrollTick(_scroll, _visibleDeviceRect);
+
+    public void TickAnimation() => _pinnedOrder.TickScroll(_scroll, _visibleDeviceRect);
 
     internal PhoneDevicePageView(IViewHostActions actions)
     {
@@ -99,6 +105,7 @@ internal sealed partial class PhoneDevicePageView : IViewPage
 
     internal void ShowConnectionPage()
     {
+        FinishPinnedOrder(commit: false);
         CancelViewOperation();
         _actions.CloseInlineEdit(commit: false);
         CloseCatalog();
@@ -111,6 +118,7 @@ internal sealed partial class PhoneDevicePageView : IViewPage
 
     internal void ShowProfile(string profileId)
     {
+        FinishPinnedOrder(commit: false);
         CancelViewOperation();
         _actions.CloseInlineEdit(commit: false);
         CloseCatalog();
@@ -159,7 +167,8 @@ internal sealed partial class PhoneDevicePageView : IViewPage
 
     public void OnCaptureLost()
     {
-        bool changed = _fileScroll.Dragging || _scroll.Dragging;
+        bool changed = _fileScroll.Dragging || _scroll.Dragging || _pinnedOrder.Pressed;
+        FinishPinnedOrder(commit: false);
         _fileScroll.EndDrag();
         _scroll.EndDrag();
         if (changed) _actions.Invalidate();
@@ -177,6 +186,7 @@ internal sealed partial class PhoneDevicePageView : IViewPage
     {
         var phone = _actions.Host.Phone;
         var profile = phone.Store.Profile;
+        if (_pinnedOrder.Pressed && _pinnedOrderProfile != profile.Id) FinishPinnedOrder(commit: false);
         _appIcons.SetProfile(profile.Id);
         var online = profile.LastDevice is { } last ? phone.Connections.Get(last).Device : null;
         if (!Equals(online, _activeDevice))
@@ -223,7 +233,7 @@ internal sealed partial class PhoneDevicePageView : IViewPage
     public void Render(D2dTarget g, UiThemePalette t, UiHitMap hit, UiRect contentRect)
     {
         _hit = hit;
-        _visibleDeviceRect = contentRect;
+        _pinnedOrder.ClearRows();
         string? status = IsConnectionPage && _airPlayConnectionChoice ? null : _statusMessage;
         if (!string.IsNullOrEmpty(status))
         {
@@ -233,6 +243,7 @@ internal sealed partial class PhoneDevicePageView : IViewPage
             g.DrawText(status, footer, _statusError ? t.Fail : t.TextSecondary, 12f, wrap: true);
             contentRect = new UiRect(contentRect.X, contentRect.Y, contentRect.Width, MathF.Max(1f, contentRect.Height - height - 8f));
         }
+        _visibleDeviceRect = contentRect;
         if (_showCatalog)
         {
             RenderCatalog(g, t, contentRect);
@@ -255,7 +266,8 @@ internal sealed partial class PhoneDevicePageView : IViewPage
         float oldOffset = _scroll.Offset;
         _scroll.ContentHeight = MathF.Max(0f, endY - startY);
         _scroll.Clamp();
-        if (hadScroll != (_scroll.MaxOffset > 0.5f) || oldOffset != _scroll.Offset) _actions.Invalidate();
+        bool targetChanged = _pinnedOrder.Retarget(_scroll, _visibleDeviceRect);
+        if (targetChanged || hadScroll != (_scroll.MaxOffset > 0.5f) || oldOffset != _scroll.Offset) _actions.Invalidate();
         _scroll.Draw(g, t, _hit, "phone.scroll", contentRect);
     }
 
@@ -335,7 +347,16 @@ internal sealed partial class PhoneDevicePageView : IViewPage
             {
                 var app = apps[i];
                 var rowRect = new UiRect(lx, ly + i * libRowH, lw, libRowH);
+                if (apps.Count > 1) _pinnedOrder.AddRow(app.Package, rowRect, _scroll.Offset);
                 if (rowRect.Bottom < _visibleDeviceRect.Y || rowRect.Y >= _visibleDeviceRect.Bottom) continue;
+                bool dragged = _pinnedOrder.IsSource(app.Package);
+                if (dragged)
+                {
+                    var selected = rowRect.Deflate(0f, 2f);
+                    g.FillRoundedRect(selected, 8f, t.NavSelected.WithAlphaFraction(0.55f));
+                    g.DrawRoundedRect(selected, 8f, t.Accent, 1.5f);
+                }
+                _pinnedOrder.DrawInsertionLine(g, t, app.Package, rowRect, gap: 0f);
                 bool smart = phone.Store.IsSmartVolumeEnabled(profile.LastDevice, app.Package);
 
                 var iconRect = new UiRect(rowRect.X, rowRect.CenterY - 16f, 32f, 32f);
@@ -346,6 +367,18 @@ internal sealed partial class PhoneDevicePageView : IViewPage
                 else
                 {
                     g.DrawText(string.IsNullOrEmpty(app.Name) ? "♪" : StringInfo.GetNextTextElement(app.Name), iconRect, t.TextPrimary, 18f, 400, UiTextAlign.Center, UiVertAlign.Center);
+                }
+
+                if (apps.Count > 1)
+                {
+                    string grip = PinnedAppGrip + app.Package;
+                    _hit.Add(grip, iconRect, UiCursorKind.Hand, L10n.T("Phone.DragAppOrder"));
+                    if (dragged || _hit.IsHover(grip))
+                    {
+                        var gripBadge = new UiRect(iconRect.Right - 11f, iconRect.Bottom - 13f, 14f, 14f);
+                        g.FillRoundedRect(gripBadge, 4f, t.SurfaceBg);
+                        g.DrawIcon(UiIcon.Grip, gripBadge.Deflate(2f), t.TextPrimary);
+                    }
                 }
 
                 var swRect = new UiRect(rowRect.Right - 36f, rowRect.CenterY - 12f, 34f, 24f);
@@ -620,6 +653,12 @@ internal sealed partial class PhoneDevicePageView : IViewPage
 
     public bool OnPointerMove(float x, float y, bool leftDown)
     {
+        if (_pinnedOrder.Pressed)
+        {
+            if (leftDown) return _pinnedOrder.Move(y, _scroll, _visibleDeviceRect);
+            FinishPinnedOrder(commit: false);
+            return true;
+        }
         if (leftDown && _fileScroll.DragMove(y)) { _actions.Invalidate(); return true; }
         if (leftDown && _scroll.DragMove(y)) { _actions.Invalidate(); return true; }
         bool changed = _hit.UpdateHover(x, y);
@@ -639,6 +678,12 @@ internal sealed partial class PhoneDevicePageView : IViewPage
             return true;
         }
         if (e.Button != UiMouseButton.Left) return false;
+        if (targetId?.StartsWith(PinnedAppGrip, StringComparison.Ordinal) == true)
+        {
+            _pinnedOrderProfile = _actions.Host.Phone.Store.Profile.Id;
+            _pinnedOrder.Begin(targetId[PinnedAppGrip.Length..], e.Y);
+            return true;
+        }
         if (targetId == "phone.filescroll" && _fileScroll.BeginDrag(e.Y))
         {
             _actions.Invalidate();
@@ -658,6 +703,12 @@ internal sealed partial class PhoneDevicePageView : IViewPage
     public bool OnPointerUp(UiPointerEventArgs e, string? clickId)
     {
         if (e.Button != UiMouseButton.Left) return false;
+        if (_pinnedOrder.Pressed)
+        {
+            if (_pinnedOrder.Dragging) _pinnedOrder.Move(e.Y, _scroll, _visibleDeviceRect);
+            FinishPinnedOrder(commit: true);
+            return true;
+        }
         if (_fileScroll.Dragging)
         {
             _fileScroll.EndDrag();
@@ -979,6 +1030,7 @@ internal sealed partial class PhoneDevicePageView : IViewPage
             return true;
         }
         _scroll.OnWheel(delta);
+        _pinnedOrder.Retarget(_scroll, _visibleDeviceRect);
         _actions.Invalidate();
         return true;
     }
@@ -997,6 +1049,11 @@ internal sealed partial class PhoneDevicePageView : IViewPage
 
     public bool OnKeyDown(int vk, bool ctrl, bool shift, bool alt)
     {
+        if (vk == 0x1B && _pinnedOrder.Pressed)
+        {
+            FinishPinnedOrder(commit: false);
+            return true;
+        }
         if (_actions.ActiveInlineEditTag != null) return false;
         if (_showCatalog)
         {
@@ -1026,6 +1083,21 @@ internal sealed partial class PhoneDevicePageView : IViewPage
             }
         }
         return false;
+    }
+
+    private void FinishPinnedOrder(bool commit)
+    {
+        string? profileId = _pinnedOrderProfile;
+        _pinnedOrderProfile = null;
+        if (_pinnedOrder.End(commit) is not { } drop || profileId == null) return;
+        var store = _actions.Host.Phone.Store;
+        if (store.Profile.Id != profileId) return;
+        try { store.MoveRetainedApp(profileId, drop.Source, drop.Anchor, drop.After); }
+        catch (IOException ex)
+        {
+            ExceptionDiagnostics.Record("Phone.MoveRetainedApp", ex);
+            _actions.ShowNotice(L10n.T("Tray.SaveFailed"));
+        }
     }
 
     private void EnqueueOrStartFiles(AndroidDevice online, string profileId, string[] paths, string destination, string? pullFrom)

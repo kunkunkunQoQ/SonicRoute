@@ -280,8 +280,6 @@ internal sealed class UiScrollState
 /// <summary>
 /// High-fidelity WPF-matching UI primitives (Cards, Buttons, ToggleSwitch, Sliders, Inputs, ComboBoxes).
 /// </summary>
-internal enum UiSliderStyle { Standard, PanelRow }
-
 internal static class UiPrimitives
 {
     internal static float MeasureWrappedTextHeight(string text, float size, float width) =>
@@ -450,44 +448,55 @@ internal static class UiPrimitives
         g.DrawText(label, rect.Deflate(34f, 0f, 8f, 0f), t.TextPrimary.WithAlphaFraction(opacity), fontSize, 400, UiTextAlign.Leading, UiVertAlign.Center);
     }
 
-    /// <summary>
-    /// Renders WPF App.xaml Slider / RowSlider (with optional live audio peak overlay and thumb).
-    /// </summary>
+    internal const float MinimumVisiblePeak = 0.01f;
+
+    internal static bool UpdateVolumePeak(ref float peak, float measured)
+    {
+        float before = peak;
+        if (!float.IsFinite(measured)) measured = 0f;
+        peak = MathF.Max(measured, before * 0.72f);
+        if (peak < 0.005f) peak = 0f;
+        return HasVolumePeakChanged(before, peak);
+    }
+
+    internal static bool HasVolumePeakChanged(float drawn, float peak) =>
+        (drawn > MinimumVisiblePeak) != (peak > MinimumVisiblePeak) || MathF.Abs(peak - drawn) > 0.008f;
+
     public static void DrawVolumeSlider(
         D2dTarget g, UiThemePalette t, UiHitMap hit, string id, UiRect rect,
-        float value01, float peak01, bool muted, bool showPeak,
-        UiSliderStyle style = UiSliderStyle.Standard, bool enabled = true)
+        float value01, float peak01, bool muted, bool showPeak, bool enabled = true, bool compact = false, bool dimUnavailable = false) =>
+        DrawSlider(g, t, hit, id, rect, value01, peak01, muted, showPeak, enabled, outlinedThumb: !compact, dimUnavailable);
+
+    public static void DrawValueSlider(D2dTarget g, UiThemePalette t, UiHitMap hit, string id, UiRect rect,
+        float value01, bool enabled = true) =>
+        DrawSlider(g, t, hit, id, rect, value01, 0f, muted: false, showPeak: false, enabled, outlinedThumb: true);
+
+    private static void DrawSlider(D2dTarget g, UiThemePalette t, UiHitMap hit, string id, UiRect rect,
+        float value01, float peak01, bool muted, bool showPeak, bool enabled, bool outlinedThumb, bool dimUnavailable = false)
     {
         if (enabled) hit.Add(id, rect, UiCursorKind.Hand);
         bool hot = enabled && hit.IsHoverOrActive(id);
-        const float trackHeight = 4f;
-        float pad = SliderEndInset(style);
-        float barX = rect.X + pad;
-        float barW = MathF.Max(1f, rect.Width - pad * 2f);
-        float barY = rect.CenterY - trackHeight * 0.5f;
-        float r = trackHeight * 0.5f;
-
-        var trackRect = new UiRect(barX, barY, barW, trackHeight);
-        g.FillRoundedRect(trackRect, r, t.SliderBg);
+        var track = SliderTrack(rect, outlinedThumb);
+        float r = track.Height * 0.5f;
+        g.FillRoundedRect(track, r, t.SliderBg);
 
         float clampedVal = Math.Clamp(value01, 0f, 1f);
-        float fillW = barW * clampedVal;
+        float fillW = track.Width * clampedVal;
         if (fillW > 0.5f)
         {
-            UiColor fillCol = muted ? t.AccentInverse.WithAlphaFraction(0.55f) : t.Accent;
-            g.FillRoundedRect(new UiRect(barX, barY, fillW, trackHeight), r, fillCol);
+            UiColor fillCol = dimUnavailable ? t.AccentDisabled : muted ? t.AccentInverse.WithAlphaFraction(0.55f) : t.Accent;
+            g.FillRoundedRect(track with { Width = fillW }, r, fillCol);
         }
 
-        if (showPeak && peak01 > 0.01f && !muted && fillW > 0.5f)
+        if (showPeak && !dimUnavailable && peak01 > MinimumVisiblePeak && !muted && fillW > 0.5f)
         {
             float peakW = fillW * Math.Clamp(peak01, 0f, 1f);
-            g.FillRoundedRect(new UiRect(barX, barY, peakW, trackHeight), r, t.AccentPeak);
+            g.FillRoundedRect(track with { Width = peakW }, r, t.AccentPeak);
         }
 
-        float thumbX = barX + fillW;
-        float rad = 7f;
-        UiColor thumbCol = muted ? t.AccentInverse : t.Accent;
-        if (style == UiSliderStyle.Standard)
+        float thumbX = track.X + fillW;
+        UiColor thumbCol = dimUnavailable ? t.AccentDisabled : muted ? t.AccentInverse : t.Accent;
+        if (outlinedThumb)
         {
             // App.xaml uses a 28 DIP hit thumb, a 17 DIP ellipse and a 2 DIP surface stroke.
             g.FillEllipse(thumbX, rect.CenterY + 1f, 10f, 10f, new UiColor(0, 0, 0, 22));
@@ -497,7 +506,7 @@ internal static class UiPrimitives
             g.FillEllipse(thumbX, rect.CenterY, 6.5f, 6.5f, thumbCol);
             return;
         }
-        if (hot) rad += 1f;
+        float rad = hot ? 8f : 7f;
         if (!enabled) thumbCol = t.AccentDisabled;
         g.FillEllipse(thumbX, rect.CenterY, rad, rad, thumbCol);
     }
@@ -513,30 +522,43 @@ internal static class UiPrimitives
         return elements.Length <= 12 ? head : head[..elements[11]] + "…";
     }
 
-    private static float SliderEndInset(UiSliderStyle style) => style switch
+    private static UiRect SliderTrack(UiRect rect, bool outlinedThumb)
     {
-        UiSliderStyle.Standard => 14f,
-        _ => 7f
-    };
+        float inset = outlinedThumb ? 14f : 7f;
+        return new UiRect(rect.X + inset, rect.CenterY - 2f, MathF.Max(1f, rect.Width - inset * 2f), 4f);
+    }
 
-    public static int SliderValueFromX(UiRect rect, float mouseX, UiSliderStyle style = UiSliderStyle.Standard)
+    public static int VolumeSliderValueFromX(UiRect rect, float mouseX, bool compact = false) =>
+        SliderValueFromX(rect, mouseX, outlinedThumb: !compact);
+
+    public static int ValueSliderValueFromX(UiRect rect, float mouseX) => SliderValueFromX(rect, mouseX, outlinedThumb: true);
+
+    private static int SliderValueFromX(UiRect rect, float mouseX, bool outlinedThumb)
     {
-        float pad = SliderEndInset(style);
-        float barW = MathF.Max(1f, rect.Width - pad * 2f);
-        float t = Math.Clamp((mouseX - (rect.X + pad)) / barW, 0f, 1f);
+        var track = SliderTrack(rect, outlinedThumb);
+        float t = Math.Clamp((mouseX - track.X) / track.Width, 0f, 1f);
         return (int)MathF.Round(t * 100f);
     }
 
-    public static void DrawComboBox(D2dTarget g, UiThemePalette t, UiHitMap hit, string id, UiRect rect, string text, bool open = false, float fontSize = 12.5f, bool enabled = true)
+    public static void DrawComboBox(D2dTarget g, UiThemePalette t, UiHitMap hit, string id, UiRect rect, string text,
+        bool open = false, float fontSize = 12.5f, bool enabled = true, bool showTooltip = true,
+        ComboAppIcon? appIcon = null, Action? onAppIconLoaded = null)
     {
-        if (enabled) hit.Add(id, rect, UiCursorKind.Hand, text);
+        if (enabled) hit.Add(id, rect, UiCursorKind.Hand, showTooltip ? text : null);
         bool hot = enabled && hit.IsHover(id);
         float opacity = enabled ? 1f : 0.5f;
         g.FillRoundedRect(rect, UiMetrics.ComboCornerRadius, t.SurfaceBg.WithAlphaFraction(opacity));
         UiColor edge = open || hot || (hit.ShowFocus && hit.FocusId == id) ? t.Accent : t.Border;
         g.DrawRoundedRect(rect, UiMetrics.ComboCornerRadius, edge.WithAlphaFraction(opacity), 1f);
-        g.DrawText(text, new UiRect(rect.X + 10f, rect.Y, MathF.Max(0f, rect.Width - 32f), rect.Height),
-            t.TextPrimary.WithAlphaFraction(opacity), fontSize, 400, UiTextAlign.Leading, UiVertAlign.Center);
+        UiColor ink = t.TextPrimary.WithAlphaFraction(opacity);
+        var label = new UiRect(rect.X + 10f, rect.Y, MathF.Max(0f, rect.Width - 32f), rect.Height);
+        if (appIcon is { } icon)
+        {
+            var iconRect = new UiRect(label.X, label.CenterY - 8f, 16f, 16f);
+            if (!hit.VisiblePart(iconRect).IsEmpty) icon.Draw(g, iconRect, ink, onAppIconLoaded, opacity);
+            label = label.Deflate(22f, 0, 0, 0);
+        }
+        g.DrawText(text, label, ink, fontSize, 400, UiTextAlign.Leading, UiVertAlign.Center);
         float arrowRight = rect.Right - 12f;
         float arrowTop = rect.CenterY - 2f;
         var arrowColor = t.TextSecondary.WithAlphaFraction(opacity);

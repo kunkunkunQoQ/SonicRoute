@@ -6,10 +6,12 @@ namespace SonicRoute.Core.Models
         public required uint ProcessId { get; init; }
         /// <summary>External sessions have a source identity and never impersonate a Windows PID.</summary>
         public string? ExternalSourceId { get; init; }
+        public string? ExternalPreferenceKey { get; init; }
+        public bool IsExternalOffline { get; init; }
         public string? SourceLabel { get; set; }
         public byte[]? ExternalIconPng { get; init; }
         public bool IsExternal => ExternalSourceId != null;
-        public string Identity => ExternalSourceId ?? "windows:" + ProcessId;
+        public string Identity => ExternalPreferenceKey ?? ExternalSourceId ?? "windows:" + ProcessId;
 
         /// <summary>会话显示名（可能为空）</summary>
         public string? DisplayName { get; set; }

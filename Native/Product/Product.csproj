@@ -20,6 +20,7 @@
   <ItemGroup>
     <ProjectReference Include="../Audio/Audio.csproj" />
     <ProjectReference Include="../../SonicRoute.AndroidAudio/SonicRoute.AndroidAudio.csproj" Condition="'$(SonicRouteEdition)'=='Full'" />
+    <Compile Include="../../SonicRoute/AndroidAudioHost.IsolationRules.cs" Condition="'$(SonicRouteEdition)'=='Full'" />
     <PackageReference Include="QRCoder" Version="1.7.0" Condition="'$(SonicRouteEdition)'=='Full'" />
     <Compile Include="../Graphics/DirectDrawing.cs;../../SonicRoute.AndroidAudio/WicIconLoader.cs;../../SonicRoute.AndroidAudio/ComInteropHelpers.cs;../../shared/WindowsAudio/Win32Native.cs" />
     <EmbeddedResource Include="../../LICENSE" LogicalName="SonicRoute.License" />

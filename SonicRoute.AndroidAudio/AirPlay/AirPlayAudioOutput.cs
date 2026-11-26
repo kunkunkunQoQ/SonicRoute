@@ -21,6 +21,9 @@ internal sealed class AirPlayAudioOutput : IPhoneAudioSession, IMultiOutputAudio
     private readonly Func<Action, IDisposable> _watchDefault;
     private readonly Action _changed;
     private readonly Action _failed;
+    private readonly AndroidAudioSettingsStore? _preferences;
+    private readonly Func<string?[], string?[]>? _resolveOutputs;
+    private readonly ExternalAudioPreference? _initial;
     private readonly AndroidPcmSource _pcm = new();
     private readonly PcmOutputMirrors _mirrors;
     private AndroidAudioState _state = new(CaptureState.Starting);
@@ -35,21 +38,87 @@ internal sealed class AirPlayAudioOutput : IPhoneAudioSession, IMultiOutputAudio
 
     internal AirPlayAudioOutput(string name, Action changed, Action failed,
         Func<AndroidPcmSource, string?, CancellationToken, IPcmPlayer> createPlayer,
-        Func<Action, IDisposable> watchDefault, CancellationToken lifetime)
+        Func<Action, IDisposable> watchDefault, CancellationToken lifetime,
+        AndroidAudioSettingsStore? preferences = null, string? preferenceKey = null, Func<string?[], string?[]>? resolveOutputs = null)
     {
         Name = name;
         _changed = changed; _failed = failed; _createPlayer = createPlayer; _watchDefault = watchDefault;
         _lifetime = lifetime;
         _mirrors = new(RemoveFailedOutputsAsync);
+        _preferences = preferences;
+        _resolveOutputs = resolveOutputs;
+        PreferenceKey = preferences == null ? null : preferenceKey;
+        // A display name is enough for a card, but two senders may share it.
+        if (preferenceKey?.StartsWith(ExternalAudioPreference.AirPlayPrefix + "id:", StringComparison.Ordinal) == true)
+            _initial = preferences?.FindExternalAudio(preferenceKey);
+        if (_initial is { } saved)
+        {
+            _state = _state with { Volume = saved.Volume, Muted = saved.Muted };
+            _pcm.Volume = saved.Muted ? 0 : saved.Volume / 100f;
+        }
     }
 
     internal string Id { get; } = "airplay:" + Guid.NewGuid().ToString("N");
     internal string Name { get; }
+    internal string? PreferenceKey { get; }
     public AndroidAudioState State => Volatile.Read(ref _state);
     public AndroidPcmSource? Pcm => State.State == CaptureState.Receiving ? _pcm : null;
     internal int BufferedSamples => _pcm.BufferedSamples;
     internal double RemoteVolume { get; private set; }
     internal bool CanChangeActiveOutputs => !_disposed && State.State == CaptureState.Receiving;
+    internal bool HasSavedOutputs => _initial?.Outputs.Any(id => id != null) == true;
+
+    // The sender owns playback. Open the remembered renderers on the first media
+    // packet, before any samples can reach a temporary default output.
+    internal async Task PreparePlaybackAsync(CancellationToken token)
+    {
+        await _routes.WaitAsync(token).ConfigureAwait(false);
+        try
+        {
+            if (_disposed || State.State != CaptureState.Starting || _player != null || !HasSavedOutputs) return;
+            var outputs = _resolveOutputs?.Invoke(_initial!.Outputs) ?? _initial!.Outputs;
+            var (primary, extras) = PcmOutputMirrors.Select(outputs, null);
+            if (primary == null && extras.Length == 0) return;
+            _mirrors.SetLevels(_pcm.Volume, false);
+            _mirrors.SetHeaderGain(_pcm.HeaderGain);
+            try
+            {
+                await _mirrors.ApplyAsync(extras, (pcm, id, cancel) => _createPlayer(pcm, id, cancel), async () =>
+                {
+                    var player = _createPlayer(_pcm, primary, token);
+                    try
+                    {
+                        if (player is AndroidPhonePcmPlayer phone) await phone.VerifyBeforePlaybackAsync(token).ConfigureAwait(false);
+                        if (player is WasapiPcmPlayer wasapi) await wasapi.PlayAndConfirmAsync(token).ConfigureAwait(false);
+                        else { token.ThrowIfCancellationRequested(); player.Play(); }
+                        if (primary == null) _defaultWatch ??= _watchDefault(DefaultChanged);
+                        SetPlayer(player);
+                    }
+                    catch { DisposeQuietly(player); throw; }
+                }, token).ConfigureAwait(false);
+            }
+            catch (Exception error) when (!token.IsCancellationRequested)
+            {
+                System.Diagnostics.Trace.WriteLine("AirPlay output restoration: " + error.GetType().Name);
+                return;
+            }
+            Volatile.Write(ref _extraIds, extras);
+            _pcm.Mirrors = _mirrors;
+            Volatile.Write(ref _state, _state with { State = CaptureState.Receiving, OutputId = primary });
+            PublishStarted();
+        }
+        finally { _routes.Release(); }
+    }
+
+    private void PublishStarted()
+    {
+        if (PreferenceKey is { } key)
+        {
+            var state = State;
+            _preferences!.RememberExternalAudio(new(key, Name, null, state.Volume, state.Muted, _initial?.Outputs ?? [null]));
+        }
+        _changed();
+    }
 
     internal void Write(ReadOnlySpan<float> samples, int sampleRate)
     {
@@ -76,7 +145,7 @@ internal sealed class AirPlayAudioOutput : IPhoneAudioSession, IMultiOutputAudio
             {
                 _mirrors.SetLevels(_pcm.Volume, false);
                 _mirrors.SetHeaderGain(_pcm.HeaderGain);
-                _changed();
+                PublishStarted();
             }
         }
         if (sampleRate == AndroidPcmSource.SampleRate) _pcm.Write(samples);
@@ -128,6 +197,8 @@ internal sealed class AirPlayAudioOutput : IPhoneAudioSession, IMultiOutputAudio
             level = next.Muted ? 0 : next.Volume / 100f;
             _pcm.Volume = level;
             Volatile.Write(ref _state, next);
+            if (next.State == CaptureState.Receiving)
+                _preferences?.UpdateExternalAudio(PreferenceKey, choice => choice with { Volume = next.Volume, Muted = next.Muted });
         }
         _mirrors.SetLevels(level, false);
         _changed();
@@ -137,8 +208,9 @@ internal sealed class AirPlayAudioOutput : IPhoneAudioSession, IMultiOutputAudio
     Task IMultiOutputAudioSession.SetOutputsAsync(IReadOnlyList<string?> outputs) => Task.Run(() => ChangeOutputsAsync(outputs.ToArray()));
     public Task SetOutputAsync(string? endpoint) => Task.Run(() => ChangeOutputsAsync([endpoint]));
     internal Task SetActiveOutputsAsync(string?[] outputs, Func<bool> stillActive) => Task.Run(() => ChangeOutputsAsync(outputs, stillActive));
+    internal Task RestoreOutputsAsync(string?[] outputs, Func<bool> stillActive) => ChangeOutputsAsync(outputs, stillActive, remember: false);
 
-    private async Task ChangeOutputsAsync(string?[] desired, Func<bool>? stillActive = null)
+    private async Task ChangeOutputsAsync(string?[] desired, Func<bool>? stillActive = null, bool remember = true)
     {
         bool changed;
         bool notifyFailed = false;
@@ -152,6 +224,8 @@ internal sealed class AirPlayAudioOutput : IPhoneAudioSession, IMultiOutputAudio
                     throw new InvalidOperationException("AirPlay audio has stopped.");
             }
             changed = await ChangeOutputsLockedAsync(desired).ConfigureAwait(false);
+            if (remember)
+                _preferences?.UpdateExternalAudio(PreferenceKey, choice => choice with { Outputs = ((IMultiOutputAudioSession)this).GetOutputs() });
         }
         catch
         {

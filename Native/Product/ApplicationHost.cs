@@ -216,11 +216,11 @@ internal sealed partial class ApplicationHost : IDisposable, IMainThread
         _window.Signal -= OnSignal;
         _window.CallbackError -= HandleError;
         StopViews();
+        StopServices();
 #if SONICROUTE_PHONE
         StopFull();
 #endif
         Ui.D2dSharedContext.ReleaseShared();
-        StopServices();
         _updates.Dispose();
         AutoRuleStore.Shutdown();
         if (!ConfigService.PendingSaves.Wait(TimeSpan.FromSeconds(3)))

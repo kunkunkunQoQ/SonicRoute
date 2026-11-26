@@ -4,6 +4,7 @@ using System.IO;
 using System.Runtime.InteropServices;
 #if SONICROUTE_NATIVE_PC
 using AudioService = SonicRoute.Native.Product.PcRoutingApi;
+using PhoneRoutingHost = SonicRoute.Native.Product.PcRoutingApi;
 using ApplicationAudio = SonicRoute.Native.Product.PcRoutingApi;
 using SonicRoute.Native.Product;
 #else
@@ -13,10 +14,14 @@ using NAudio.CoreAudioApi.Interfaces;
 using SonicRoute.AndroidAudio;
 using SonicRoute.Core;
 using SonicRoute.Core.Compat;
-#if SONICROUTE_PHONE && !SONICROUTE_NATIVE_PC
+#if SONICROUTE_PHONE
 using System.Buffers;
 #endif
 using AudioPolicyConfig = SonicRoute.Core.Interop.AudioPolicyConfig;
+
+#if SONICROUTE_PHONE && !SONICROUTE_NATIVE_PC
+using PhoneRoutingHost = SonicRoute.AndroidAudioHost;
+#endif
 
 namespace SonicRoute;
 
@@ -120,7 +125,7 @@ internal static partial class LocalAppOutputMirrors
 
     internal static async Task ShutdownAsync()
     {
-#if SONICROUTE_PHONE && !SONICROUTE_NATIVE_PC
+#if SONICROUTE_PHONE
         AppPlaybackOutputs.ForgetAll();
 #endif
         Shutdown.Cancel();
@@ -316,7 +321,7 @@ internal static partial class LocalAppOutputMirrors
     private sealed class Sink(string id, IDisposable player)
     {
         internal readonly string Id = id;
-#if SONICROUTE_PHONE && !SONICROUTE_NATIVE_PC
+#if SONICROUTE_PHONE
         internal AndroidPcmSource? Pcm { get; init; }
         internal DesktopMirrorPlayer? DesktopPlayer => Player as DesktopMirrorPlayer;
 #else
@@ -378,17 +383,17 @@ internal static partial class LocalAppOutputMirrors
                 {
                     var existing = previous.FirstOrDefault(s => Ids.Equals(s.Id, id));
                     if (existing != null) { next.Add(existing); continue; }
-#if SONICROUTE_PHONE && !SONICROUTE_NATIVE_PC
+#if SONICROUTE_PHONE
                     if (AndroidOutputIdentity.IsPhoneOutput(id))
                     {
                         var pcm = new AndroidPcmSource();
-                        var phone = AndroidAudioHost.CreatePhonePcmPlayer(pcm, id, change.Token);
+                        var phone = PhoneRoutingHost.CreatePhonePcmPlayer(pcm, id, change.Token);
                         var sink = new Sink(id, phone) { Pcm = pcm };
                         staged.Add(sink);
                         phone.Failed += error =>
                         {
                             RecordAndPruneFailed(sink, error);
-                            AndroidAudioHost.PhonePlaybackFailed(phone.Device);
+                            PhoneRoutingHost.PhonePlaybackFailed(phone.Device);
                         };
                         await phone.VerifyBeforePlaybackAsync(change.Token).ConfigureAwait(false);
                         phone.Play();
@@ -451,7 +456,7 @@ internal static partial class LocalAppOutputMirrors
         {
             var outputs = Sinks;
             if (outputs.Length == 0) return;
-#if SONICROUTE_PHONE && !SONICROUTE_NATIVE_PC
+#if SONICROUTE_PHONE
             bool hasPhone = false;
             foreach (var sink in outputs)
             {

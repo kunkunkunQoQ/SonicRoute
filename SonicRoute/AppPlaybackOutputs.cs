@@ -2,6 +2,7 @@
 using AudioService = SonicRoute.Native.Product.PcRoutingApi;
 using ApplicationAudio = SonicRoute.Native.Product.PcRoutingApi;
 using AudioPolicyConfig = SonicRoute.Native.Product.PcRoutingPolicy;
+using PhoneRoutingHost = SonicRoute.Native.Product.PcRoutingApi;
 #endif
 #if SONICROUTE_PHONE && !SONICROUTE_NATIVE_PC
 using SonicRoute.AirPlay;
@@ -10,6 +11,10 @@ using SonicRoute.AndroidAudio;
 using SonicRoute.Core;
 using SonicRoute.Core.Interop;
 using SonicRoute.Core.Models;
+
+#if SONICROUTE_PHONE && !SONICROUTE_NATIVE_PC
+using PhoneRoutingHost = SonicRoute.AndroidAudioHost;
+#endif
 
 namespace SonicRoute;
 
@@ -28,9 +33,9 @@ internal static partial class AppPlaybackOutputs
     internal static HashSet<string> GetSelected(int pid, string? persistedEndpoint)
     {
         var outputs = LocalAppOutputMirrors.GetExtraOutputs(pid).ToHashSet(Ids);
-#if SONICROUTE_PHONE && !SONICROUTE_NATIVE_PC
+#if SONICROUTE_PHONE
         if (LocalAppOutputMirrors.GetExclusivePhone(pid, out _) != null) return outputs;
-        persistedEndpoint = AndroidAudioHost.TryGetPcAppPhoneOutput(pid) ?? persistedEndpoint;
+        persistedEndpoint = PhoneRoutingHost.TryGetPcAppPhoneOutput(pid) ?? persistedEndpoint;
 #endif
         outputs.Add(Endpoint(persistedEndpoint));
         return outputs;
@@ -90,12 +95,18 @@ internal static partial class AppPlaybackOutputs
             // ownership inside the same per-process gate used for explicit selections.
             if (nativeIfUnmanaged && outputs.Length == 1 && !ApplicationAudio.IsPhoneOutputDevice(outputs[0])
                 && LocalAppOutputMirrors.GetExtraOutputs(pid).Length == 0 && !AppPlaybackRestore.HasSavedChoice(pid)
-#if SONICROUTE_PHONE && !SONICROUTE_NATIVE_PC
-                && !IsManaged(pid)
+#if SONICROUTE_PHONE
+                && !IsManaged(pid) && PhoneRoutingHost.TryGetPcAppPhoneOutput(pid) == null
 #endif
                 )
-                return AudioService.ApplyEndpoint(pid, EDataFlow.eRender, outputs[0]);
-#if SONICROUTE_PHONE && !SONICROUTE_NATIVE_PC
+            {
+                var single = AudioService.ApplyEndpoint(pid, EDataFlow.eRender, outputs[0]);
+#if SONICROUTE_NATIVE_PC
+                ApplicationAudio.NotifyRouteChanged(pid);
+#endif
+                return single;
+            }
+#if SONICROUTE_PHONE
             bool reset = selected.Length == 0;
             if (reset) Forget(pid, HistoryFor(pid));
             long epoch = Volatile.Read(ref _historyEpoch);
@@ -105,7 +116,7 @@ internal static partial class AppPlaybackOutputs
             var identity = outputs.Length > 1 || SavedPlaybackStore.ReadAll().Count != 0 ? PlaybackAppIdentity.Read(pid) : null;
             string preferred = Endpoint(preferredPrimary);
             var result = await ApplyAsync(pid, outputs, preferred, allowSpeakerMute: true).ConfigureAwait(false);
-#if SONICROUTE_PHONE && !SONICROUTE_NATIVE_PC
+#if SONICROUTE_PHONE
             if (result.Success && !reset && Volatile.Read(ref _historyEpoch) == epoch)
                 Remember(pid, before.ToArray(), outputs, preferred);
 #endif
@@ -124,7 +135,7 @@ internal static partial class AppPlaybackOutputs
             if (before.SetEquals(outputs) && (outputs.All(ApplicationAudio.IsPhoneOutputDevice) || Ids.Equals(Endpoint(saved), preferred)))
                 return true;
             var result = await ApplyAsync(pid, outputs, preferred, allowSpeakerMute: true).ConfigureAwait(false);
-#if SONICROUTE_PHONE && !SONICROUTE_NATIVE_PC
+#if SONICROUTE_PHONE
             if (result.Success) Remember(pid, before.ToArray(), outputs, preferred);
 #endif
             if (!result.Success) System.Diagnostics.Trace.WriteLine("Playback restore: " + result.Message);
@@ -163,14 +174,14 @@ internal static partial class AppPlaybackOutputs
         string? primary = PreferredPrimary(physical, preferred);
         var extras = outputs.Where(id => !Ids.Equals(id, primary)).ToArray();
         string[] oldExtras = LocalAppOutputMirrors.GetExtraOutputs(pid);
-#if SONICROUTE_PHONE && !SONICROUTE_NATIVE_PC
-        string? previousPhone = AndroidAudioHost.TryGetPcAppPhoneOutput(pid);
+#if SONICROUTE_PHONE
+        string? previousPhone = PhoneRoutingHost.TryGetPcAppPhoneOutput(pid);
         bool previousPhoneOnly = LocalAppOutputMirrors.GetExclusivePhone(pid, out bool previousSpeakerMute) != null;
 #endif
         try
         {
             using var reservation = outputs.Length > 1 ? LocalAppOutputMirrors.Reserve(pid) : null;
-#if SONICROUTE_PHONE && !SONICROUTE_NATIVE_PC
+#if SONICROUTE_PHONE
             if (previousPhone != null) StopPhone();
             if (previousPhoneOnly && primary != null)
             {
@@ -200,7 +211,7 @@ internal static partial class AppPlaybackOutputs
 
             if (extras.Length != 0 || oldExtras.Length != 0)
             {
-#if SONICROUTE_PHONE && !SONICROUTE_NATIVE_PC
+#if SONICROUTE_PHONE
                 if (primary == null) await LocalAppOutputMirrors.SetExclusivePhoneOutputsAsync(pid, extras, allowSpeakerMute).ConfigureAwait(false);
                 else
 #endif
@@ -220,22 +231,24 @@ internal static partial class AppPlaybackOutputs
         }
         finally { ApplicationAudio.NotifyRouteChanged(pid); }
 
-#if SONICROUTE_PHONE && !SONICROUTE_NATIVE_PC
+#if SONICROUTE_PHONE
         Task RestoreMirrors() => previousPhoneOnly
             ? LocalAppOutputMirrors.SetExclusivePhoneOutputsAsync(pid, oldExtras, previousSpeakerMute)
             : LocalAppOutputMirrors.SetExtraOutputsAsync(pid, oldExtras);
 
         void StopPhone()
         {
-            if (AndroidAudioHost.StopPcAppToPhone(pid, restorePreviousEndpoint: true))
-                undo.Push(() => { Require(AndroidAudioHost.RoutePcAppToPhone(pid, previousPhone!)); return Task.CompletedTask; });
+            if (PhoneRoutingHost.StopPcAppToPhone(pid, restorePreviousEndpoint: true))
+                undo.Push(() => { Require(PhoneRoutingHost.RoutePcAppToPhone(pid, previousPhone!)); return Task.CompletedTask; });
         }
 #endif
     }
 
     private static (bool Success, int HResult, string Message) RouteError(Exception error)
     {
-#if SONICROUTE_PHONE && !SONICROUTE_NATIVE_PC
+#if SONICROUTE_NATIVE_PC && SONICROUTE_PHONE
+        string detail = SonicRoute.Native.Product.PhonePreview.TranslateError(error);
+#elif SONICROUTE_PHONE
         string detail = AndroidErrorTranslation.Format(error);
 #else
         string detail = error.Message;

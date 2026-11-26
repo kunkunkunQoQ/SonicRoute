@@ -37,23 +37,6 @@ internal static partial class AndroidAudioHost
         return restored ? SourceSpeakers.Acquire(processId, expected, requirePlayback) : null;
     }
 
-    private static bool WaitForOriginalSpeaker(string expected, bool requirePlayback,
-        Func<(string? Endpoint, bool Active)> observe, Action wait)
-    {
-        int matches = 0;
-        for (int sample = 0; sample < 20; sample++)
-        {
-            var current = observe();
-            if (string.Equals(current.Endpoint, expected, StringComparison.OrdinalIgnoreCase) && (!requirePlayback || current.Active))
-            {
-                if (!requirePlayback || ++matches == 3) return true;
-            }
-            else matches = 0;
-            if (sample < 19) wait();
-        }
-        return false;
-    }
-
     private static (string? Endpoint, bool Active) ReadAppSpeaker(int processId) => ReadAppSpeaker(processId, null);
 
     private static (string? Endpoint, bool Active) ReadAppSpeaker(int processId, WasapiDeviceLease.Enumerator? sharedEnumerator)

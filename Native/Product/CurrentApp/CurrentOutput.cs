@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using SonicRoute.Core;
 using SonicRoute.Core.Interop;
+using SonicRoute.Core.Models;
 using SonicRoute.Native.Audio;
 
 namespace SonicRoute.Native.Product;
@@ -17,7 +18,7 @@ internal sealed partial class ProductCurrentApp
     }
 
     private readonly object _routesGate = new();
-    private readonly Dictionary<int, RouteScope> _scopes = new();
+    private readonly Dictionary<string, RouteScope> _scopes = new(StringComparer.Ordinal);
     private Task _planning = Task.CompletedTask;
     private int _outstanding;
     private long _lastRequest;
@@ -78,51 +79,24 @@ internal sealed partial class ProductCurrentApp
                 await previousPlanning.ConfigureAwait(false);
                 try
                 {
-                    SonicRoute.Core.Models.AudioAppInfo? resolvedApp = explicitTarget is null
+                    AudioAppInfo? resolvedApp = explicitTarget is null
                         ? Resolve(pid, hwnd)
                         : audio.Apps().FirstOrDefault(a => !a.IsExternal && (int)a.ProcessId == pid);
                     int targetPid = explicitTarget is null ? checked((int)(resolvedApp?.ProcessId ?? 0)) : pid;
-#if SONICROUTE_PHONE
-                    if (explicitTarget is null && resolvedApp is { IsExternal: true })
-                    {
-                        var cfg = ConfigService.Load();
-                        var vis = Visible(cfg);
-                        if (vis.Count == 0) throw new InvalidOperationException(L10n.T("Ov.NoDevice"));
-                        string appTitle = AppDisplayName.Get(resolvedApp);
-                        string? cur = audio.ReadRoute(resolvedApp, Flow.Render) ?? AudioService.SystemDefaultDeviceId;
-                        int idx = vis.FindIndex(d => Same(d.Id, cur));
-                        int off = (int)Math.Min(Math.Abs((long)steps), int.MaxValue);
-                        string nextTarget = vis[DeviceCycle.Index(idx, vis.Count, steps < 0, off)].Id;
-                        RecordUsedApp(resolvedApp, failureFeedback);
-                        Publish(new(generation, 0, nextTarget, cur, OutputIntentStatus.Pending, selected),
-                            FormatSwitchingTitle(appTitle), "🔊 " + Label(nextTarget, vis, cfg), showOsd);
-                        return Task.Run(async () =>
-                        {
-                            var reply = await audio.SetExternalOutputsAsync(resolvedApp, [nextTarget]).ConfigureAwait(false);
-                            bool ok = !reply.Text.StartsWith("error", StringComparison.OrdinalIgnoreCase);
-                            string? actual = audio.ReadRoute(resolvedApp, Flow.Render);
-                            var curCfg = ConfigService.Load();
-                            Publish(new(generation, 0, nextTarget, actual, ok ? OutputIntentStatus.Confirmed : OutputIntentStatus.Rejected),
-                                ok ? FormatFinalTitle(appTitle) : FormatFailedTitle(appTitle),
-                                "🔊 " + Label(actual, Visible(curCfg), curCfg), showOsd);
-                            if (ok) audio.NotifyAudioChanged();
-                            return reply;
-                        });
-                    }
-#endif
                     if (requiredPid.HasValue && targetPid != requiredPid.Value) throw new InvalidOperationException("Requested session is unavailable.");
-                    if (targetPid <= 0) throw new InvalidOperationException(L10n.T("Ov.NoOutputSession"));
+                    if (targetPid <= 0 && resolvedApp is not { IsExternal: true }) throw new InvalidOperationException(L10n.T("Ov.NoOutputSession"));
                     var config = ConfigService.Load();
-                    var visible = explicitTarget == null || showOsd ? Visible(config) : null;
+                    var visible = explicitTarget == null || showOsd ? Visible(config, resolvedApp) : null;
                     if (explicitTarget == null && visible!.Count == 0) throw new InvalidOperationException(L10n.T("Ov.NoDevice"));
                     if (resolvedApp != null) RecordUsedApp(resolvedApp, failureFeedback);
                     string appName = resolvedApp != null ? AppDisplayName.Get(resolvedApp) : (ForegroundAppService.GetProcessNameSafe(targetPid) ?? "");
-                    string? old = audio.ReadRoute(targetPid, Flow.Render);
+                    string? old = resolvedApp != null ? audio.ReadRoute(resolvedApp, Flow.Render) : audio.ReadRoute(targetPid, Flow.Render);
+                    string scopeKey = resolvedApp?.Identity ?? "windows:" + (uint)targetPid;
                     string target;
                     Task<ControlReply> write;
                     lock (_routesGate)
                     {
-                        if (!_scopes.TryGetValue(targetPid, out var scope)) _scopes.Add(targetPid, scope = new());
+                        if (!_scopes.TryGetValue(scopeKey, out var scope)) _scopes.Add(scopeKey, scope = new());
                         if (explicitTarget == null)
                         {
                             int index = visible!.FindIndex(d => Same(d.Id, scope.Target ?? old));
@@ -134,9 +108,9 @@ internal sealed partial class ProductCurrentApp
                         Publish(new(generation, targetPid, target, old, OutputIntentStatus.Pending, selected),
                             FormatSwitchingTitle(appName), showOsd ? "🔊 " + Label(target, visible!, config) : "", showOsd);
                         Task previousWrite = scope.Apply;
-                        write = Task.Run(() => ApplyAsync(previousWrite, targetPid, appName, target, generation, explicitTarget == null, selected, showOsd));
+                        write = Task.Run(() => ApplyAsync(previousWrite, targetPid, resolvedApp, appName, target, generation, explicitTarget == null, selected, showOsd));
                         scope.Apply = write;
-                        _ = RetireAsync(targetPid, scope, write);
+                        _ = RetireAsync(scopeKey, scope, write);
                     }
                     return write;
                 }
@@ -152,19 +126,27 @@ internal sealed partial class ProductCurrentApp
         }
     }
 
-    private async Task<ControlReply> ApplyAsync(Task previous, int pid, string appName, string target, long generation, bool cycle, string[]? selected, bool showOsd)
+    private async Task<ControlReply> ApplyAsync(Task previous, int pid, AudioAppInfo? app, string appName, string target, long generation, bool cycle, string[]? selected, bool showOsd)
     {
         await previous.ConfigureAwait(false);
         ControlReply result;
         try
         {
-            using var process = Process.GetProcessById(pid);
-            if (process.HasExited) throw new InvalidOperationException(L10n.T("Ov.NoOutputSession"));
-            if (cycle && !Visible(ConfigService.Load()).Any(d => Same(d.Id, target)))
+            if (cycle && !Visible(ConfigService.Load(), app).Any(d => Same(d.Id, target)))
                 throw new InvalidOperationException(L10n.T("Ov.NoDevice"));
-            result = selected == null
-                ? await audio.SelectOutputAsync(pid, target).ConfigureAwait(false)
-                : await audio.ExecuteAsync(new("outputs-set", [pid.ToString(System.Globalization.CultureInfo.InvariantCulture), target, .. selected])).ConfigureAwait(false);
+#if SONICROUTE_PHONE
+            if (app is { IsExternal: true })
+                result = audio.ExternalAudio is { } bridge ? await bridge.SetExternalOutputAsync(app, target).ConfigureAwait(false)
+                    : new("error: external_session_unavailable");
+            else
+#endif
+            {
+                using var process = Process.GetProcessById(pid);
+                if (process.HasExited) throw new InvalidOperationException(L10n.T("Ov.NoOutputSession"));
+                result = selected == null
+                    ? await audio.SelectOutputAsync(pid, target).ConfigureAwait(false)
+                    : await audio.ExecuteAsync(new("outputs-set", [pid.ToString(System.Globalization.CultureInfo.InvariantCulture), target, .. selected])).ConfigureAwait(false);
+            }
         }
         catch (Exception error) { result = new("error: " + error.Message); }
 
@@ -174,15 +156,22 @@ internal sealed partial class ProductCurrentApp
         {
             string? actual;
             HashSet<string>? observed = null;
-            if (selected == null) actual = audio.ReadRoute(pid, Flow.Render);
+            if (selected == null) actual = app != null ? audio.ReadRoute(app, Flow.Render) : audio.ReadRoute(pid, Flow.Render);
             else observed = audio.ReadPlaybackSelection(pid, out actual);
-            bool matched = Same(actual, target) && (observed == null ||
+            bool primaryMatched = Same(actual, target);
+#if SONICROUTE_PHONE
+            // A phone-only mirror group has no Windows primary. Its reported first
+            // sink can differ from the user's range anchor; the actual set is authoritative.
+            if (observed is { Count: > 1 } && observed.All(PcRoutingApi.IsPhoneOutputDevice))
+                primaryMatched = actual != null && observed.Contains(actual);
+#endif
+            bool matched = primaryMatched && (observed == null ||
                 observed.SetEquals(selected!.Length == 0 ? [AudioService.SystemDefaultDeviceId] : selected));
             bool success = !result.Text.StartsWith("error", StringComparison.OrdinalIgnoreCase) && matched;
             var config = ConfigService.Load();
             Publish(new(generation, pid, target, actual, success ? OutputIntentStatus.Confirmed : OutputIntentStatus.Rejected, selected, observed?.ToArray()),
                 success ? FormatFinalTitle(appName) : FormatFailedTitle(appName),
-                showOsd ? "🔊 " + Label(actual, Visible(config), config) : "", showOsd);
+                showOsd ? "🔊 " + Label(actual, Visible(config, app), config) : "", showOsd);
             audio.NotifyAudioChanged();
             if (!matched) return new("error: output_readback_mismatch, actual=" + (actual ?? AudioService.SystemDefaultDeviceId));
             return result;
@@ -195,10 +184,11 @@ internal sealed partial class ProductCurrentApp
         }
     }
 
-    private List<Endpoint> Visible(AppConfig config)
+    private List<Endpoint> Visible(AppConfig config, AudioAppInfo? app)
     {
-        var devices = audio.RenderDevicesWithPhone().Where(d => !config.HiddenOutputDevices.Contains(d.Id)).ToList();
-        if (!config.HiddenOutputDevices.Contains(AudioService.SystemDefaultDeviceId))
+        var devices = audio.RenderDevicesWithPhone(app, includePhoneCurrent: true)
+            .Where(d => config.IsDeviceShown(EDataFlow.eRender, d.PreferenceId)).ToList();
+        if (config.IsDeviceShown(EDataFlow.eRender, AudioService.SystemDefaultDeviceId))
             devices.Insert(0, new(AudioService.SystemDefaultDeviceId, L10n.T("Dev.SystemDefaultOut")));
         return devices;
     }
@@ -237,7 +227,7 @@ internal sealed partial class ProductCurrentApp
         });
     }
 
-    private async Task RetireAsync(int pid, RouteScope scope, Task write)
+    private async Task RetireAsync(string key, RouteScope scope, Task write)
     {
         await write.ConfigureAwait(false);
         Task acceptedPlans;
@@ -245,8 +235,8 @@ internal sealed partial class ProductCurrentApp
         await acceptedPlans.ConfigureAwait(false);
         lock (_routesGate)
         {
-            if (_scopes.TryGetValue(pid, out var current) && ReferenceEquals(current, scope) && scope.Apply == write)
-                _scopes.Remove(pid);
+            if (_scopes.TryGetValue(key, out var current) && ReferenceEquals(current, scope) && scope.Apply == write)
+                _scopes.Remove(key);
         }
     }
 

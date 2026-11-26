@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using SonicRoute.Core;
+using SonicRoute.Core.Interop;
 using SonicRoute.Native.Audio;
 using SonicRoute.Native.Ui;
 
@@ -73,12 +74,13 @@ internal sealed class OutputVolumesPopupWindow : LayeredWindow
         if (IsVisible) Invalidate();
     }
 
-    internal void ShowForOwner(LayeredWindow owner, UiRect? companionOccupiedDip = null)
+    internal void ShowForOwner(QuickPanelWindow owner, UiRect? companionOccupiedDip = null)
     {
         OwnerHandle = owner.Handle;
         _theme = UiThemePalette.Resolve(_config);
         EnsureCreated(L10n.T("Qp.Output"));
         RepositionForOwner(owner, companionOccupiedDip);
+        owner.ApplyCompanionEntrance(this);
         if (!IsVisible) Show(activate: false);
         RefreshData(owner, companionOccupiedDip);
     }
@@ -152,11 +154,10 @@ internal sealed class OutputVolumesPopupWindow : LayeredWindow
             {
                 var devices = ProductAudio.Devices(Flow.Render);
                 string? defId = devices.Length > 0 ? ProductAudio.DefaultId(Flow.Render) : null;
-                var hidden = _config.PanelOutputVolumesRetainedOnly ? _config.HiddenOutputDevices : null;
                 foreach (var dev in devices)
                 {
                     if (string.IsNullOrWhiteSpace(dev.Id) || AudioService.IsSystemDefault(dev.Id)) continue;
-                    if (hidden != null && hidden.Contains(dev.Id)) continue;
+                    if (_config.PanelOutputVolumesRetainedOnly && !_config.IsDeviceShown(EDataFlow.eRender, dev.PreferenceId)) continue;
                     string name = _config.DeviceNames.GetValueOrDefault(dev.Id, dev.Name);
                     int vol = 0;
                     bool muted = false;
@@ -320,7 +321,7 @@ internal sealed class OutputVolumesPopupWindow : LayeredWindow
             var sliderRect = new UiRect(muteRect.Right + 6f, ctrlY, MathF.Max(40f, pctRect.X - 6f - (muteRect.Right + 6f)), 32f);
             string sliderId = $"ov.vol:{row.Id}";
             UiPrimitives.DrawVolumeSlider(g, _theme, _hit, sliderId, sliderRect,
-                row.Volume / 100f, 0f, row.Muted, showPeak: false, enabled: row.Available);
+                row.Volume / 100f, 0f, row.Muted, showPeak: false, enabled: row.Available, compact: true);
         }
         _hit.PopClip();
         g.PopClip();
@@ -336,7 +337,7 @@ internal sealed class OutputVolumesPopupWindow : LayeredWindow
             int idx = _rows.FindIndex(r => r.Id == _draggingId);
             if (idx >= 0)
             {
-                int val = UiPrimitives.SliderValueFromX(_draggingRect, xDip);
+                int val = UiPrimitives.VolumeSliderValueFromX(_draggingRect, xDip, compact: true);
                 if (_rows[idx].Volume != val)
                 {
                     _rows[idx].Volume = val;
@@ -396,7 +397,7 @@ internal sealed class OutputVolumesPopupWindow : LayeredWindow
             {
                 _draggingId = _rows[vIdx].Id;
                 _draggingRect = hit.Value.Bounds;
-                int val = UiPrimitives.SliderValueFromX(_draggingRect, e.X);
+                int val = UiPrimitives.VolumeSliderValueFromX(_draggingRect, e.X, compact: true);
                 _rows[vIdx].Volume = val;
                 QueueDeviceVolume(_rows[vIdx].Id, val);
                 _onEndpointStateChanged?.Invoke(_rows[vIdx].Id, val, null);

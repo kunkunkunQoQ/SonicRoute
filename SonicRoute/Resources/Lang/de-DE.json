@@ -667,6 +667,7 @@
   "Phone.PairAndConnect": "Koppeln und verbinden",
   "Phone.ConnectedStatus": "Verbunden",
   "Phone.ProcessingStatus": "Wird verarbeitet…",
+  "Phone.DragAppOrder": "App-Symbol ziehen, um die Reihenfolge zu ändern. Am Rand wird gescrollt. Esc bricht ab.",
   "Phone.QuickPanelAppsTitle": "Im Schnellpanel angezeigte Geräte-Apps",
   "Phone.SmartVolumeTitle": "Intelligente Lautstärke",
   "Phone.ClipboardSyncTitle": "Zwischenablage synchronisieren",

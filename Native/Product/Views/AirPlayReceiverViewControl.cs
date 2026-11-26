@@ -159,7 +159,7 @@ internal sealed class AirPlayReceiverViewControl
         g.DrawIcon(UiIcon.AirPlay, new UiRect(iconBox.X + 7f, iconBox.Y + 7f, 18f, 18f), t.TextPrimary, 1.8f);
 
         var swRect = new UiRect(x + w - 38f, y + 4f, 38f, 28f);
-        UiPrimitives.DrawSwitch(g, t, hit, $"{_idPrefix}.toggle", swRect, running || status.Stage == AirPlayStage.Starting, enabled: !changing);
+        UiPrimitives.DrawSwitch(g, t, hit, $"{_idPrefix}.toggle", swRect, _host.AirPlay.Enabled || status.Stage == AirPlayStage.Starting, enabled: !changing);
 
         float textX = iconBox.Right + 10f;
         float textW = MathF.Max(40f, swRect.X - 8f - textX);
@@ -309,9 +309,8 @@ internal sealed class AirPlayReceiverViewControl
         {
             var stage = _host.AirPlay.Status.Stage;
             if (stage is AirPlayStage.Starting or AirPlayStage.Stopping) return true;
-            bool running = stage is AirPlayStage.Waiting or AirPlayStage.Connected;
             _closeInlineEdit(true);
-            _ = _host.AirPlay.SetReceivingAsync(_config, !running);
+            _ = _host.AirPlay.SetReceivingAsync(_config, !_host.AirPlay.Enabled);
             return true;
         }
 

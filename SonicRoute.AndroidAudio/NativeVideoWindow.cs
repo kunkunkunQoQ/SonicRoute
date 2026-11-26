@@ -391,7 +391,7 @@ public sealed class NativeVideoWindow : IAsyncDisposable
 
     private void ApplyWindowIcon(nint hwnd)
     {
-        if (_isMirrorMode)
+        if (_isMirrorMode && _iconPng is not { Length: > 0 })
         {
             _iconPng = null;
             // Keep caption clean without generic Win32 icon, matching mirror_resize.h.

@@ -7,7 +7,7 @@ using System.Text;
 
 namespace SonicRoute.AirPlay;
 
-internal sealed class AirPlayIdentity(string name, byte[]? screenKey = null, bool hevc = false, bool requireCode = false)
+internal sealed class AirPlayIdentity(string name, byte[]? screenKey = null, bool hevc = false, bool requireCode = false, string? id = null)
 {
     // A single DNS-SD label also has to fit the 12 hex digits and '@' in the RAOP instance name.
     private const int NameByteLimit = 50;
@@ -18,8 +18,8 @@ internal sealed class AirPlayIdentity(string name, byte[]? screenKey = null, boo
     internal const string RaopService = "_raop._tcp.local";
     internal const string Version = "366.0";
     internal string Name { get; } = NormalizeName(name) is { Length: > 0 } normalized ? normalized : "SonicRoute";
-    internal string Id { get; } = CreateId();
-    private string DisplayId { get; } = Guid.NewGuid().ToString();
+    internal string Id { get; } = id ?? CreateId();
+    private string DisplayId => new Guid("00000000-0000-0000-0000-" + Id).ToString();
     internal string DeviceId => string.Join(':', Enumerable.Range(0, 6).Select(i => Id.Substring(i * 2, 2)));
     internal string Host => $"sonicroute-{Id.ToLowerInvariant()}.local";
     private long Features => AudioFeatures | (screenKey == null ? 0 : ScreenFeatures | (hevc ? 1L << 42 : 0));
@@ -41,7 +41,7 @@ internal sealed class AirPlayIdentity(string name, byte[]? screenKey = null, boo
         return result.ToString().Trim();
     }
 
-    private static string CreateId()
+    internal static string CreateId()
     {
         byte[] bytes = RandomNumberGenerator.GetBytes(6);
         bytes[0] = (byte)((bytes[0] | 2) & ~1);

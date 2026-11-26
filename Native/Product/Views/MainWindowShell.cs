@@ -232,7 +232,7 @@ internal sealed partial class MainWindowShell : LayeredWindow, IViewHostActions
         {
             onSelected(choice);
             if (IsVisible) Invalidate();
-        });
+        }, _host.TryPost);
     }
 
     public void StartInlineEdit(
@@ -313,6 +313,7 @@ internal sealed partial class MainWindowShell : LayeredWindow, IViewHostActions
     }
 
     protected override InlineEditHost ActiveEditor => _inlineEdit;
+    protected override bool ShowOwnedWindowTooltips => _currentTab != MainNavTab.Settings;
 
     protected override string GetWindowTitle() => WindowTitle;
 
@@ -379,6 +380,7 @@ internal sealed partial class MainWindowShell : LayeredWindow, IViewHostActions
         var page = _pressedPage;
         _pressedPage = null;
         page?.OnCaptureLost();
+        SyncPageAnimationTimer();
         Invalidate();
     }
 
@@ -424,6 +426,12 @@ internal sealed partial class MainWindowShell : LayeredWindow, IViewHostActions
 
         if (!anyAnim) StopAnimationTimer();
         Invalidate();
+    }
+
+    private void SyncPageAnimationTimer()
+    {
+        if (_activePage is { NeedsAnimationTick: true }) StartAnimationTimer(16);
+        else if (!_sidebarAnimating && !_modeAnimating) StopAnimationTimer();
     }
 
     protected override void OnRender(D2dTarget g, float widthDip, float heightDip)
@@ -647,6 +655,7 @@ internal sealed partial class MainWindowShell : LayeredWindow, IViewHostActions
         else SetCursorKind(UiCursorKind.Arrow);
 
         bool pageChanged = _activePage?.OnPointerMove(xDip, yDip, leftDown) ?? false;
+        if (_pressedPage != null) SyncPageAnimationTimer();
         if (hoverChanged || pageChanged) Invalidate();
     }
 
@@ -715,6 +724,7 @@ internal sealed partial class MainWindowShell : LayeredWindow, IViewHostActions
         if (page != null)
         {
             if (page == _activePage && page.OnPointerUp(e, clickId)) Invalidate();
+            SyncPageAnimationTimer();
             return;
         }
 
@@ -764,7 +774,10 @@ internal sealed partial class MainWindowShell : LayeredWindow, IViewHostActions
     protected override void OnMouseWheel(float xDip, float yDip, float delta, bool horizontal)
     {
         if (_activePage?.OnMouseWheel(xDip, yDip, delta, horizontal) == true)
+        {
+            if (_pressedPage != null) SyncPageAnimationTimer();
             Invalidate();
+        }
     }
 
     protected override bool OnKeyDown(int vk, bool ctrl, bool shift, bool alt)
@@ -772,6 +785,7 @@ internal sealed partial class MainWindowShell : LayeredWindow, IViewHostActions
         if (_activePage?.OnKeyDown(vk, ctrl, shift, alt) == true ||
             (!ctrl && !alt && _hit.TryGetFocus(out var item, out _) && _activePage?.OnFocusedKey(item.Id, vk) == true))
         {
+            if (_pressedPage != null) SyncPageAnimationTimer();
             Invalidate();
             return true;
         }
