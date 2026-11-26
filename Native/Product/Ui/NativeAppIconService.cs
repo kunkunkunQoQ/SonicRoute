@@ -63,16 +63,6 @@ internal static class NativeAppIconService
         }
     }
 
-    public static void ClearCache()
-    {
-        lock (Gate)
-        {
-            Cache.Clear();
-            NegativeCache.Clear();
-            Order.Clear();
-        }
-    }
-
     public static IconBitmap? GetAppIcon(AppConfig? config, int pid, string? iconPath, string? processName, Action? onLoaded = null)
     {
         if (config != null && !string.IsNullOrWhiteSpace(processName)

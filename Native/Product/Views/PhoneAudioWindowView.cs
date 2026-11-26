@@ -228,15 +228,6 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
         if (IsVisible) Invalidate();
     }
 
-    internal (string DeviceId, UiRect Bounds)[] GetDropZoneTargets()
-    {
-        EnsureDropGeometry();
-        var result = new (string DeviceId, UiRect Bounds)[_dropZones.Count];
-        for (int i = 0; i < _dropZones.Count; i++)
-            result[i] = (_dropZones[i].DeviceId, _dropZones[i].Bounds);
-        return result;
-    }
-
     internal string? HitTestScreenDropZone(int screenXPx, int screenYPx)
     {
         if (!IsVisible) return null;
@@ -296,13 +287,6 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
                 _host.AirPlay.Disconnect();
         }
         else _ = RouteExternalAppAsync(app, targetDeviceId);
-        if (IsVisible) Invalidate();
-    }
-
-    internal void SetExternalDragHover(string? zoneId)
-    {
-        if (string.Equals(_externalDragHoverZone, zoneId, StringComparison.Ordinal)) return;
-        _externalDragHoverZone = zoneId;
         if (IsVisible) Invalidate();
     }
 

@@ -1192,15 +1192,6 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
         actions.Invalidate();
     }
 
-    private void CancelDrags()
-    {
-        _dragRuleId = _dropRuleId = null;
-        _ruleDragging = false;
-        _dragStepIndex = _dropStepIndex = -1;
-        _stepDragging = false;
-        _draggingVolStepIndex = -1;
-    }
-
     private void ToggleHotkeyCapture()
     {
         if (_capturingHotkey) CancelHotkeyCapture();

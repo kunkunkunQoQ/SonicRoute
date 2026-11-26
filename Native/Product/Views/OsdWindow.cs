@@ -148,12 +148,6 @@ internal sealed class OsdWindow : LayeredWindow
         }
     }
 
-    internal void HideAndRelease()
-    {
-        Hide();
-        ReleaseRenderResources();
-    }
-
     internal void ReleaseIdleResources()
     {
         if (!IsVisible) ReleaseRenderResources();

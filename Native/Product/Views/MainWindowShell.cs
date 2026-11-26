@@ -124,16 +124,6 @@ internal sealed class MainWindowShell : LayeredWindow, IViewHostActions
         ActivateCurrentPage();
     }
 
-    public void OpenPhoneConnection()
-    {
-        ShowMain(0);
-        NavigateTo(MainNavTab.Apps);
-#if SONICROUTE_PHONE
-        if (_pages.TryGetValue(MainNavTab.Apps, out var page) && page is AppsPageView apps)
-            apps.OpenPhoneConnection();
-#endif
-    }
-
     public void OpenPhoneDevice(string? profileId = null)
     {
         ShowMain(0);

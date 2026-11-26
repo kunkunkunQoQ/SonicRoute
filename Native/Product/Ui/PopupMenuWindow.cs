@@ -3,27 +3,20 @@ using System.Collections.Generic;
 
 namespace SonicRoute.Native.Ui;
 
-internal enum UiMenuDotKind { None, Accent, Success, Fail }
-
 internal sealed class UiMenuItem
 {
     public string Text { get; set; } = "";
     public Action? Click { get; init; }
     public bool IsSeparator { get; init; }
-    public bool IsHeader { get; init; }
     public bool Checked { get; init; }
     public bool Enabled { get; init; } = true;
-    public bool Danger { get; init; }
     public UiIcon? Icon { get; init; }
-    public UiMenuDotKind Dot { get; init; }
-    public string? RightHint { get; init; }
     public string? Tooltip { get; set; }
     public List<UiMenuItem>? SubItems { get; init; }
     public Action<PopupMenuWindow>? SubmenuOpened { get; init; }
     public float MaxTextWidth { get; init; } = float.PositiveInfinity;
 
     public static UiMenuItem Separator() => new() { IsSeparator = true };
-    public static UiMenuItem Header(string text) => new() { Text = text, IsHeader = true, Enabled = false };
 }
 
 /// <summary>
@@ -37,7 +30,6 @@ internal sealed class PopupMenuWindow : LayeredWindow
     private const float PadX = 5f; // 1 DIP frame + 4 DIP WPF menu padding
     private const float PadY = 5f;
     private const float ItemH = 30f;
-    private const float HeaderH = 26f;
     private const float SepH = 9f;
 
     private UiThemePalette _theme;
@@ -99,7 +91,7 @@ internal sealed class PopupMenuWindow : LayeredWindow
         ReleasePointerCapture();
         CloseSubMenu();
         _items = items;
-        int focus = _focusOnLoad ? items.FindIndex(i => i.Enabled && !i.IsHeader && !i.IsSeparator) : -1;
+        int focus = _focusOnLoad ? items.FindIndex(i => i.Enabled && !i.IsSeparator) : -1;
         _focusedIndex = _hoverIndex = focus;
         _focusOnLoad = false;
         _scroll.Offset = 0;
@@ -168,7 +160,7 @@ internal sealed class PopupMenuWindow : LayeredWindow
         bool anyLeftCol = false;
         foreach (var item in _items)
         {
-            if (item.Icon is not null || item.Dot != UiMenuDotKind.None)
+            if (item.Icon is not null)
                 anyLeftCol = true;
         }
 
@@ -182,15 +174,11 @@ internal sealed class PopupMenuWindow : LayeredWindow
                 y += SepH;
                 continue;
             }
-            var size = ctx.MeasureText(item.Text, UiMetrics.FontFamily, item.IsHeader ? 11.5f : 12.5f,
-                item.IsHeader ? 600 : 400, maxWDip, 32f, false);
-            float h = TrayStyle ? size.Height + 12f : item.IsHeader ? HeaderH : ItemH;
+            var size = ctx.MeasureText(item.Text, UiMetrics.FontFamily, 12.5f, 400, maxWDip, 32f, false);
+            float h = TrayStyle ? size.Height + 12f : ItemH;
             float textW = MathF.Min(size.Width, item.MaxTextWidth);
-            float hintW = string.IsNullOrEmpty(item.RightHint)
-                ? 0f
-                : ctx.MeasureText(item.RightHint, UiMetrics.FontFamily, 11f, 400, 120f, 32f, false).Width + 20f;
             float subW = item.Checked || item.SubItems is { Count: > 0 } ? 22f : 0f;
-            float rowW = PadX * 2f + (anyLeftCol ? 28f : 10f) + textW + hintW + subW + 20f;
+            float rowW = PadX * 2f + (anyLeftCol ? 28f : 10f) + textW + subW + 20f;
             if (TrayStyle)
             {
                 // WPF ItemBorder has 8 DIP horizontal padding and 10 DIP before its mark.
@@ -231,7 +219,7 @@ internal sealed class PopupMenuWindow : LayeredWindow
         bool anyLeftCol = false;
         foreach (var it in _items)
         {
-            if (it.Icon is not null || it.Dot != UiMenuDotKind.None) { anyLeftCol = true; break; }
+            if (it.Icon is not null) { anyLeftCol = true; break; }
         }
 
         var view = new UiRect(PadX, PadY, widthDip - PadX * 2f, heightDip - PadY * 2f);
@@ -253,12 +241,6 @@ internal sealed class PopupMenuWindow : LayeredWindow
                 g.DrawLine(r.X + 4f, sy, r.Right - 4f, sy, _theme.Border, 1f, roundCaps: false);
                 continue;
             }
-            if (item.IsHeader)
-            {
-                g.DrawText(item.Text, r.Deflate(10f, 0f), _theme.TextSecondary, 11.5f, 600, UiTextAlign.Leading, UiVertAlign.Center);
-                continue;
-            }
-
             bool highlighted = i == _hoverIndex || i == _focusedIndex || i == _openSubIndex;
             if (highlighted && item.Enabled)
                 g.FillRoundedRect(r, 4f, _theme.NavHover);
@@ -284,24 +266,12 @@ internal sealed class PopupMenuWindow : LayeredWindow
             if (item.Icon is UiIcon ic)
             {
                 UiColor icCol = !item.Enabled ? _theme.TextSecondary.WithAlphaFraction(0.55f)
-                    : item.Danger ? _theme.Fail
                     : highlighted ? _theme.Accent : _theme.TextSecondary;
                 g.DrawIcon(ic, new UiRect(r.X + 7f, r.CenterY - 7f, 14f, 14f), icCol, 1.8f);
             }
-            else if (item.Dot != UiMenuDotKind.None)
-            {
-                UiColor dotCol = item.Dot switch
-                {
-                    UiMenuDotKind.Success => _theme.Success,
-                    UiMenuDotKind.Fail => _theme.Fail,
-                    _ => _theme.Accent,
-                };
-                g.FillEllipse(r.X + 14f, r.CenterY, 4f, 4f, dotCol);
-            }
-
             UiColor fg = !item.Enabled
                 ? _theme.TextSecondary.WithAlphaFraction(0.55f)
-                : item.Danger ? _theme.Fail : _theme.TextPrimary;
+                : _theme.TextPrimary;
 
             float rightReserve = 10f;
             if (item.Checked)
@@ -314,13 +284,6 @@ internal sealed class PopupMenuWindow : LayeredWindow
                 g.DrawIcon(UiIcon.ChevronRight, new UiRect(r.Right - 16f, r.CenterY - 5f, 10f, 10f), _theme.TextSecondary, 1.8f);
                 rightReserve += 16f;
             }
-            if (!string.IsNullOrEmpty(item.RightHint))
-            {
-                var hr = new UiRect(r.Right - rightReserve - 92f, r.Y, 92f, r.Height);
-                g.DrawText(item.RightHint, hr, _theme.TextSecondary, 11f, 400, UiTextAlign.Trailing, UiVertAlign.Center);
-                rightReserve += 96f;
-            }
-
             g.DrawText(item.Text, new UiRect(textLeft, r.Y, MathF.Max(10f, r.Right - rightReserve - textLeft), r.Height),
                 fg, 12.5f, 400, UiTextAlign.Leading, UiVertAlign.Center);
         }
@@ -433,7 +396,7 @@ internal sealed class PopupMenuWindow : LayeredWindow
                 OpenSubMenu(_focusedIndex);
                 if (_subMenu is not null && _subMenu._items.Count > 0)
                 {
-                    int first = _subMenu._items.FindIndex(i => i.Enabled && !i.IsHeader && !i.IsSeparator);
+                    int first = _subMenu._items.FindIndex(i => i.Enabled && !i.IsSeparator);
                     _subMenu._focusOnLoad = first < 0;
                     _subMenu._focusedIndex = first;
                     _subMenu._hoverIndex = first;
@@ -451,7 +414,7 @@ internal sealed class PopupMenuWindow : LayeredWindow
             for (int step = 0; step < count; step++)
             {
                 idx = (idx + dir + count) % count;
-                if (!_items[idx].IsSeparator && !_items[idx].IsHeader && _items[idx].Enabled)
+                if (!_items[idx].IsSeparator && _items[idx].Enabled)
                 {
                     _focusedIndex = idx;
                     _hoverIndex = idx;
@@ -503,7 +466,7 @@ internal sealed class PopupMenuWindow : LayeredWindow
     {
         if (idx < 0 || idx >= _items.Count) return;
         var item = _items[idx];
-        if (!item.Enabled || item.IsSeparator || item.IsHeader) return;
+        if (!item.Enabled || item.IsSeparator) return;
         if (item.SubItems is { Count: > 0 })
         {
             OpenSubMenu(idx);
@@ -575,7 +538,7 @@ internal sealed class PopupMenuWindow : LayeredWindow
         float contentY = y - PadY + _scroll.Offset;
         for (int i = 0; i < _itemRects.Count; i++)
         {
-            if (_items[i].IsSeparator || _items[i].IsHeader) continue;
+            if (_items[i].IsSeparator) continue;
             var r = _itemRects[i];
             if (contentY >= r.Y && contentY < r.Bottom) return i;
         }

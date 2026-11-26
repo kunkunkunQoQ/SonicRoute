@@ -20,3 +20,19 @@
 | 可见性与资源归属 | `HostViews`、`MainWindowShell`、经典/简洁窗口、`LayeredWindow` | 保留按需创建、显示时订阅、DPI 及 HWND 专属渲染资源的释放。复用新增数据只由已创建的手机视图持有；托盘冷启动不创建图形对象，后台功能无新增定时器。 |
 
 各处保留 R-09 普通/实验设置分组、图标侧栏、经典/简洁面板、Android 媒体与 AirPlay 行为差异。本节没有通过行数推断包大小、CPU 或内存变化。
+
+## C · 已清理的不可达实现
+
+取两种 R-09 正式候选发布的预 AOT 程序集，路径为相应版型的 `r09-release/build/{Full,Lite}-x64/bin/Product/release_win-x64/SonicRoute.dll`。用 `System.Reflection.Metadata` 逐条解码所有方法体，遍历 Full 的 5,890 个方法定义与 16,930 个本程序集方法引用，Lite 的 5,024 个定义与 13,514 个引用。计数包括普通调用、委托/函数指针取址、方法元数据标记与泛型方法规格。另查成员引用、方法名字符串、各入口调用代码、界面创建方式及产品项目的 AOT 保留与 JSON 元数据。以下项目都在两版分别核对，手机专有类型只出现于 Full。
+
+| 清理位置 | 双版证据与继续使用的入口 |
+| --- | --- |
+| `NativeDialogs.Input/RecordHotkey` 和旧模态 EDIT | 两个入口没有引用。私有 `Run` 只由这两个入口调用。其 `DialogProc` 的唯一地址引用来自 `Run` 内部的窗口类注册；无导出入口。删除该独立消息循环、对话框状态、专用按键解析及仅为该窗口声明的互操作方法。保留 `Open/Save/OpenMultiple/BrowseFolder` 的 Win32/COM、确认/警告/错误提示和现行 `InlineEditHost/HotkeyBinding`。 |
+| `D2dTarget.FillHueSpectrumRect`、`UiColor.FromArgb` | 两版均无调用。当前取色器由 `ColorPickerWindow.MakeSpectrum` 生成色谱，通过 `DrawBgraBitmap` 显示；仍使用的通用渐变及所有绘制目标的生命周期保留。 |
+| `UiPrimitives.DrawSettingsSwitchRow`、`AutomationPageView.CancelDrags` | 旧设置行的最后调用已随 R-09 设置重排消失。现有行使用 B 中的带说明开关；规则和步骤的捕获取消走 `OnCaptureLost`、`CommitOrCancelRuleDrag` 及 `CommitOrCancelStepDrag`。所删方法均无调用。 |
+| `PopupMenuWindow` 及 `UiMenuItem` 的旧菜单表现状态 | 两版未写 `Danger/Dot/RightHint`；`IsHeader` 的唯一写入来自零引用的 `Header` 工厂。类型为产品内部手工构造的菜单模型，未进入序列化或外部协议。移除这四种不可进入的绘制、尺寸与键盘分支。真实的分隔线、图片、选中勾、提示、禁用项、动态子菜单和托盘状态继续使用其原入口。 |
+| `LayeredWindow.SetTitle/SetBoundsDip/SetTopMost`、`NativeAppIconService.ClearCache`、`OsdWindow.HideAndRelease` | 两版无调用。窗口创建读取实际标题和置顶要求；定位继续使用像素锚点与 DIP 大小。图标仍按容量/时间淘汰，导入更新有独立失效通知；OSD 隐藏与闲时的专属渲染资源仍从活跃路径释放。 |
+| `ApplicationHost.SetPreviewGlobalControls` 及初始伴随文件探测 | 设置器无人调用；`PreviewGlobalControls` 的 getter 两版均为零引用，只有老方法与视图启动赋值。移除打开视图时的 `global-controls.enabled` 文件探测及仅为这段逻辑保留的字段。磁盘上的旧文件保持原状。快捷键与后台服务继续由已启用的真实配置管理。 |
+| `MainWindowShell.OpenPhoneConnection`、`PhoneAudioWindowView.GetDropZoneTargets/SetExternalDragHover` | 旧外壳转发无调用。应用页实例自己的 `OpenPhoneConnection` 仍由 `apps.phone.add` 使用；主窗深链使用 `OpenPhoneDevice`。Full 伴随窗实际使用跨设备拖放目标注册、`HitTestScreenDropZone` 及状态事件，旧的复制目标数组/手工设置悬停方法无人调用。 |
+
+保留仅在 Full 手机连接页调用的 `DrawRadioButton`、仅在 Full 伴随窗口使用的 `OpenPhoneManagement`，以及 `LayeredWindow.WndProc`、EDIT 子类过程、文件对话框、协议与 JSON 兼容字段、动态语言键。其可达性有条件，或者由系统/设备调用。没有因单一版型、单次截图或一次运行中未出现就删除页面、资源或协议数据。以上为源码维护和候选状态分支的清理，体积变化须以实际发布收据为准。

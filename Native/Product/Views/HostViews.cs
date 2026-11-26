@@ -21,14 +21,12 @@ internal sealed partial class ApplicationHost
     private string micOsdTitle = "", micOsdText = "";
     private bool? micOsdMuted;
     private long micRestoreVersion;
-    private string PreviewControlsFile => Path.Combine(_environment.DataDirectory, "global-controls.enabled");
 
     internal string DataDirectory => _environment.DataDirectory;
     internal CandidateEnvironment EnvironmentInfo => _environment;
     internal UpdateService Updates => _updates;
     internal IReadOnlyDictionary<string, string> HotkeyStatuses => _automation.HotkeyStatuses;
     internal ProductAudio Audio => _audio;
-    internal bool PreviewGlobalControls { get; private set; }
     internal long AppVolumeRevision { get; private set; }
     internal bool HasPendingVolume(AudioAppInfo app)
     {
@@ -125,7 +123,6 @@ internal sealed partial class ApplicationHost
 
     private void StartViews()
     {
-        PreviewGlobalControls = File.Exists(PreviewControlsFile);
         _feedback.Changed += ShowFeedback;
         L10n.Instance.PropertyChanged += RefreshLanguage;
     }
@@ -179,14 +176,6 @@ internal sealed partial class ApplicationHost
         using var key = Microsoft.Win32.Registry.CurrentUser.CreateSubKey(RunKey, writable: true);
         if (enabled) key?.SetValue(RunEntry, '"' + Environment.ProcessPath + '"');
         else key?.DeleteValue(RunEntry, false);
-    }
-
-    internal void SetPreviewGlobalControls(bool enabled)
-    {
-        if (enabled) File.WriteAllText(PreviewControlsFile, "Native AOT Preview");
-        else File.Delete(PreviewControlsFile);
-        PreviewGlobalControls = enabled;
-        ViewSettingsChanged();
     }
 
     internal void RefreshViewThemes() => Ui.LayeredWindow.RefreshVisibleThemes(() => Ui.UiThemePalette.Resolve(_config));

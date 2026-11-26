@@ -13,8 +13,6 @@ internal readonly record struct UiColor(byte R, byte G, byte B, byte A = 255)
     public static UiColor White => new(255, 255, 255, 255);
 
     public static UiColor FromRgb(byte r, byte g, byte b) => new(r, g, b, 255);
-    public static UiColor FromArgb(byte a, byte r, byte g, byte b) => new(r, g, b, a);
-
     public UiColor WithAlpha(byte alpha) => new(R, G, B, alpha);
 
     public UiColor WithAlphaFraction(float factor)

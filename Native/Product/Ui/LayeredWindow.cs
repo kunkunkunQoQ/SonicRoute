@@ -85,7 +85,6 @@ internal abstract unsafe class LayeredWindow : IDisposable
     private const int GwlExStyle = -20;
 
     private static readonly nint HwndTopMost = new(-1);
-    private static readonly nint HwndNoTopMost = new(-2);
     private const uint SwpNoSize = 0x0001;
     private const uint SwpNoMove = 0x0002;
     private const uint SwpNoZOrder = 0x0004;
@@ -209,22 +208,11 @@ internal abstract unsafe class LayeredWindow : IDisposable
         }
     }
 
-    public void SetTitle(string title)
-    {
-        if (Handle != 0) SetWindowTextW(Handle, title);
-    }
-
     public void SetIcon(nint hIcon)
     {
         if (Handle == 0 || hIcon == 0) return;
         SendMessageW(Handle, 0x0080, 0, hIcon);
         SendMessageW(Handle, 0x0080, 1, hIcon);
-    }
-
-    public void SetBoundsDip(float leftDip, float topDip, float widthDip, float heightDip)
-    {
-        float s = DpiScale;
-        SetBoundsPx((int)MathF.Round(leftDip * s), (int)MathF.Round(topDip * s), widthDip, heightDip);
     }
 
     public void SetBoundsPx(int leftPx, int topPx, float widthDip, float heightDip)
@@ -260,13 +248,6 @@ internal abstract unsafe class LayeredWindow : IDisposable
         _topPx = topPx;
         if (Handle != 0)
             SetWindowPos(Handle, 0, _leftPx, _topPx, 0, 0, SwpNoSize | SwpNoZOrder | SwpNoActivate);
-    }
-
-    public void SetTopMost(bool topMost)
-    {
-        TopMost = topMost;
-        if (Handle != 0)
-            SetWindowPos(Handle, topMost ? HwndTopMost : HwndNoTopMost, 0, 0, 0, 0, SwpNoMove | SwpNoSize | SwpNoActivate);
     }
 
     public void EnableFileDrop()
@@ -1153,7 +1134,6 @@ internal abstract unsafe class LayeredWindow : IDisposable
     [DllImport("user32.dll", SetLastError = true)] private static extern ushort RegisterClassExW(ref WndClassExW wc);
     [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)] private static extern nint CreateWindowExW(uint exStyle, string cls, string title, uint style, int x, int y, int w, int h, nint parent, nint menu, nint inst, nint param);
     [DllImport("user32.dll")] private static extern bool DestroyWindow(nint hwnd);
-    [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern bool SetWindowTextW(nint hwnd, string text);
     [DllImport("user32.dll")] private static extern nint DefWindowProcW(nint hwnd, uint msg, nuint wParam, nint lParam);
     [DllImport("user32.dll")] private static extern bool ShowWindow(nint hwnd, int cmd);
     [DllImport("user32.dll")] private static extern bool SetWindowPos(nint hwnd, nint insertAfter, int x, int y, int cx, int cy, uint flags);

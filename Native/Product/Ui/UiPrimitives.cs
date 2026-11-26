@@ -581,21 +581,6 @@ internal static class UiPrimitives
     }
 
     /// <summary>Verbatim SettingsControls.xaml SettingsSwitchRow (border bottom, 30px icon, label, 34px AutomationSwitch).</summary>
-    public static void DrawSettingsSwitchRow(D2dTarget g, UiThemePalette t, UiHitMap hit, string id, UiRect rect, UiIcon icon, string title, bool isChecked, bool drawBottomBorder = true, bool enabled = true)
-    {
-        if (enabled) hit.Add(id, rect, UiCursorKind.Hand);
-        if (enabled && hit.IsHover(id))
-            g.FillRoundedRect(rect.Deflate(0f, 1f), 6f, t.NavHover.WithAlphaFraction(0.55f));
-        UiColor iconCol = enabled ? t.TextSecondary : t.TextSecondary.WithAlphaFraction(0.5f);
-        UiColor textCol = enabled ? t.TextPrimary : t.TextSecondary;
-        g.DrawIcon(icon, new UiRect(rect.X + 2f, rect.CenterY - 8.5f, 17f, 17f), iconCol, 1.8f);
-        g.DrawText(title, new UiRect(rect.X + 32f, rect.Y, MathF.Max(0f, rect.Width - 82f), rect.Height),
-            textCol, 12.5f, 400, UiTextAlign.Leading, UiVertAlign.Center, wrap: true, ellipsis: false);
-        DrawSwitch(g, t, hit, id, new UiRect(rect.Right - 36f, rect.CenterY - 12f, 34f, 24f), isChecked, enabled);
-        if (drawBottomBorder)
-            g.DrawLine(rect.X + 2f, rect.Bottom, rect.Right - 2f, rect.Bottom, t.Border, 1f, roundCaps: false);
-    }
-
     public static void DrawBadge(D2dTarget g, UiThemePalette t, UiRect rect, string text, UiColor bg, UiColor fg, UiColor? border = null, float fontSize = 10.5f)
     {
         g.FillRoundedRect(rect, rect.Height * 0.5f, bg);

@@ -639,39 +639,6 @@ internal sealed unsafe class D2dTarget : IDisposable
         }
     }
 
-    public void FillHueSpectrumRect(UiRect rect, float radius)
-    {
-        if (rect.IsEmpty) return;
-        D2dGradientStop* stops = stackalloc D2dGradientStop[7];
-        stops[0] = new D2dGradientStop { Position = 0f / 6f, Color = new D2dColorF(UiColor.FromRgb(255, 0, 0)) };
-        stops[1] = new D2dGradientStop { Position = 1f / 6f, Color = new D2dColorF(UiColor.FromRgb(255, 255, 0)) };
-        stops[2] = new D2dGradientStop { Position = 2f / 6f, Color = new D2dColorF(UiColor.FromRgb(0, 255, 0)) };
-        stops[3] = new D2dGradientStop { Position = 3f / 6f, Color = new D2dColorF(UiColor.FromRgb(0, 255, 255)) };
-        stops[4] = new D2dGradientStop { Position = 4f / 6f, Color = new D2dColorF(UiColor.FromRgb(0, 0, 255)) };
-        stops[5] = new D2dGradientStop { Position = 5f / 6f, Color = new D2dColorF(UiColor.FromRgb(255, 0, 255)) };
-        stops[6] = new D2dGradientStop { Position = 1f, Color = new D2dColorF(UiColor.FromRgb(255, 0, 0)) };
-
-        nint stopColl = 0;
-        if (((delegate* unmanaged[Stdcall]<nint, D2dGradientStop*, uint, uint, uint, nint*, int>)D2dSharedContext.Slot(_target, 9))(_target, stops, 7, 0, 0, &stopColl) != 0 || stopColl == 0)
-            return;
-
-        nint gradBrush = 0;
-        var lgProps = new D2dLinearGradProps { Start = new D2dPoint(rect.X, rect.Y), End = new D2dPoint(rect.Right, rect.Y) };
-        try
-        {
-            if (((delegate* unmanaged[Stdcall]<nint, D2dLinearGradProps*, nint, nint, nint*, int>)D2dSharedContext.Slot(_target, 10))(_target, &lgProps, 0, stopColl, &gradBrush) == 0 && gradBrush != 0)
-            {
-                var rr = new D2dRoundedRect(new D2dRectF(rect.X, rect.Y, rect.Right, rect.Bottom), radius, radius);
-                ((delegate* unmanaged[Stdcall]<nint, D2dRoundedRect*, nint, void>)D2dSharedContext.Slot(_target, 19))(_target, &rr, gradBrush);
-            }
-        }
-        finally
-        {
-            D2dSharedContext.Release(ref gradBrush);
-            D2dSharedContext.Release(ref stopColl);
-        }
-    }
-
     public void DrawText(
         string text,
         UiRect rect,
