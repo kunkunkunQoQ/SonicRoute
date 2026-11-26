@@ -53,6 +53,7 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
     private ComboPopupWindow? _comboPopup;
     private bool _airPlaySelected;
     private string _searchText = "";
+    private string? _activeProfileId;
     private AndroidDevice? _activeDevice;
     private QuickPanelWindow? _panel;
     private AndroidDevice? _pressDevice;
@@ -67,6 +68,7 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
     private AndroidMediaState? _mediaState;
     private AndroidConnectionQuality? _connectionQuality;
     private CancellationTokenSource? _mediaCts;
+    private Task? _mediaWatch;
 
     // Media seek bar & background artwork decoding
     private bool _seeking;
@@ -74,6 +76,7 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
     private string? _seekPackage;
     private UiRect _mediaTitleRect;
     private CancellationTokenSource? _catalogRefresh;
+    private string? _refreshError;
     private string? _seekTitle;
     private UiRect _seekSliderRect;
     private bool _seekTimerRunning;
@@ -82,6 +85,7 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
     private byte[]? _artBgra;
     private int _artW, _artH, _artVer, _artGen;
     private bool _wired;
+    private int _phoneChangePending;
 
     internal bool HasOpenModal => (_comboPopup is { IsVisible: true }) || _inlineEdit.IsOpen;
 
@@ -160,7 +164,7 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
         UpdateSeekAnimationTimer();
     }
 
-    internal void RepositionForOwner(LayeredWindow owner)
+    internal void RepositionForOwner(LayeredWindow owner, bool deferPresentation = false)
     {
         if (owner.Handle == 0) return;
         GetMonitorWorkAreaForWindow(owner.Handle, out int ml, out int mt, out int mr, out int mb, out uint monDpi);
@@ -188,13 +192,19 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
         x = Math.Clamp(x, workL, MathF.Max(workL, workR - width));
         float y = Math.Clamp(ownerT, workT, MathF.Max(workT, workB - height));
 
-        SetBoundsPx((int)MathF.Round(x * s), (int)MathF.Round(y * s), width, height);
+        SetPanelBoundsPx((int)MathF.Round(x * s), (int)MathF.Round(y * s), width, height, deferPresentation);
     }
 
     internal void RefreshData()
     {
         var phone = _host.Phone;
         var profile = phone.Store.Profile;
+        if (_activeProfileId != profile.Id)
+        {
+            _activeProfileId = profile.Id;
+            CancelCatalogRefresh();
+            _dropStatusMessage = null;
+        }
         _appIcons.SetProfile(profile.Id);
         var online = profile.LastDevice is { } last ? phone.Connections.Get(last).Device : null;
         if (IsVisible && _airPlaySelected) _airPlay.Attach();
@@ -206,6 +216,7 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
         }
         else if (!Equals(online, _activeDevice))
         {
+            _refreshError = null;
             if (!AndroidDeviceIdentity.Matches(online, _activeDevice))
             {
                 ++_commandVersion;
@@ -294,7 +305,7 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
     {
         ControlReply reply = app.IsExternal
             ? await _host.Audio.SetExternalOutputsAsync(app, [targetDeviceId]).ConfigureAwait(false)
-            : await _host.CurrentApp.SelectOutputAsync((int)app.ProcessId, targetDeviceId, showOsd: false).ConfigureAwait(false);
+            : await _host.CurrentApp.SelectOutputAsync((int)app.ProcessId, targetDeviceId, FeedbackKind.PanelWarning).ConfigureAwait(false);
         if (reply.Text.StartsWith("error:", StringComparison.OrdinalIgnoreCase)) throw new InvalidOperationException(reply.Text);
     });
 
@@ -455,10 +466,12 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
 
     private void OnPhoneChanged()
     {
-        _host.TryPost(() =>
+        if (Interlocked.Exchange(ref _phoneChangePending, 1) != 0) return;
+        if (!_host.TryPost(() =>
         {
-            if (IsVisible) RefreshData();
-        });
+            Volatile.Write(ref _phoneChangePending, 0);
+            if (_wired && IsVisible) RefreshData();
+        })) Volatile.Write(ref _phoneChangePending, 0);
     }
 
     private void RestartMediaWatch(AndroidDevice? device)
@@ -481,7 +494,8 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
             });
         };
 
-        _ = Task.Run(async () =>
+        var token = cts.Token;
+        _mediaWatch = Task.Run(async () =>
         {
             try
             {
@@ -494,10 +508,21 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
                         UpdateSeekAnimationTimer();
                         if (IsVisible && !_airPlaySelected) Invalidate();
                     });
-                }, cts.Token).ConfigureAwait(false);
+                }, token).ConfigureAwait(false);
             }
-            catch (OperationCanceledException) when (cts.IsCancellationRequested) { }
-            catch { }
+            catch (OperationCanceledException) when (token.IsCancellationRequested) { }
+            catch (Exception ex) { ExceptionDiagnostics.Record("PhoneCompanion.MediaWatch", ex); }
+            finally
+            {
+                if (!token.IsCancellationRequested) _host.TryPost(() =>
+                {
+                    if (!ReferenceEquals(_mediaCts, cts)) return;
+                    _mediaState = null;
+                    _connectionQuality = null;
+                    UpdateSeekAnimationTimer();
+                    if (IsVisible) Invalidate();
+                });
+            }
         });
     }
 
@@ -508,6 +533,7 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
         _seeking = false;
         var cts = _mediaCts;
         _mediaCts = null;
+        _mediaWatch = null;
         if (cts != null)
         {
             try { cts.Cancel(); } catch { }
@@ -914,7 +940,8 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
         {
             var refresh = new UiRect(right - footerH, footerY, footerH, footerH);
             UiPrimitives.DrawSecondaryButton(g, _theme, _hit, "companion.refresh", refresh, "",
-                enabled: _catalogRefresh == null, radius: 8f, icon: UiIcon.Refresh, tooltip: L10n.T("History.Refresh"));
+                enabled: _catalogRefresh == null, radius: 8f, icon: UiIcon.Refresh,
+                tooltip: _refreshError ?? L10n.T(online == null && profile.LastDevice != null ? "Phone.Reconnect" : "History.Refresh"));
             right = refresh.X - 4f;
         }
         var card = new UiRect(padX, footerY, right - padX, footerH);
@@ -922,7 +949,7 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
             ? L10n.T("Phone.DeviceSelector") : phone.Store.GetProfileDisplayName(profile);
         string status = _airPlaySelected ? AirPlayReceiverViewControl.GetStageLabel(_host.AirPlay.Status)
             : L10n.T(_catalogRefresh != null ? "Phone.StatusLoading" : online == null ? "Phone.Disconnected" : "Phone.ConnectedStatus");
-        _hit.Add("companion.device", card, UiCursorKind.Hand, _dropStatusMessage ?? name);
+        _hit.Add("companion.device", card, UiCursorKind.Hand, _refreshError ?? _dropStatusMessage ?? name);
         g.FillRoundedRect(card, 8f, _theme.SurfaceBgAlpha);
         g.DrawRoundedRect(card, 8f, _hit.IsHover("companion.device") ? _theme.Accent : _theme.Border);
         var icon = new UiRect(card.X + 7f, card.CenterY - 8f, 16f, 16f);
@@ -1252,23 +1279,30 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
         if (_catalogRefresh != null) return;
         var phone = _host.Phone;
         var selected = phone.Store.Profile;
-        var refresh = new CancellationTokenSource();
+        var mediaAtClick = _mediaWatch;
+        var refresh = CancellationTokenSource.CreateLinkedTokenSource(phone.Lifetime);
         _catalogRefresh = refresh;
+        _refreshError = null;
         Invalidate();
+        string? error = null;
         try
         {
-            await RunCompanionCommand(async () =>
-            {
-                await phone.ReconnectSelectedDeviceAsync(refresh.Token).ConfigureAwait(false);
-                refresh.Token.ThrowIfCancellationRequested();
-                if (phone.Store.Profile.Id != selected.Id || selected.LastDevice == null ||
-                    phone.Connections.Resolve(selected.LastDevice) is not { } device) return;
-                using var read = CancellationTokenSource.CreateLinkedTokenSource(refresh.Token, phone.Connections.OperationToken(device));
-                var apps = await phone.Adb.AppsAsync(device, read.Token, selected.QuickPanelApps.Select(a => a.Package).ToArray()).ConfigureAwait(false);
-                read.Token.ThrowIfCancellationRequested();
-                if (phone.Store.Profile.Id == selected.Id && phone.Connections.IsCurrent(device))
-                    phone.Store.UpdateMetadata(device, apps);
-            });
+            await phone.ReconnectSelectedDeviceAsync(refresh.Token).ConfigureAwait(false);
+            refresh.Token.ThrowIfCancellationRequested();
+            var current = phone.Store.Profile;
+            if (current.Id != selected.Id || current.QuickPanelApps.Count == 0 ||
+                phone.Connections.Resolve(current.LastDevice) is not { } device) return;
+            using var read = CancellationTokenSource.CreateLinkedTokenSource(refresh.Token, phone.Connections.OperationToken(device));
+            var apps = await phone.Adb.AppsAsync(device, read.Token, current.QuickPanelApps.Select(a => a.Package).ToArray()).ConfigureAwait(false);
+            read.Token.ThrowIfCancellationRequested();
+            if (phone.Store.Profile.Id == selected.Id && phone.Connections.IsCurrent(device))
+                phone.Store.UpdateMetadata(device, apps);
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception ex)
+        {
+            ExceptionDiagnostics.Record("PhoneCompanion.Refresh", ex);
+            error = PhonePreview.TranslateError(ex);
         }
         finally
         {
@@ -1277,7 +1311,13 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
                 refresh.Dispose();
                 if (!ReferenceEquals(_catalogRefresh, refresh)) return;
                 _catalogRefresh = null;
-                if (IsVisible) Invalidate();
+                if (!IsVisible || _airPlaySelected || phone.Store.Profile.Id != selected.Id) return;
+                RefreshData();
+                _refreshError = error;
+                // A failed media session can leave a healthy ADB device online. An
+                // explicit refresh retries that ended session, preserving any live one.
+                if (ReferenceEquals(_mediaWatch, mediaAtClick) && mediaAtClick is { IsCompleted: true } && _activeDevice != null)
+                    RestartMediaWatch(_activeDevice);
             })) refresh.Dispose();
         }
     }
@@ -1286,6 +1326,7 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
     {
         _catalogRefresh?.Cancel();
         _catalogRefresh = null;
+        _refreshError = null;
     }
 
     private void OpenPhoneManagementDeepLink()

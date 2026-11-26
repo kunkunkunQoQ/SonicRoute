@@ -463,7 +463,7 @@ internal sealed class ThemePageView : IViewPage
         SetValue(value);
         if (!_actions.CommitSettings()) return true;
         if (id == "th.opacity") _actions.NotifyThemeChanged();
-        if (id == "th.panel.h") _actions.NotifySettingsChanged();
+        if (id == "th.panel.h") _actions.Host.PanelGeometryChanged();
         if (id is "th.osd.w" or "th.osd.font") _actions.Host.PreviewOsd();
         _actions.Invalidate();
         return true;
@@ -490,7 +490,7 @@ internal sealed class ThemePageView : IViewPage
             return;
         }
         if (preview && id is ("osdW" or "osdFont")) _actions.Host.PreviewOsd();
-        if (id == "panelH") _actions.NotifySettingsChanged();
+        if (id == "panelH") _actions.Host.PanelGeometryChanged();
     }
 
     private void ApplySliderDrag(string name, float x)

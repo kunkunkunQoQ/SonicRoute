@@ -30,13 +30,22 @@ public sealed class AndroidDeviceDiscovery
     // A handshake can finish after another scan or a removal. Use the newer
     // observation only if it independently contains exactly this live instance.
     internal bool PublishConnection(AndroidConnectionResult result, long revision, Func<AndroidConnectionResult, bool> accept)
+        => PublishConnection(result, revision, accept, out _);
+
+    private bool PublishConnection(AndroidConnectionResult result, long revision, Func<AndroidConnectionResult, bool> accept,
+        out bool superseded)
     {
         bool published = false;
+        superseded = false;
         lock (_gate)
         {
             if (revision != _revision)
             {
-                if (!_current || _devices == null || !_devices.Contains(result.Device)) return false;
+                if (!_current || _devices == null || !_devices.Contains(result.Device))
+                {
+                    superseded = true;
+                    return false;
+                }
                 result = result with { Devices = _devices };
             }
             else if (!_current || !ReferenceEquals(_devices, result.Devices))
@@ -52,6 +61,24 @@ public sealed class AndroidDeviceDiscovery
             // Dispatch after the durable store transaction and outside the lock.
             if (published || accepted) Changed?.Invoke();
         }
+    }
+
+    // Connecting can itself trigger track-devices before the handshake returns. Recheck
+    // that specific live attachment once without repeating the wireless connection.
+    internal async Task<bool> PublishReconnectAsync(AndroidConnectionResult result, long revision,
+        Func<AndroidConnectionResult, bool> accept, CancellationToken token)
+    {
+        token.ThrowIfCancellationRequested();
+        if (PublishConnection(result, revision, accept, out bool superseded)) return true;
+        if (!superseded) return false;
+
+        var devices = await ReadAsync(token).ConfigureAwait(false);
+        token.ThrowIfCancellationRequested();
+        var confirmed = devices.FirstOrDefault(d => d.State == "device" && (d == result.Device
+            || AndroidDeviceIdentity.SameAttachment(result.Device, d)
+                && AndroidDeviceIdentity.SamePhysicalDevice(result.Device, d)
+                && (result.Device.IdentityFingerprint == null || result.Device.IdentityFingerprint == d.IdentityFingerprint)));
+        return confirmed != null && PublishConnection(result with { Device = confirmed, Devices = devices }, RevisionOf(devices), accept);
     }
     public void Publish(IReadOnlyList<AndroidDevice> devices)
     {

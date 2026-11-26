@@ -39,6 +39,7 @@ internal sealed class QuickPanelWindow : LayeredWindow
         public float Peak;
         public bool Expanded;
         public string NativeOutputId = AudioService.SystemDefaultDeviceId;
+        public Endpoint[] OutputDevices = [];
         public HashSet<string> SelectedOutputs = new(IdCmp);
         public string? OutputAnchor;
         public string NativeInputId = AudioService.SystemDefaultDeviceId;
@@ -75,7 +76,6 @@ internal sealed class QuickPanelWindow : LayeredWindow
     private PopupMenuWindow? _presetMenu;
 
     private Endpoint[] _outputs = [];
-    private Endpoint[] _allRenderOutputs = [];
     private Endpoint[] _inputs = [];
     private string? _defaultOutputId;
     private string? _panelOutputId;
@@ -180,9 +180,7 @@ internal sealed class QuickPanelWindow : LayeredWindow
 #endif
         if (IsVisible)
         {
-            ApplyConfiguredHeight();
-            if (!_adjustMode) PositionWindow();
-            RepositionCompanions();
+            ApplyConfiguredBounds();
             RefreshData();
             Invalidate();
         }
@@ -192,8 +190,7 @@ internal sealed class QuickPanelWindow : LayeredWindow
     {
         _theme = UiThemePalette.Resolve(_config);
         EnsureCreated(L10n.T("Qp.Panel"));
-        ApplyConfiguredHeight();
-        if (!_adjustMode) PositionWindow();
+        ApplyConfiguredBounds();
 
         if (!IsVisible)
         {
@@ -266,7 +263,7 @@ internal sealed class QuickPanelWindow : LayeredWindow
             try
             {
                 render = ProductAudio.Devices(Flow.Render);
-                allRenderWithPhone = _host.Audio.RenderDevicesWithPhone();
+                allRenderWithPhone = _host.Audio.RenderDevicesWithPhone(windows: render, includePhoneCurrent: true);
                 defId = render.Length > 0 ? ProductAudio.DefaultId(Flow.Render) : null;
                 string? targetEndpoint = _config.PanelChangeSystemDefault ? null : (_panelOutputId ?? defId);
                 try
@@ -366,7 +363,10 @@ internal sealed class QuickPanelWindow : LayeredWindow
                         catch { }
                     }
 
-                    string? outLabel = needOutputName ? ResolveDeviceDisplayName(allRenderWithPhone, nativeOut) : null;
+                    var outputDevices = app.IsExternal
+                        ? _host.Audio.RenderDevicesWithPhone(app, render)
+                        : allRenderWithPhone;
+                    string? outLabel = needOutputName ? ResolveDeviceDisplayName(outputDevices, nativeOut) : null;
 
                     newRows.Add(new AppRowState
                     {
@@ -381,6 +381,7 @@ internal sealed class QuickPanelWindow : LayeredWindow
                         Available = avail,
                         Expanded = expanded,
                         NativeOutputId = nativeOut,
+                        OutputDevices = outputDevices,
                         SelectedOutputs = selectedOuts,
                         NativeInputId = nativeIn,
                         CachedOutputLabel = outLabel,
@@ -413,7 +414,6 @@ internal sealed class QuickPanelWindow : LayeredWindow
 #endif
 
                 _outputs = render;
-                _allRenderOutputs = allRenderWithPhone;
                 _inputs = capture;
                 _defaultOutputId = defId;
                 if (_panelOutputId == null || !render.Any(d => IdCmp.Equals(d.Id, _panelOutputId)))
@@ -929,30 +929,20 @@ internal sealed class QuickPanelWindow : LayeredWindow
 
     private List<(string Id, string Name)> BuildOutputChoicesForRow(AppRowState row)
     {
-        var choices = new List<(string Id, string Name)>
-        {
-            (AudioService.SystemDefaultDeviceId, L10n.T("Dev.SystemDefaultOut"))
-        };
+        var choices = new List<(string Id, string Name)>(row.OutputDevices.Length + 1);
+        const string defaultId = AudioService.SystemDefaultDeviceId;
+        if (!_config.HiddenOutputDevices.Contains(defaultId))
+            choices.Add((defaultId, Label(defaultId, L10n.T("Dev.SystemDefaultOut"))));
 
-#if SONICROUTE_PHONE
-        bool isAndroidExternal = row.IsExternal && _host.Audio.ExternalAudio?.FindSession(row.App.ExternalSourceId) is AndroidAudioSession;
-        if (isAndroidExternal)
-        {
-            choices.Add((AndroidAudioSession.SourcePhoneOutputId, L10n.T("Phone.NativeAudioOutput")));
-        }
-#endif
-
-        var sourceList = _allRenderOutputs.Length > 0 ? _allRenderOutputs : _outputs;
-        foreach (var d in sourceList)
+        foreach (var d in row.OutputDevices)
         {
             if (_config.HiddenOutputDevices.Contains(d.Id)) continue;
-            if (row.IsExternal && PcRoutingApi.IsPhoneOutputDevice(d.Id))
-            {
-                // Keep external/phone outputs consistent with WPF RowPlaybackDevices
-            }
-            choices.Add((d.Id, _config.DeviceNames.GetValueOrDefault(d.Id, d.Name)));
+            choices.Add((d.Id, Label(d.Id, d.Name)));
         }
         return choices;
+
+        string Label(string id, string fallback) =>
+            _config.DeviceNames.TryGetValue(id, out var alias) && !string.IsNullOrWhiteSpace(alias) ? alias : fallback;
     }
 
     private List<(string Id, string Name)> BuildInputChoices()
@@ -1209,12 +1199,13 @@ internal sealed class QuickPanelWindow : LayeredWindow
             int newTopPx = _resizeStartTopPx;
             if (_resizingTopEdge)
             {
-                int deltaPx = (int)MathF.Round((newH - _resizeStartHeightDip) * DpiScale);
-                newTopPx = Math.Max(mt, _resizeStartTopPx - deltaPx);
+                int fixedBottom = _resizeStartTopPx + (int)MathF.Round(_resizeStartHeightDip * DpiScale);
+                newH = MathF.Min(newH, MathF.Max(UiMetrics.QuickPanelMinHeight, (fixedBottom - mt) / DpiScale));
+                newTopPx = fixedBottom - (int)MathF.Round(newH * DpiScale);
             }
 
-            SetBoundsPx(LeftPx, newTopPx, WidthDip, newH);
-            RepositionCompanions();
+            if (newTopPx != TopPx || (int)MathF.Round(newH * DpiScale) != HeightPx)
+                SetGroupBounds(LeftPx, newTopPx, newH);
             return;
         }
 
@@ -1430,17 +1421,16 @@ internal sealed class QuickPanelWindow : LayeredWindow
         if (_resizingHeight)
         {
             _resizingHeight = false;
+            if (HeightPx == (int)MathF.Round(_resizeStartHeightDip * DpiScale) && TopPx == _resizeStartTopPx) return;
             _config.QuickPanelHeight = (int)Math.Clamp(MathF.Round(HeightDip), 350f, 850f);
             if (_resizingTopEdge && string.Equals(_config.QuickPanelPosMode, "custom", StringComparison.OrdinalIgnoreCase))
                 _config.QuickPanelCustomY = CurrentCustomPosition().Y;
             if (!CommitPanelSettings())
             {
-                SetBoundsPx(LeftPx, _resizeStartTopPx, WidthDip, _resizeStartHeightDip);
-                RepositionCompanions();
+                SetGroupBounds(LeftPx, _resizeStartTopPx, _resizeStartHeightDip);
                 return;
             }
-            _host.ViewSettingsChanged();
-            RepositionCompanions();
+            _host.PanelGeometryChanged();
             return;
         }
 
@@ -1960,7 +1950,7 @@ internal sealed class QuickPanelWindow : LayeredWindow
 
         row.SelectedOutputs = new HashSet<string>(nextOutputs, IdCmp);
         row.NativeOutputId = preferred;
-        row.CachedOutputLabel = ResolveDeviceDisplayName(_allRenderOutputs.Length > 0 ? _allRenderOutputs : _outputs, preferred);
+        row.CachedOutputLabel = ResolveDeviceDisplayName(row.OutputDevices, preferred);
         Invalidate();
 
         Task<ControlReply> write;
@@ -1979,8 +1969,8 @@ internal sealed class QuickPanelWindow : LayeredWindow
 #endif
         {
             write = !ctrl && !shift && !PcRoutingApi.IsPhoneOutputDevice(devId)
-                ? _host.CurrentApp.SelectOutputAsync(row.Pid, devId, showOsd: false)
-                : _host.CurrentApp.SetOutputsAsync(row.Pid, preferred, nextOutputs, showOsd: false);
+                ? _host.CurrentApp.SelectOutputAsync(row.Pid, devId, FeedbackKind.PanelWarning)
+                : _host.CurrentApp.SetOutputsAsync(row.Pid, preferred, nextOutputs, FeedbackKind.PanelWarning);
         }
         ObserveRoute(row.Identity, Flow.Render, write);
     }
@@ -2186,20 +2176,31 @@ internal sealed class QuickPanelWindow : LayeredWindow
         if (masterTarget != null) _outputVolumesPopup?.SyncEndpointState(masterTarget, volume, muted);
     }
 
-    private void RepositionCompanions()
+    private void SetGroupBounds(int left, int top, float height)
+    {
+        SetPanelBoundsPx(left, top, UiMetrics.QuickPanelWindowWidth, height, deferPresentation: true);
+        RepositionCompanions(deferPresentation: true);
+        PresentPanelBounds();
+#if SONICROUTE_PHONE
+        _phoneCompanion?.PresentPanelBounds();
+#endif
+        _outputVolumesPopup?.PresentPanelBounds();
+    }
+
+    private void RepositionCompanions(bool deferPresentation = false)
     {
         UiRect? phoneOccupied = null;
 #if SONICROUTE_PHONE
         if (_phoneCompanion is { IsVisible: true })
         {
-            _phoneCompanion.RepositionForOwner(this);
+            _phoneCompanion.RepositionForOwner(this, deferPresentation);
             float s = DpiScale;
             phoneOccupied = new UiRect(_phoneCompanion.LeftPx / s, _phoneCompanion.TopPx / s, _phoneCompanion.WidthDip, _phoneCompanion.HeightDip);
         }
 #endif
         if (_outputVolumesPopup is { IsVisible: true })
         {
-            _outputVolumesPopup.RepositionForOwner(this, phoneOccupied);
+            _outputVolumesPopup.RepositionForOwner(this, phoneOccupied, deferPresentation);
         }
     }
 
@@ -2221,17 +2222,18 @@ internal sealed class QuickPanelWindow : LayeredWindow
 #endif
     }
 
-    private void ApplyConfiguredHeight()
+    internal void ApplyConfiguredBounds()
     {
         GetMonitorWorkAreaForWindow(Handle, out _, out int mt, out _, out int mb, out uint monDpi);
         float s = monDpi / 96f;
         float maxH = MathF.Max(240f, (mb - mt) / s - 16f);
         float h = Math.Clamp(_config.QuickPanelHeight, UiMetrics.QuickPanelMinHeight, UiMetrics.QuickPanelMaxHeight);
-        ResizeDip(UiMetrics.QuickPanelWindowWidth, MathF.Min(h, maxH));
-    }
-
-    private void PositionWindow()
-    {
+        h = MathF.Min(h, maxH);
+        if (_adjustMode)
+        {
+            SetGroupBounds(LeftPx, TopPx, h);
+            return;
+        }
         if (string.Equals(_config.QuickPanelPosMode, "custom", StringComparison.OrdinalIgnoreCase)
             && _config.QuickPanelCustomX >= 0 && _config.QuickPanelCustomY >= 0)
         {
@@ -2243,24 +2245,24 @@ internal sealed class QuickPanelWindow : LayeredWindow
             GetMonitorWorkAreaForPoint(guessXPx, guessYPx, out int cml, out int cmt, out int cmr, out int cmb, out uint cDpi);
             float cs = cDpi / 96f;
             int cwPx = (int)MathF.Round(WidthDip * cs);
-            int chPx = (int)MathF.Round(HeightDip * cs);
+            int chPx = (int)MathF.Round(h * cs);
             int cx = Math.Clamp(guessXPx, cml, Math.Max(cml, cmr - cwPx));
             int cy = Math.Clamp(guessYPx, cmt, Math.Max(cmt, cmb - chPx));
-            SetBoundsPx(cx, cy, WidthDip, HeightDip);
+            SetGroupBounds(cx, cy, h);
             return;
         }
 
-        GetMonitorWorkAreaForPoint(0, 0, out int ml, out int mt, out int mr, out int mb, out uint monDpi);
-        float s = monDpi / 96f;
+        GetMonitorWorkAreaForPoint(0, 0, out int ml, out mt, out int mr, out mb, out monDpi);
+        s = monDpi / 96f;
         int wPx = (int)MathF.Round(WidthDip * s);
-        int hPx = (int)MathF.Round(HeightDip * s);
+        int hPx = (int)MathF.Round(h * s);
         int xPx = mr - wPx - (int)MathF.Round(12f * s);
         int yPx = mb - hPx - (int)MathF.Round(10f * s);
         if (yPx < mt + (int)MathF.Round(6f * s)) yPx = mt + (int)MathF.Round(6f * s);
 
         xPx = Math.Clamp(xPx, ml, Math.Max(ml, mr - wPx));
         yPx = Math.Clamp(yPx, mt, Math.Max(mt, mb - hPx));
-        SetBoundsPx(xPx, yPx, WidthDip, HeightDip);
+        SetGroupBounds(xPx, yPx, h);
     }
 
     private static float PrimaryCoordinateScale()
@@ -2397,10 +2399,6 @@ internal sealed class QuickPanelWindow : LayeredWindow
     {
         if (string.IsNullOrEmpty(deviceId) || AudioService.IsSystemDefault(deviceId))
             return L10n.T("Dev.SystemDefaultOut");
-#if SONICROUTE_PHONE
-        if (IdCmp.Equals(deviceId, AndroidAudioSession.SourcePhoneOutputId))
-            return L10n.T("Phone.NativeAudioOutput");
-#endif
         if (_config.DeviceNames.TryGetValue(deviceId, out string? custom) && !string.IsNullOrWhiteSpace(custom))
             return custom;
         var found = devices.FirstOrDefault(d => IdCmp.Equals(d.Id, deviceId));

@@ -35,6 +35,7 @@ internal sealed class AppsPageView : IViewPage
 
     private List<AudioAppInfo> _apps = new();
     private Endpoint[] _outputs = Array.Empty<Endpoint>();
+    private string? _outputChoicesIdentity;
     private Endpoint[] _inputs = Array.Empty<Endpoint>();
     private Dictionary<string, bool> _mutedByIdentity = new(StringComparer.Ordinal);
 
@@ -544,9 +545,10 @@ internal sealed class AppsPageView : IViewPage
         g.DrawText(L10n.T("Apps.Output"), new UiRect(outCol.X, outCol.Y, outCol.Width, 18f), t.TextSecondary, 13f, 600);
         _outputComboRect = new UiRect(outCol.X, outCol.Y + 22f, outCol.Width, 36f);
         string displayedPrimary = GetDisplayedPrimaryOutput();
-        string currentOutLabel = hasApp ? DeviceLabel(displayedPrimary, Flow.Render) : "";
-        UiPrimitives.DrawComboBox(g, t, hit, "apps.out.combo", _outputComboRect, currentOutLabel, enabled: hasApp);
-        if (hasApp) _clicks["apps.out.combo"] = () => OpenOutputCombo(outChoices);
+        bool outputReady = hasApp && _outputChoicesIdentity == app!.Identity;
+        string currentOutLabel = outputReady ? DeviceLabel(displayedPrimary, Flow.Render) : "";
+        UiPrimitives.DrawComboBox(g, t, hit, "apps.out.combo", _outputComboRect, currentOutLabel, enabled: outputReady);
+        if (outputReady) _clicks["apps.out.combo"] = () => OpenOutputCombo(app!);
 
         var activeSet = _pendingOutputs ?? _selectedOutputs;
         string? nativeCandidate = hasApp && !app!.IsExternal && !PcRoutingApi.IsPhoneOutputDevice(displayedPrimary) && activeSet.Contains(displayedPrimary)
@@ -561,9 +563,9 @@ internal sealed class AppsPageView : IViewPage
             bool isNative = hasApp && isMember && (app!.IsExternal || (nativeCandidate != null && IdCmp.Equals(dev.Id, nativeCandidate)));
             bool isMirror = hasApp && isMember && !isNative;
             string pidKey = "apps.out.dev." + dev.Id;
-            DrawQuickDevButton(g, t, hit, pidKey, pr, dev.ShortLabel, isNative, isMirror, hasApp, dev.Label);
+            DrawQuickDevButton(g, t, hit, pidKey, pr, dev.ShortLabel, isNative, isMirror, outputReady, dev.Label);
             var devCopy = dev;
-            if (hasApp) _clicks[pidKey] = () => HandleOutputPillClick(devCopy.Id, outChoices);
+            if (outputReady) _clicks[pidKey] = () => HandleOutputPillClick(app!, devCopy.Id, outChoices);
         }
 
         if (_actions.Config.ExperimentalMic)
@@ -912,7 +914,7 @@ internal sealed class AppsPageView : IViewPage
         {
             try
             {
-                var outs = _actions.Host.Audio.RenderDevicesWithPhone();
+                var outs = _actions.Host.Audio.RenderDevicesWithPhone(selectedSnapshot);
                 var ins = readMic ? ProductAudio.Devices(Flow.Capture) : Array.Empty<Endpoint>();
                 var apps = _actions.Host.Audio.Apps(forceAppsRefresh);
                 var mutedMap = new Dictionary<string, bool>(apps.Count, StringComparer.Ordinal);
@@ -983,7 +985,11 @@ internal sealed class AppsPageView : IViewPage
                     _refreshing = false;
                     if (!_active) return;
 
-                    _outputs = outs;
+                    if (targetIdentity == _selectedIdentity)
+                    {
+                        _outputs = outs;
+                        _outputChoicesIdentity = targetIdentity;
+                    }
                     _inputs = ins;
                     _apps = apps;
                     _mutedByIdentity = mutedMap;
@@ -1302,7 +1308,7 @@ internal sealed class AppsPageView : IViewPage
                     output = QueueExternalOutputs(app, [AudioService.SystemDefaultDeviceId]);
                 else
 #endif
-                    output = _actions.Host.CurrentApp.SelectOutputAsync((int)app.ProcessId, AudioService.SystemDefaultDeviceId);
+                    output = _actions.Host.CurrentApp.SelectOutputAsync((int)app.ProcessId, AudioService.SystemDefaultDeviceId, FeedbackKind.AppsWarning);
                 var input = !app.IsExternal && resetMic ? QueueInputRoute((int)app.ProcessId, null) : Task.FromResult<string?>(null);
                 var reply = await output.ConfigureAwait(false);
                 return await input.ConfigureAwait(false) == null && !reply.Text.StartsWith("error", StringComparison.OrdinalIgnoreCase);
@@ -1423,13 +1429,16 @@ internal sealed class AppsPageView : IViewPage
         _actions.ShowNotice(L10n.T("AppIcons.ResetDone"));
     }
 
-    private void OpenOutputCombo(DeviceChoice[] choices)
+    private void OpenOutputCombo(AudioAppInfo app)
     {
-        if (_selectedApp == null) return;
+        if (app.Identity != _selectedIdentity || app.Identity != _outputChoicesIdentity) return;
+        var primary = GetDisplayedPrimaryOutput();
+        var choices = BuildOutputChoices(primary);
         var list = choices.Select(c => new ComboChoice(c.Id, c.Label)).ToArray();
-        _actions.ShowCombo(_outputComboRect, list, GetDisplayedPrimaryOutput(), picked =>
+        _actions.ShowCombo(_outputComboRect, list, primary, picked =>
         {
-            ApplyOutputSelection(_selectedApp, choices, picked.Key, ctrl: false, shift: false);
+            if (app.Identity == _selectedIdentity && app.Identity == _outputChoicesIdentity)
+                ApplyOutputSelection(app, choices, picked.Key, ctrl: false, shift: false);
         });
     }
 
@@ -1443,12 +1452,12 @@ internal sealed class AppsPageView : IViewPage
         });
     }
 
-    private void HandleOutputPillClick(string deviceId, DeviceChoice[] choices)
+    private void HandleOutputPillClick(AudioAppInfo app, string deviceId, DeviceChoice[] choices)
     {
-        if (_selectedApp == null) return;
+        if (app.Identity != _selectedIdentity || app.Identity != _outputChoicesIdentity) return;
         bool ctrl = (GetKeyState(0x11) & 0x8000) != 0;
         bool shift = (GetKeyState(0x10) & 0x8000) != 0;
-        ApplyOutputSelection(_selectedApp, choices, deviceId, ctrl, shift);
+        ApplyOutputSelection(app, choices, deviceId, ctrl, shift);
     }
 
     private void ApplyOutputSelection(AudioAppInfo app, DeviceChoice[] choices, string deviceId, bool ctrl, bool shift)
@@ -1509,8 +1518,8 @@ internal sealed class AppsPageView : IViewPage
             // Enqueue on the input thread so single clicks and Ctrl/Shift requests reach the
             // same per-process owner in the order they were made.
             write = !ctrl && !shift && !PcRoutingApi.IsPhoneOutputDevice(deviceId)
-                ? _actions.Host.CurrentApp.SelectOutputAsync(pid, deviceId)
-                : _actions.Host.CurrentApp.SetOutputsAsync(pid, preferred, nextOutputs);
+                ? _actions.Host.CurrentApp.SelectOutputAsync(pid, deviceId, FeedbackKind.AppsWarning)
+                : _actions.Host.CurrentApp.SetOutputsAsync(pid, preferred, nextOutputs, FeedbackKind.AppsWarning);
         }
         _ = FinishOutputAsync(write, app.Identity, editGen);
     }
@@ -1641,7 +1650,7 @@ internal sealed class AppsPageView : IViewPage
         var app = _selectedApp;
         _selectedVolume = percent;
 
-        _actions.Host.QueueAppVolume(app, percent);
+        _actions.Host.QueueAppVolume(app, percent, FeedbackKind.AppsWarning);
         if (!app.IsExternal) KickPeakBurst();
         _actions.Invalidate();
     }
@@ -1682,21 +1691,19 @@ internal sealed class AppsPageView : IViewPage
         public string ShortLabel { get; } = UiPrimitives.ShortDeviceName(Label);
     }
 
-    private DeviceChoice[] BuildOutputChoices()
+    private DeviceChoice[] BuildOutputChoices(string? includePrimary = null)
     {
+        if (_outputChoicesIdentity != _selectedIdentity) return [];
         var cfg = _actions.Config;
-        var active = _pendingOutputs ?? _selectedOutputs;
         var list = new List<DeviceChoice>();
-        if (!cfg.HiddenOutputDevices.Contains(AudioService.SystemDefaultDeviceId)
-            || IdCmp.Equals(_nativeOutput, AudioService.SystemDefaultDeviceId)
-            || active.Contains(AudioService.SystemDefaultDeviceId))
+        if (!cfg.HiddenOutputDevices.Contains(AudioService.SystemDefaultDeviceId))
         {
-            list.Add(new DeviceChoice(AudioService.SystemDefaultDeviceId, L10n.T("Dev.SystemDefaultOut")));
+            list.Add(new DeviceChoice(AudioService.SystemDefaultDeviceId, DeviceLabel(AudioService.SystemDefaultDeviceId, Flow.Render)));
         }
 
         foreach (var ep in _outputs)
         {
-            if (cfg.HiddenOutputDevices.Contains(ep.Id) && !IdCmp.Equals(_nativeOutput, ep.Id) && !active.Contains(ep.Id))
+            if (cfg.HiddenOutputDevices.Contains(ep.Id) && !IdCmp.Equals(includePrimary, ep.Id))
                 continue;
             list.Add(new DeviceChoice(ep.Id, DeviceLabel(ep.Id, Flow.Render, ep.Name)));
         }
@@ -1754,11 +1761,11 @@ internal sealed class AppsPageView : IViewPage
 
     private string DeviceLabel(string? id, Flow flow, string? fallback = null)
     {
+        if (id != null && (flow == Flow.Render || !AudioService.IsSystemDefault(id))
+            && _actions.Config.DeviceNames.TryGetValue(id, out string? custom) && !string.IsNullOrWhiteSpace(custom))
+            return custom;
         if (string.IsNullOrWhiteSpace(id) || AudioService.IsSystemDefault(id))
             return L10n.T(flow == Flow.Render ? "Dev.SystemDefaultOut" : "Dev.SystemDefaultIn");
-
-        if (_actions.Config.DeviceNames.TryGetValue(id, out string? custom) && !string.IsNullOrWhiteSpace(custom))
-            return custom;
 
         var list = flow == Flow.Render ? _outputs : _inputs;
         return fallback ?? list.FirstOrDefault(e => IdCmp.Equals(e.Id, id))?.Name ?? id;

@@ -19,7 +19,7 @@ internal sealed partial class ProductCurrentApp(ProductAudio audio, IMainThread 
     internal AudioAppInfo? LastForeground => _selection.LastForeground;
     internal event Action? CurrentChanged { add => _selection.Changed += value; remove => _selection.Changed -= value; }
 
-    internal void RecordUsedApp(AudioAppInfo? app, bool showOsd = true)
+    internal void RecordUsedApp(AudioAppInfo? app, FeedbackKind failureFeedback = FeedbackKind.Osd)
     {
         if (app == null || string.IsNullOrWhiteSpace(app.ProcessName)) return;
         owner.PostContinuation(() =>
@@ -30,7 +30,7 @@ internal sealed partial class ProductCurrentApp(ProductAudio audio, IMainThread 
             if (string.Equals(cfg.LastUsedAppName, app.ProcessName, StringComparison.OrdinalIgnoreCase)) return;
             cfg.LastUsedAppName = app.ProcessName;
             if (!ConfigService.TryCommit(cfg))
-                feedback.Publish(showOsd ? FeedbackKind.Osd : FeedbackKind.PanelWarning, BuildIdentity.DisplayName, L10n.T("Tray.SaveFailed"), success: false);
+                feedback.Publish(failureFeedback, BuildIdentity.DisplayName, L10n.T("Tray.SaveFailed"), success: false);
         });
     }
 

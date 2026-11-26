@@ -83,7 +83,7 @@ internal sealed class OutputVolumesPopupWindow : LayeredWindow
         RefreshData(owner, companionOccupiedDip);
     }
 
-    internal void RepositionForOwner(LayeredWindow owner, UiRect? companionOccupiedDip = null)
+    internal void RepositionForOwner(LayeredWindow owner, UiRect? companionOccupiedDip = null, bool deferPresentation = false)
     {
         if (owner.Handle == 0) return;
         GetMonitorWorkAreaForWindow(owner.Handle, out int ml, out int mt, out int mr, out int mb, out uint monDpi);
@@ -109,7 +109,7 @@ internal sealed class OutputVolumesPopupWindow : LayeredWindow
             desiredH,
             companionOccupiedDip);
 
-        SetBoundsPx((int)MathF.Round(rect.X * s), (int)MathF.Round(rect.Y * s), rect.Width, rect.Height);
+        SetPanelBoundsPx((int)MathF.Round(rect.X * s), (int)MathF.Round(rect.Y * s), rect.Width, rect.Height, deferPresentation);
     }
 
     internal void SyncEndpointState(string? deviceId, int? volume = null, bool? muted = null)

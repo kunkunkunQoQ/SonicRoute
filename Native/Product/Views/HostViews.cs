@@ -36,7 +36,7 @@ internal sealed partial class ApplicationHost
         return !app.IsExternal && _volumeWriter.HasPending((int)app.ProcessId);
     }
 
-    internal void QueueAppVolume(AudioAppInfo app, int level)
+    internal void QueueAppVolume(AudioAppInfo app, int level, FeedbackKind failureFeedback = FeedbackKind.Osd)
     {
         ++AppVolumeRevision;
         string identity = app.Identity;
@@ -44,7 +44,7 @@ internal sealed partial class ApplicationHost
         {
             ++AppVolumeRevision;
             if (_disposed) return;
-            if (!applied || actual < 0) { ReportAudioWriteFailure(); return; }
+            if (!applied || actual < 0) { ReportAudioWriteFailure(failureFeedback); return; }
             mainView?.ConfirmAppVolume(identity, actual);
             panelView?.ConfirmAppVolume(identity, actual);
         }
@@ -91,10 +91,12 @@ internal sealed partial class ApplicationHost
         }) < 0) ReportAudioWriteFailure();
     }
 
-    internal void ReportAudioWriteFailure()
+    internal void ReportAudioWriteFailure() => ReportAudioWriteFailure(FeedbackKind.Osd);
+
+    private void ReportAudioWriteFailure(FeedbackKind target)
     {
         if (_disposed) return;
-        PublishOsd(BuildIdentity.DisplayName, L10n.T("Tray.AudioActionFailed"), success: false);
+        _feedback.Publish(target, BuildIdentity.DisplayName, L10n.T("Tray.AudioActionFailed"), success: false);
         NotifyAudioVisualChanged();
     }
 
@@ -212,6 +214,12 @@ internal sealed partial class ApplicationHost
         panelView?.ApplyThemeAndSettings();
     }
 
+    internal void PanelGeometryChanged()
+    {
+        if (panelView is { IsVisible: true }) panelView.ApplyConfiguredBounds();
+        if (mainView is { IsVisible: true }) mainView.Invalidate();
+    }
+
     internal void RestartPreview() => _ = RestartViewAsync();
     private async Task RestartViewAsync()
     {
@@ -310,6 +318,10 @@ internal sealed partial class ApplicationHost
 
                 case FeedbackKind.PanelWarning:
                     panelView?.ShowDeviceError(feedback.Text);
+                    break;
+
+                case FeedbackKind.AppsWarning:
+                    if (mainView is { IsVisible: true }) mainView.ShowNotice(feedback.Text);
                     break;
 
                 case FeedbackKind.OutputSilent:

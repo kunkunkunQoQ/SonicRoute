@@ -31,10 +31,10 @@ internal sealed partial class ProductCurrentApp
         return QueueOutput(captured, hwnd, null, steps, null, requiredPid);
     }
 
-    internal Task<ControlReply> SelectOutputAsync(int pid, string target, bool showOsd = true) =>
-        QueueOutput(pid, 0, target, 1, null, showOsd: showOsd);
+    internal Task<ControlReply> SelectOutputAsync(int pid, string target, FeedbackKind failureFeedback = FeedbackKind.Osd) =>
+        QueueOutput(pid, 0, target, 1, null, failureFeedback: failureFeedback);
 
-    internal Task<ControlReply> SetOutputsAsync(int pid, string preferred, string[] selected, bool showOsd = true)
+    internal Task<ControlReply> SetOutputsAsync(int pid, string preferred, string[] selected, FeedbackKind failureFeedback = FeedbackKind.Osd)
     {
         var outputs = selected.Select(Normal).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
         var effective = outputs.Length == 0 ? [AudioService.SystemDefaultDeviceId] : outputs;
@@ -44,7 +44,7 @@ internal sealed partial class ProductCurrentApp
         if (local.Length > 0) primaryChoices = local;
 #endif
         string target = AppPlaybackOutputs.PreferredPrimary(primaryChoices, Normal(preferred))!;
-        return QueueOutput(pid, 0, target, 1, outputs, showOsd: showOsd);
+        return QueueOutput(pid, 0, target, 1, outputs, failureFeedback: failureFeedback);
     }
 
     private static string FormatSwitchingTitle(string? appTitle)
@@ -64,8 +64,9 @@ internal sealed partial class ProductCurrentApp
             ? L10n.T("Ov.OutputSwitchFailed")
             : L10n.T("Ov.OutputSwitchFailed") + " · " + appTitle;
 
-    private Task<ControlReply> QueueOutput(int pid, nint hwnd, string? explicitTarget, int steps, string[]? selected, int? requiredPid = null, bool showOsd = true)
+    private Task<ControlReply> QueueOutput(int pid, nint hwnd, string? explicitTarget, int steps, string[]? selected, int? requiredPid = null, FeedbackKind failureFeedback = FeedbackKind.Osd)
     {
+        bool showOsd = failureFeedback == FeedbackKind.Osd;
         lock (_routesGate)
         {
             if (_closed || _outstanding >= 32) return Task.FromResult(new ControlReply("error: output_queue_busy"));
@@ -92,7 +93,7 @@ internal sealed partial class ProductCurrentApp
                         int idx = vis.FindIndex(d => Same(d.Id, cur));
                         int off = (int)Math.Min(Math.Abs((long)steps), int.MaxValue);
                         string nextTarget = vis[DeviceCycle.Index(idx, vis.Count, steps < 0, off)].Id;
-                        RecordUsedApp(resolvedApp, showOsd);
+                        RecordUsedApp(resolvedApp, failureFeedback);
                         Publish(new(generation, 0, nextTarget, cur, OutputIntentStatus.Pending, selected),
                             FormatSwitchingTitle(appTitle), "🔊 " + Label(nextTarget, vis, cfg), showOsd);
                         return Task.Run(async () =>
@@ -112,9 +113,9 @@ internal sealed partial class ProductCurrentApp
                     if (requiredPid.HasValue && targetPid != requiredPid.Value) throw new InvalidOperationException("Requested session is unavailable.");
                     if (targetPid <= 0) throw new InvalidOperationException(L10n.T("Ov.NoOutputSession"));
                     var config = ConfigService.Load();
-                    var visible = Visible(config);
-                    if (explicitTarget == null && visible.Count == 0) throw new InvalidOperationException(L10n.T("Ov.NoDevice"));
-                    if (resolvedApp != null) RecordUsedApp(resolvedApp, showOsd);
+                    var visible = explicitTarget == null || showOsd ? Visible(config) : null;
+                    if (explicitTarget == null && visible!.Count == 0) throw new InvalidOperationException(L10n.T("Ov.NoDevice"));
+                    if (resolvedApp != null) RecordUsedApp(resolvedApp, failureFeedback);
                     string appName = resolvedApp != null ? AppDisplayName.Get(resolvedApp) : (ForegroundAppService.GetProcessNameSafe(targetPid) ?? "");
                     string? old = audio.ReadRoute(targetPid, Flow.Render);
                     string target;
@@ -124,14 +125,14 @@ internal sealed partial class ProductCurrentApp
                         if (!_scopes.TryGetValue(targetPid, out var scope)) _scopes.Add(targetPid, scope = new());
                         if (explicitTarget == null)
                         {
-                            int index = visible.FindIndex(d => Same(d.Id, scope.Target ?? old));
+                            int index = visible!.FindIndex(d => Same(d.Id, scope.Target ?? old));
                             int offset = (int)Math.Min(Math.Abs((long)steps), int.MaxValue);
                             target = visible[DeviceCycle.Index(index, visible.Count, steps < 0, offset)].Id;
                         }
                         else target = explicitTarget;
                         scope.Target = target;
                         Publish(new(generation, targetPid, target, old, OutputIntentStatus.Pending, selected),
-                            FormatSwitchingTitle(appName), "🔊 " + Label(target, visible, config), showOsd);
+                            FormatSwitchingTitle(appName), showOsd ? "🔊 " + Label(target, visible!, config) : "", showOsd);
                         Task previousWrite = scope.Apply;
                         write = Task.Run(() => ApplyAsync(previousWrite, targetPid, appName, target, generation, explicitTarget == null, selected, showOsd));
                         scope.Apply = write;
@@ -181,7 +182,7 @@ internal sealed partial class ProductCurrentApp
             var config = ConfigService.Load();
             Publish(new(generation, pid, target, actual, success ? OutputIntentStatus.Confirmed : OutputIntentStatus.Rejected, selected, observed?.ToArray()),
                 success ? FormatFinalTitle(appName) : FormatFailedTitle(appName),
-                "🔊 " + Label(actual, Visible(config), config), showOsd);
+                showOsd ? "🔊 " + Label(actual, Visible(config), config) : "", showOsd);
             audio.NotifyAudioChanged();
             if (!matched) return new("error: output_readback_mismatch, actual=" + (actual ?? AudioService.SystemDefaultDeviceId));
             return result;

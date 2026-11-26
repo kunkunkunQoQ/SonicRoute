@@ -124,11 +124,11 @@ internal sealed partial class ProductAudio : IDisposable
         return list;
     }
 
-    internal Endpoint[] RenderDevicesWithPhone()
+    internal Endpoint[] RenderDevicesWithPhone(AudioAppInfo? app = null, Endpoint[]? windows = null, bool includePhoneCurrent = false)
     {
-        var win = Devices(Flow.Render);
+        var win = windows ?? Devices(Flow.Render);
 #if SONICROUTE_PHONE
-        var phone = ExternalAudio?.GetPhoneOutputs() ?? [];
+        var phone = ExternalAudio?.GetPhoneOutputs(app, includePhoneCurrent) ?? [];
         if (phone.Length > 0) return [.. win, .. phone];
 #endif
         return win;

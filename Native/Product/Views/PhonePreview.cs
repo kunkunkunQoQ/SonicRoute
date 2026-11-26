@@ -374,7 +374,8 @@ internal sealed class PhonePreview : IDisposable
     internal async Task<IReadOnlyList<AndroidDevice>> ReconnectSelectedDeviceAsync(CancellationToken cancel)
     {
         var selected = Store.Profile;
-        var devices = await RefreshSelectedDeviceAsync(cancel).ConfigureAwait(false);
+        long revision = Connections.Revision;
+        var devices = await Task.Run(() => RefreshSelectedDeviceAsync(selected, revision, cancel), cancel).ConfigureAwait(false);
         cancel.ThrowIfCancellationRequested();
         if (selected.LastDevice == null) return devices;
 
@@ -385,13 +386,14 @@ internal sealed class PhonePreview : IDisposable
         return devices;
     }
 
-    internal async Task<IReadOnlyList<AndroidDevice>> RefreshSelectedDeviceAsync(CancellationToken cancel)
+    internal Task<IReadOnlyList<AndroidDevice>> RefreshSelectedDeviceAsync(CancellationToken cancel) =>
+        RefreshSelectedDeviceAsync(Store.Profile, Connections.Revision, cancel);
+
+    private async Task<IReadOnlyList<AndroidDevice>> RefreshSelectedDeviceAsync(AndroidPhoneProfile selected, long revision, CancellationToken cancel)
     {
-        var selected = Store.Profile;
         if (selected.LastDevice is not { } saved)
             return await Discovery.ReadAsync(cancel).ConfigureAwait(false);
 
-        long revision = Connections.Revision;
         bool StillSelected() => Store.Profile.Id == selected.Id && revision == Connections.Revision;
         await refreshGate.WaitAsync(cancel).ConfigureAwait(false);
         try
@@ -410,7 +412,7 @@ internal sealed class PhonePreview : IDisposable
 
             AndroidConnectionResult result;
             var ready = AndroidDeviceIdentity.FindOnlineDevice(saved, devices);
-            if (ready != null && (!saved.IsWifi || !ready.IsWifi && AndroidDeviceIdentity.SamePhysicalDevice(saved, ready)))
+            if (ready is { IsWifi: false } && (!saved.IsWifi || AndroidDeviceIdentity.SamePhysicalDevice(saved, ready)))
             {
                 result = await Wireless.EnrichReadyResultAsync(new(ready, devices), !HasActivePlaybackConnections, cancel).ConfigureAwait(false);
             }
@@ -423,7 +425,8 @@ internal sealed class PhonePreview : IDisposable
             cancel.ThrowIfCancellationRequested();
             if (!StillSelected()) return Discovery.Devices ?? devices;
 
-            if (!Discovery.PublishConnection(result, discoveryRevision, current => Connections.Admit(current, revision, selected.Id, requireCurrent: true)))
+            if (!await Discovery.PublishReconnectAsync(result, discoveryRevision,
+                current => !cancel.IsCancellationRequested && Connections.Admit(current, revision, selected.Id, requireCurrent: true), cancel).ConfigureAwait(false))
                 throw AndroidError.WithCode(new IOException("Device identity could not be verified."), AndroidErrorCode.ReconnectNoDeviceFound);
             _ = ProbeOutputsIfConnectedAsync([result.Device], force: true, token: token);
             return Discovery.Devices ?? result.Devices;

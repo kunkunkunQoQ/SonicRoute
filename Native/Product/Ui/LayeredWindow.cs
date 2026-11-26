@@ -109,6 +109,7 @@ internal abstract unsafe class LayeredWindow : IDisposable
     private nint _oldBitmap;
     private int _bufWidthPx;
     private int _bufHeightPx;
+    private bool _boundsPending, _resizedSurfaceReady, _presentingBounds;
 
     private float _widthDip;
     private float _heightDip;
@@ -240,6 +241,51 @@ internal abstract unsafe class LayeredWindow : IDisposable
             SetWindowPos(Handle, 0, 0, 0, WidthPx, HeightPx, SwpNoMove | SwpNoZOrder | SwpNoActivate);
             if (_visible) RenderNow();
         }
+    }
+
+    // Prepare docked panels together so their old bitmap is never stretched/moved into
+    // the new bounds while the other panel's Direct2D content is being rendered.
+    protected void SetPanelBoundsPx(int left, int top, float width, float height, bool deferPresentation = false)
+    {
+        width = MathF.Max(_minWidthDip, width);
+        height = MathF.Max(_minHeightDip, height);
+        int w = Math.Max(1, (int)MathF.Round(width * DpiScale));
+        int h = Math.Max(1, (int)MathF.Round(height * DpiScale));
+        bool resized = w != WidthPx || h != HeightPx;
+        bool moved = left != _leftPx || top != _topPx;
+        if (!resized && !moved) return;
+        var rect = new WinRect { Left = left, Top = top, Right = left + w, Bottom = top + h };
+        if (!IsVisible || (moved && MonitorFromRect(ref rect, 2) != MonitorFromWindow(Handle, 2)))
+        {
+            // Let Windows negotiate WM_DPICHANGED when moving between monitors.
+            SetBoundsPx(left, top, width, height);
+            return;
+        }
+        _leftPx = left;
+        _topPx = top;
+        _widthDip = w / DpiScale;
+        _heightDip = h / DpiScale;
+        if (resized) DrawSurface(w, h, reserveHeight: true);
+        _boundsPending = true;
+        _resizedSurfaceReady = resized;
+        if (!deferPresentation) PresentPanelBounds();
+    }
+
+    internal void PresentPanelBounds()
+    {
+        if (!_boundsPending) return;
+        _boundsPending = false;
+        if (!_resizedSurfaceReady)
+        {
+            MovePx(_leftPx, _topPx);
+            return;
+        }
+        var dest = new Point { X = _leftPx, Y = _topPx };
+        _presentingBounds = true;
+        bool applied;
+        try { applied = PresentSurface(WidthPx, HeightPx, &dest); }
+        finally { _presentingBounds = false; }
+        if (!applied) SetBoundsPx(dest.X, dest.Y, _widthDip, _heightDip);
     }
 
     public void MovePx(int leftPx, int topPx)
@@ -543,14 +589,25 @@ internal abstract unsafe class LayeredWindow : IDisposable
     public void RenderNow()
     {
         if (_disposed || !_visible || Handle == 0 || IsMinimized) return;
-        _paintPending = false;
         int wPx = WidthPx;
         int hPx = HeightPx;
-        if (wPx <= 0 || hPx <= 0) return;
+        DrawSurface(wPx, hPx);
+        PresentSurface(wPx, hPx, null);
+    }
 
-        EnsureBackBuffer(wPx, hPx);
+    private void DrawSurface(int wPx, int hPx, bool reserveHeight = false)
+    {
+        _paintPending = false;
+        // Keep both the DIB and the D2D DC binding stable across small height changes.
+        const int step = 64;
+        int bufferHeight = hPx;
+        if (_bufWidthPx == wPx && _bufHeightPx >= hPx && _bufHeightPx - hPx < step * 2)
+            bufferHeight = _bufHeightPx;
+        else if (reserveHeight)
+            bufferHeight = (hPx + step - 1) / step * step;
+        EnsureBackBuffer(wPx, bufferHeight);
         _target ??= new D2dTarget(D2dSharedContext.Instance);
-        _target.BeginDraw(_memDc, wPx, hPx, _dpi);
+        _target.BeginDraw(_memDc, wPx, bufferHeight, _dpi);
         var editor = ActiveEditor;
         _target.Editor = editor is { IsOpen: true } ? editor : null;
         _target.Editor?.BeginLayout();
@@ -572,12 +629,16 @@ internal abstract unsafe class LayeredWindow : IDisposable
             _target.Editor = null;
             _target.EndDraw();
         }
+    }
 
+    private bool PresentSurface(int wPx, int hPx, Point* dest)
+    {
         var size = new Size { Cx = wPx, Cy = hPx };
         var src = new Point { X = 0, Y = 0 };
         var blend = new BlendFunction { BlendOp = 0, BlendFlags = 0, SourceConstantAlpha = 255, AlphaFormat = 1 };
-        UpdateLayeredWindow(Handle, 0, 0, ref size, _memDc, ref src, 0, ref blend, 2 /*ULW_ALPHA*/);
-        if (editor is { IsOpen: true }) editor.FinishLayout(this);
+        bool applied = UpdateLayeredWindow(Handle, 0, (nint)dest, ref size, _memDc, ref src, 0, ref blend, 2 /*ULW_ALPHA*/);
+        if (ActiveEditor is { IsOpen: true } editor) editor.FinishLayout(this);
+        return applied;
     }
 
     private void EnsureBackBuffer(int wPx, int hPx)
@@ -604,6 +665,7 @@ internal abstract unsafe class LayeredWindow : IDisposable
 
     protected void ReleaseRenderResources()
     {
+        _boundsPending = false;
         _tooltip?.Dispose();
         _tooltip = null;
         StopAnimationTimer();
@@ -736,11 +798,11 @@ internal abstract unsafe class LayeredWindow : IDisposable
 
             case WmPaint:
                 ValidateRect(hwnd, 0);
-                win.RenderNow();
+                if (!win._presentingBounds) win.RenderNow();
                 return 0;
 
             case WmUserInvalidate:
-                if (win._visible) win.RenderNow();
+                if (win._visible && win._paintPending) win.RenderNow();
                 return 0;
 
             case WmTimer:
@@ -762,7 +824,7 @@ internal abstract unsafe class LayeredWindow : IDisposable
                         win._topPx = unchecked((short)(((long)lParam >> 16) & 0xFFFF));
                     }
                     win.OnMoved(win._leftPx, win._topPx);
-                    if (win.ActiveEditor is { IsOpen: true } editor) editor.FinishLayout(win);
+                    if (!win._presentingBounds && win.ActiveEditor is { IsOpen: true } editor) editor.FinishLayout(win);
                 }
                 return 0;
 
@@ -792,7 +854,7 @@ internal abstract unsafe class LayeredWindow : IDisposable
                     win._heightDip = ph / win.DpiScale;
                     if (wasMin) win.OnWindowStateChanged(minimized: false, maximized: wParam == 2);
                     win.OnResized(win._widthDip, win._heightDip);
-                    if (win._visible) win.RenderNow();
+                    if (win._visible && !win._presentingBounds) win.RenderNow();
                 }
                 return 0;
             }
@@ -1164,6 +1226,7 @@ internal abstract unsafe class LayeredWindow : IDisposable
     [DllImport("user32.dll")] private static extern int GetSystemMetrics(int idx);
     [DllImport("user32.dll")] private static extern nint MonitorFromPoint(Point pt, uint flags);
     [DllImport("user32.dll")] private static extern nint MonitorFromWindow(nint hwnd, uint flags);
+    [DllImport("user32.dll")] private static extern nint MonitorFromRect(ref WinRect rect, uint flags);
     [DllImport("user32.dll")] private static extern bool GetMonitorInfoW(nint mon, ref MonitorInfo mi);
     [DllImport("shcore.dll")] private static extern int GetDpiForMonitor(nint mon, int type, out uint dpiX, out uint dpiY);
     [DllImport("user32.dll")] private static extern nint GetDC(nint hwnd);
