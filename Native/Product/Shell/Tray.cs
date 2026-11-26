@@ -10,6 +10,8 @@ internal sealed unsafe partial class NativeApplicationWindow
     private nint sharedIcon, whiteIcon;
     private Win.Rect lastIconRect;
     private long lastIconRectTime;
+    private Win.Point? iconHoverPoint;
+    private nint iconHoverRoot;
     private Win.Point? rightDownPoint;
     private uint lastContextEvent;
     private long lastContextAt;
@@ -20,6 +22,8 @@ internal sealed unsafe partial class NativeApplicationWindow
     private void RestoreTray()
     {
         lastIconRect = default;
+        lastIconRectTime = 0;
+        iconHoverPoint = null;
         rightDownPoint = null;
         lastContextEvent = 0;
         if (sharedIcon == 0)
@@ -122,6 +126,20 @@ internal sealed unsafe partial class NativeApplicationWindow
         uint value = (ushort)l;
         switch (value)
         {
+            case 0x200: // WM_MOUSEMOVE sent by Explorer for this icon.
+            case 0x406: // NIN_POPUPOPEN also carries a v4 icon anchor.
+                if (wheelEnabled && !wheelEverywhere)
+                {
+                    Win.Point pointer;
+                    if (versionFour) pointer = TrayMousePoint(w);
+                    else if (Win.GetCursorPos(out pointer) == 0) break;
+                    if (iconHoverPoint == null) iconHoverRoot = Win.GetAncestor(Win.WindowFromPoint(pointer), 2);
+                    iconHoverPoint = pointer;
+                }
+                break;
+            case 0x2a3: // WM_MOUSELEAVE
+                iconHoverPoint = null;
+                break;
             case 0x201: // start of a new left-button gesture
                 doubleClick = false;
                 break;
@@ -180,33 +198,48 @@ internal sealed unsafe partial class NativeApplicationWindow
         VerifyOwner();
         rect = default;
         var id = new Win.IconId { Size = (uint)sizeof(Win.IconId), Window = Handle, Id = 1 };
-        return TrayRegistered && Win.Shell_NotifyIconGetRect(in id, out rect) >= 0 && rect.Right > rect.Left && rect.Bottom > rect.Top;
+        return TrayRegistered && Win.Shell_NotifyIconGetRect(in id, out rect) == 0 && rect.Right > rect.Left && rect.Bottom > rect.Top;
     }
 
     private bool IsOverTray(Win.Point point)
     {
-        if (!wheelEverywhere)
-        {
-            if (TryGetTrayRect(out var rect))
-            {
-                lastIconRect = rect;
-                lastIconRectTime = Environment.TickCount64;
-            }
-            return lastIconRectTime > 0 && Environment.TickCount64 - lastIconRectTime < 30000 && lastIconRect.Contains(point, 4);
-        }
+        if (!OverNotificationArea(point, out nint root, out bool inOverflow)) return false;
+        if (wheelEverywhere) return true;
 
-        // A hit only occurs on a wheel event. Resolve the taskbar under the pointer, including secondary monitors.
+        bool fresh = TryGetTrayRect(out var rect);
+        if (fresh)
+        {
+            lastIconRect = rect;
+            lastIconRectTime = Environment.TickCount64;
+        }
+        if (lastIconRectTime == 0 || Environment.TickCount64 - lastIconRectTime >= 30000 || !lastIconRect.Contains(point))
+            return false;
+
+        // With the overflow closed, Explorer returns the same chevron rectangle for all hidden icons.
+        // An actual icon in the open flyout has its own live rectangle. A pinned icon (or a cached
+        // rectangle during a Shell failure) also needs a hover notification addressed to our icon ID.
+        return fresh && inOverflow || iconHoverRoot == root && iconHoverPoint is { } hover && lastIconRect.Contains(hover);
+    }
+
+    private bool OverNotificationArea(Win.Point point, out nint root, out bool inOverflow)
+    {
+        inOverflow = false;
         nint hit = Win.WindowFromPoint(point);
-        nint root = Win.GetAncestor(hit, 2);
+        root = Win.GetAncestor(hit, 2);
         if (root == 0) return false;
         Span<char> name = stackalloc char[64];
         fixed (char* p = name)
         {
             int count = Win.GetClassNameW(root, p, name.Length);
             var cls = name[..count];
-            if (cls.SequenceEqual("NotifyIconOverflowWindow") || cls.SequenceEqual("TopLevelWindowForOverflowXamlIsland")) return true;
+            if (cls.SequenceEqual("NotifyIconOverflowWindow") || cls.SequenceEqual("TopLevelWindowForOverflowXamlIsland"))
+            {
+                inOverflow = true;
+                return true;
+            }
             if (!cls.SequenceEqual("Shell_TrayWnd") && !cls.SequenceEqual("Shell_SecondaryTrayWnd")) return false;
         }
+        if (!wheelEverywhere) return true; // Caller checks our live icon and the corresponding Shell hover.
         nint notify = Win.FindWindowExW(root, 0, "TrayNotifyWnd", null);
         if (notify != 0 && Win.GetWindowRect(notify, out var region) != 0 && region.Contains(point)) return true;
         nint overflow = Win.FindWindowExW(root, 0, "NotifyContainerOverflowWindow", null);

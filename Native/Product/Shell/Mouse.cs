@@ -39,6 +39,7 @@ internal sealed unsafe partial class NativeApplicationWindow
         }
         wheelEnabled = trayWheel;
         wheelEverywhere = everywhere;
+        if (!trayWheel || everywhere) iconHoverPoint = null;
         if (!trayWheel) Array.Clear(wheelDelta);
         return true;
     }
@@ -47,6 +48,7 @@ internal sealed unsafe partial class NativeApplicationWindow
     {
         if (mouseHook != 0) { Win.UnhookWindowsHookEx(mouseHook); mouseHook = 0; }
         wheelEnabled = false;
+        iconHoverPoint = null;
         ++mouseGeneration;
         boundGestures = 0;
         mouseBindings.Clear();
@@ -57,6 +59,13 @@ internal sealed unsafe partial class NativeApplicationWindow
     private static nint MouseProc(int code, nuint message, nint data)
     {
         var host = current;
+        if (code == 0 && message == 0x200 && data != 0 && host?.iconHoverPoint is { } hover)
+        {
+            // Expire Explorer's icon-specific hover on departure. No Shell calls on this path.
+            var point = ((Win.MouseData*)data)->Point;
+            if (Math.Abs((long)point.X - hover.X) > 4 || Math.Abs((long)point.Y - hover.Y) > 4)
+                host.iconHoverPoint = null;
+        }
         if (code == 0 && host != null && !host.closing && !host.CapturingHotkey && data != 0
             && message is 0x207 or 0x20a or 0x20b)
         {
@@ -94,7 +103,9 @@ internal sealed unsafe partial class NativeApplicationWindow
         // Wheel deltas are additive. Match the product's four modifier groups without queueing each tick.
         wheelDelta[bucket] = (int)Math.Clamp((long)wheelDelta[bucket] + high, int.MinValue, int.MaxValue);
         wheelForeground[bucket] = Win.GetForegroundWindow();
-        return false;  // tray wheel observes, bound mouse hotkeys consume.
+        // One accepted Shift gesture owns one master-volume adjustment. Passing this packet on
+        // lets another tray listener adjust the same system endpoint a second time.
+        return bucket == 3;
     }
 
     private void DrainWheel()
