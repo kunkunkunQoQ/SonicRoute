@@ -1,6 +1,5 @@
 #if SONICROUTE_PHONE
 using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.InteropServices;
@@ -26,7 +25,6 @@ internal sealed class ExternalAudioBridge : IDisposable
     private readonly Func<PhonePreview> _getPhone;
     private readonly Func<AirPlayPreview?> _tryGetAirPlay;
     private readonly Action _onChanged;
-    private readonly ConcurrentDictionary<int, bool> _silenceLocalPrefs = new();
     private readonly object _silenceGate = new();
     private readonly Dictionary<string, ReservedEndpointState> _reservedSilence = new(StringComparer.OrdinalIgnoreCase);
 
@@ -228,10 +226,10 @@ internal sealed class ExternalAudioBridge : IDisposable
         return list.ToArray();
     }
 
-    internal string? GetPhoneRoutedDeviceId(int pid)
+    internal string? GetPhoneRoute(int pid, out bool exclusive)
     {
-        if (pid <= 0) return null;
-        return _tryGetPhone()?.Pc.GetPersistedEndpoint(pid);
+        exclusive = false;
+        return pid > 0 ? _tryGetPhone()?.Pc.GetPersistedEndpoint(pid, out exclusive) : null;
     }
 
     internal (bool Success, int HResult, string Message) RoutePcAppToPhone(int pid, string targetDeviceId, bool silenceLocal)
@@ -245,15 +243,13 @@ internal sealed class ExternalAudioBridge : IDisposable
                 && string.Equals(AndroidDeviceIdentity.Key(d), phoneKey, StringComparison.OrdinalIgnoreCase));
         if (connected == null)
             return (false, -1, L10n.T("Phone.Err.PhoneOffline"));
-        _silenceLocalPrefs[pid] = silenceLocal;
-        var result = phone.Pc.RouteProcess(pid, targetDeviceId, connected);
+        var result = phone.Pc.RouteProcess(pid, targetDeviceId, connected, silenceLocal);
         if (result.Success) _onChanged();
         return result;
     }
 
     internal bool StopPcAppToPhone(int pid, bool restorePreviousEndpoint)
     {
-        _silenceLocalPrefs.TryRemove(pid, out _);
         var phone = _tryGetPhone();
         if (phone == null) return false;
         bool stopped = phone.Pc.StopProcess(pid, restorePreviousEndpoint);
@@ -263,7 +259,6 @@ internal sealed class ExternalAudioBridge : IDisposable
 
     internal int StopAllPcToPhone(bool restorePreviousEndpoint = true)
     {
-        _silenceLocalPrefs.Clear();
         var phone = _tryGetPhone();
         if (phone == null) return 0;
         int count = phone.Pc.StopAll(restorePreviousEndpoint);
@@ -285,8 +280,6 @@ internal sealed class ExternalAudioBridge : IDisposable
     internal IPcProcessSilenceLease? AcquireLocalSilenceLease(int pid)
     {
         if (pid <= 0) return null;
-        if (_silenceLocalPrefs.TryGetValue(pid, out bool silence) && !silence)
-            return null;
         return TryAcquireEndpointLease(pid);
     }
 
@@ -422,7 +415,6 @@ internal sealed class ExternalAudioBridge : IDisposable
     {
         if (ReferenceEquals(AppDisplayName.ExternalNameResolver, (Func<string, string?>)ResolveExternalDisplayName))
             AppDisplayName.ExternalNameResolver = null;
-        _silenceLocalPrefs.Clear();
     }
 }
 #endif

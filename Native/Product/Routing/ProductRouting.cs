@@ -16,6 +16,25 @@ internal sealed class ProductRouting : IDisposable
 #endif
     internal void Start() => AppPlaybackRestore.Start();
 
+    internal string? ReadPlaybackRoute(int pid, bool includeSelection, out HashSet<string>? selected)
+    {
+#if SONICROUTE_PHONE
+        bool exclusive = false;
+        string? phone = ExternalAudio?.GetPhoneRoute(pid, out exclusive);
+        if (exclusive && phone != null)
+        {
+            selected = includeSelection ? new(StringComparer.OrdinalIgnoreCase) { phone } : null;
+            return phone;
+        }
+#endif
+        string? primary = PcRoutingApi.GetPersistedEndpoint(pid, EDataFlow.eRender);
+        selected = includeSelection ? AppPlaybackOutputs.GetSelected(pid, primary) : null;
+#if SONICROUTE_PHONE
+        if (phone != null) selected?.Add(phone);
+#endif
+        return primary;
+    }
+
     internal Task<ControlReply> SelectOutputAsync(int pid, string target)
         => ExecuteAsync(new ControlRequest("output-native", [pid.ToString(CultureInfo.InvariantCulture), target]));
 
@@ -39,13 +58,8 @@ internal sealed class ProductRouting : IDisposable
                 case "outputs-get" when request.Args.Length == 1:
                     var values = await Task.Run(() =>
                     {
-                        var selected = AppPlaybackOutputs.GetSelected(pid,
-                            PcRoutingApi.GetPersistedEndpoint(pid, EDataFlow.eRender)).ToHashSet(StringComparer.OrdinalIgnoreCase);
-#if SONICROUTE_PHONE
-                        if (ExternalAudio?.GetPhoneRoutedDeviceId(pid) is { } phoneOut)
-                            selected.Add(phoneOut);
-#endif
-                        return selected.ToArray();
+                        ReadPlaybackRoute(pid, includeSelection: true, out var selected);
+                        return selected!.ToArray();
                     }).ConfigureAwait(false);
                     return new(JsonSerializer.Serialize(values, RoutingJson.Default.StringArray));
                 case "output-native" when request.Args is [_, var single]:

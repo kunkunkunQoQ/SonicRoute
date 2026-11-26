@@ -147,13 +147,14 @@ internal sealed partial class ProductAudio : IDisposable
         }
     }
 
-    internal string? ReadRoute(int pid, Flow flow)
+    internal string? ReadRoute(int pid, Flow flow) => flow == Flow.Render
+        ? _routing.ReadPlaybackRoute(pid, includeSelection: false, out _)
+        : PcRoutingApi.GetPersistedEndpoint(pid, (EDataFlow)flow);
+
+    internal HashSet<string> ReadPlaybackSelection(int pid, out string? primary)
     {
-#if SONICROUTE_PHONE
-        if (flow == Flow.Render && ExternalAudio?.GetPhoneRoutedDeviceId(pid) is { } phoneOut)
-            return phoneOut;
-#endif
-        return PcRoutingApi.GetPersistedEndpoint(pid, (EDataFlow)flow);
+        primary = _routing.ReadPlaybackRoute(pid, includeSelection: true, out var selected);
+        return selected!;
     }
 
     internal string? ReadRoute(AudioAppInfo app, Flow flow)
@@ -170,17 +171,7 @@ internal sealed partial class ProductAudio : IDisposable
     {
         if (!app.IsExternal)
         {
-            int pid = checked((int)app.ProcessId);
-            var set = AppPlaybackOutputs.GetSelected(pid, PcRoutingApi.GetPersistedEndpoint(pid, EDataFlow.eRender));
-#if SONICROUTE_PHONE
-            if (ExternalAudio?.GetPhoneRoutedDeviceId(pid) is { } phoneOut)
-            {
-                if (set.Count == 1 && Core.AudioService.IsSystemDefault(set.First()))
-                    return [phoneOut];
-                set.Add(phoneOut);
-            }
-#endif
-            return set.ToArray();
+            return ReadPlaybackSelection(checked((int)app.ProcessId), out _).ToArray();
         }
 #if SONICROUTE_PHONE
         if (ExternalAudio != null) return ExternalAudio.GetExternalOutputs(app);

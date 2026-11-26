@@ -61,5 +61,6 @@
 | 冻结源码审查 | 上述存储入口直接对照冻结 SHA；主配置每个公开持久化属性均已归类。冻结中便携与 Full/Lite 均无另一个 exe 同目录配置发现逻辑。 |
 | 自动化存储夹具 | `r10-evidence/compat-codec/check.ps1` 从全新合成数据目录运行，各读取阶段使用独立 pwsh 进程和 .NET 10 Full Release 产出的程序集。六个场景见 `result.json`，另有 `clipboard-check.json`。覆盖数值和集合坏值局部恢复、逐字节原件、中文扩展、正常保存及新进程重读、主文件损坏后备份重建和再次启动、旧规则迁移与枚举、路由、离线档案、手机音频与剪贴板。无真实业务、系统输入、手机传输结论。 |
 | 冻结运行历史原件读回 | Lite 的历史目录 `R10d57c453c4c1647d4_Lite` 与启动 ID 对应，原样读取同一份 397 字节 UTF-8 recent.jsonl。修复前零行及 InvalidOperationException，修复后一行、LastError 为空，规则名、时间、动作、步骤数与原记录相符；文件 SHA-256 保持不变。见 `r10-evidence/compat-codec/history-wpf-lite.json`。 |
+| Full 应用播放路由读回 | 新建静音进程，真实 Windows render 策略只读。用非流式合成手机和替代静音租约验证电脑、仅手机、系统默认与手机同时选中、退回仅手机、退回电脑，读到的选中项数依次为 1、1、2、1、1，两次独占各获取并释放一次租约。修复统一当前会话的读回，不改变已有播放保存/恢复格式；Windows 与实际手机混合播放和跨重启恢复仍待真机。证据 `r10-evidence/compat-codec/mixed-readback.json`。 |
 | 正式升级与回退 | 两份冻结 WPF EXE 实际通过 UI 生成隔离原件，源文件清单及哈希在 `r10-evidence/frozen/{Full,Lite}/manifest.json`。产品系统输入、重启、回退数据、各项是否通过及未覆盖条件记录在 `r10-evidence/upgrade-report.md`。 |
 | 待实机 | 正式 Store 安装/更新和系统启动任务、真实用户注册表及 PATH、外部 ADB/手机认证、物理设备恢复及剪贴板收发、AirPlay 配对、跨版本系统音频端点与双进程同时编辑，须相应环境及用户确认。 |

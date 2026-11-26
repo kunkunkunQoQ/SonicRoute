@@ -45,10 +45,16 @@ public sealed class PcToPhoneAudioManager(Func<AdbClient> adbFactory, Func<int, 
         }
     }
 
-    public string? GetPersistedEndpoint(int processId)
+    public string? GetPersistedEndpoint(int processId) => GetPersistedEndpoint(processId, out _);
+
+    internal string? GetPersistedEndpoint(int processId, out bool exclusive)
     {
         lock (_gate)
-            return _routes.TryGetValue(processId, out var route) ? route.TargetDeviceId : null;
+        {
+            _routes.TryGetValue(processId, out var route);
+            exclusive = route?.SilenceLocal == true;
+            return route?.TargetDeviceId;
+        }
     }
 
     public IReadOnlyList<(int ProcessId, string TargetDeviceId, string PhoneKey, string SinkKey)> GetActiveRoutes()
@@ -58,6 +64,9 @@ public sealed class PcToPhoneAudioManager(Func<AdbClient> adbFactory, Func<int, 
     }
 
     public (bool Success, int HResult, string Message) RouteProcess(int processId, string targetDeviceId, AndroidDevice? device)
+        => RouteProcess(processId, targetDeviceId, device, silenceLocal: true);
+
+    internal (bool Success, int HResult, string Message) RouteProcess(int processId, string targetDeviceId, AndroidDevice? device, bool silenceLocal)
     {
         if (processId <= 0) return (false, -1, "无效的应用进程 ID。");
         if (!AndroidOutputIdentity.TryParseDeviceId(targetDeviceId, out string phoneKey, out string sinkKey))
@@ -76,6 +85,7 @@ public sealed class PcToPhoneAudioManager(Func<AdbClient> adbFactory, Func<int, 
                 existing.TargetDeviceId = targetDeviceId;
                 existing.SinkKey = sinkKey;
                 if (device != null) existing.Device = device;
+                existing.ChangeSilenceMode(silenceLocal, () => SafeAcquireSilenceLease(processId));
                 route = existing;
                 samePhoneSwitch = true;
             }
@@ -89,8 +99,9 @@ public sealed class PcToPhoneAudioManager(Func<AdbClient> adbFactory, Func<int, 
                 }
                 bool canSilence = device is { State: "device" }
                     && !string.Equals(device.Serial, "offline-fixture", StringComparison.Ordinal);
-                var lease = carriedLease ?? (canSilence ? SafeAcquireSilenceLease(processId) : null);
-                route = new ActiveRoute(processId, targetDeviceId, phoneKey, sinkKey, device, lease);
+                if (!silenceLocal) { carriedLease?.Release(restorePreviousEndpoint: false); carriedLease = null; }
+                var lease = carriedLease ?? (silenceLocal && canSilence ? SafeAcquireSilenceLease(processId) : null);
+                route = new ActiveRoute(processId, targetDeviceId, phoneKey, sinkKey, device, lease, silenceLocal);
                 _routes[processId] = route;
                 if (previous != null) _ = Retire(previous, restorePreviousEndpoint: false);
             }
@@ -294,7 +305,8 @@ public sealed class PcToPhoneAudioManager(Func<AdbClient> adbFactory, Func<int, 
         string phoneKey,
         string sinkKey,
         AndroidDevice? device,
-        IPcProcessSilenceLease? silenceLease)
+        IPcProcessSilenceLease? silenceLease,
+        bool silenceLocal)
     {
         private readonly object _routeLock = new();
         private readonly CancellationTokenSource _cts = new();
@@ -307,6 +319,7 @@ public sealed class PcToPhoneAudioManager(Func<AdbClient> adbFactory, Func<int, 
         public string PhoneKey { get; } = phoneKey;
         public string SinkKey { get; set; } = sinkKey;
         public AndroidDevice? Device { get; set; } = device;
+        public bool SilenceLocal { get; private set; } = silenceLocal;
         public bool IsStopped { get; private set; }
         public bool IsStreamingStarted { get; private set; }
         public long BytesStreamed;
@@ -387,11 +400,31 @@ public sealed class PcToPhoneAudioManager(Func<AdbClient> adbFactory, Func<int, 
             }
         }
 
+        // The Windows endpoint has already been applied before an exclusive route becomes mixed.
+        public void ChangeSilenceMode(bool exclusive, Func<IPcProcessSilenceLease?> factory)
+        {
+            lock (_routeLock)
+            {
+                if (SilenceLocal == exclusive || IsStopped) return;
+                SilenceLocal = exclusive;
+                if (exclusive)
+                {
+                    if (Device is { State: "device" } && Device.Serial != "offline-fixture") _silenceLease ??= factory();
+                }
+                else
+                {
+                    var previous = _silenceLease;
+                    _silenceLease = null;
+                    previous?.Release(restorePreviousEndpoint: false);
+                }
+            }
+        }
+
         public void EnsureSilenceLease(Func<IPcProcessSilenceLease?> factory)
         {
             lock (_routeLock)
             {
-                if (IsStopped || _silenceLease != null) return;
+                if (IsStopped || !SilenceLocal || _silenceLease != null) return;
                 _silenceLease = factory();
             }
         }

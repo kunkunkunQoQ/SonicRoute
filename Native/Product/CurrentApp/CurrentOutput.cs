@@ -38,7 +38,12 @@ internal sealed partial class ProductCurrentApp
     {
         var outputs = selected.Select(Normal).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
         var effective = outputs.Length == 0 ? [AudioService.SystemDefaultDeviceId] : outputs;
-        string target = AppPlaybackOutputs.PreferredPrimary(effective, Normal(preferred))!;
+        var primaryChoices = effective;
+#if SONICROUTE_PHONE
+        var local = effective.Where(id => !PcRoutingApi.IsPhoneOutputDevice(id)).ToArray();
+        if (local.Length > 0) primaryChoices = local;
+#endif
+        string target = AppPlaybackOutputs.PreferredPrimary(primaryChoices, Normal(preferred))!;
         return QueueOutput(pid, 0, target, 1, outputs, showOsd: showOsd);
     }
 
@@ -166,8 +171,10 @@ internal sealed partial class ProductCurrentApp
         // but cannot replace a newer user's pending/final feedback on the STA.
         try
         {
-            var actual = audio.ReadRoute(pid, Flow.Render);
-            var observed = selected == null ? null : AppPlaybackOutputs.GetSelected(pid, actual);
+            string? actual;
+            HashSet<string>? observed = null;
+            if (selected == null) actual = audio.ReadRoute(pid, Flow.Render);
+            else observed = audio.ReadPlaybackSelection(pid, out actual);
             bool matched = Same(actual, target) && (observed == null ||
                 observed.SetEquals(selected!.Length == 0 ? [AudioService.SystemDefaultDeviceId] : selected));
             bool success = !result.Text.StartsWith("error", StringComparison.OrdinalIgnoreCase) && matched;
