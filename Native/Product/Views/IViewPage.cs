@@ -45,7 +45,9 @@ internal interface IViewHostActions
         bool password = false,
         bool selectAll = false,
         bool readOnlyMultiline = false,
-        int maxLength = 0);
+        int maxLength = 0,
+        bool acceptFileDrop = false);
+    void SetInlineEditText(string tag, string text);
     void CloseInlineEdit(bool commit);
     void NavigateTo(MainNavTab tab);
     void OpenPhoneDevice(string? profileId = null) { }
@@ -65,6 +67,7 @@ internal interface IViewPage : IDisposable
     bool OnMouseWheel(float x, float y, float delta, bool horizontal);
     bool OnKeyDown(int vk, bool ctrl, bool shift, bool alt);
     void OnFilesDropped(string[] paths) { }
+    void OnFilesDropped(string[] paths, string? targetId) => OnFilesDropped(paths);
     void OnCaptureLost() { }
     void OnFocusLost() { }
     bool NeedsAnimationTick => false;
@@ -106,7 +109,7 @@ internal sealed class AliasEditor(IViewHostActions actions) : IDisposable
     private IDisposable? _timer;
     private int _version;
 
-    public void Open(string tag, UiRect rect, string key, bool device)
+    public void Open(string tag, UiRect rect, string key, bool device, string? displayName = null)
     {
         Dispose();
         int version = _version;
@@ -122,8 +125,11 @@ internal sealed class AliasEditor(IViewHostActions actions) : IDisposable
             if (actions.CommitSettings()) actions.NotifySettingsChanged();
         }
 
-        actions.StartInlineEdit(tag, rect, Names().GetValueOrDefault(key, ""), text =>
+        string initial = displayName ?? Names().GetValueOrDefault(key, "");
+        bool edited = false;
+        actions.StartInlineEdit(tag, rect, initial, text =>
         {
+            edited = true;
             _timer?.Dispose();
             _timer = actions.Host.ScheduleOnce(TimeSpan.FromMilliseconds(300), () =>
             {
@@ -133,8 +139,8 @@ internal sealed class AliasEditor(IViewHostActions actions) : IDisposable
         }, (text, _) =>
         {
             Dispose();
-            Apply(text);
-        });
+            if (edited || text != initial) Apply(text);
+        }, selectAll: !device);
     }
 
     public void Dispose()

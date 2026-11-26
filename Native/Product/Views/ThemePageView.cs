@@ -702,9 +702,12 @@ internal sealed class ThemePageView : IViewPage
 
     private void CommitHex(string text)
     {
-        if (UiColor.TryParseHex(text, out var col))
+        var hex = text.AsSpan().Trim();
+        if (hex.StartsWith("#")) hex = hex[1..];
+        if (hex.Length == 6 && uint.TryParse(hex, NumberStyles.AllowHexSpecifier, CultureInfo.InvariantCulture, out uint rgb))
         {
-            if (col.WithAlpha(255) != _actions.Theme.Accent) ApplyAccent(col.ToHexRgb());
+            var color = UiColor.FromRgb((byte)(rgb >> 16), (byte)(rgb >> 8), (byte)rgb);
+            if (color != _actions.Theme.Accent) ApplyAccent(color.ToHexRgb());
         }
         else
         {

@@ -77,7 +77,7 @@ internal abstract unsafe class LayeredWindow : IDisposable
     private const uint WmXButtonUp = 0x020C;
     private const uint WmMouseHWheel = 0x020E;
     private const uint WmCaptureChanged = 0x0215;
-    private const uint WmDropFiles = 0x0233;
+    internal const uint WmDropFiles = 0x0233;
     private const uint WmMouseLeave = 0x02A3;
     private const uint WmDpiChanged = 0x02E0;
     private const uint WmNcCalcSize = 0x0083;
@@ -369,6 +369,33 @@ internal abstract unsafe class LayeredWindow : IDisposable
             SetForegroundWindow(Handle);
             SetFocus(Handle);
         }
+    }
+
+    internal static void ReceiveFileDrop(nint owner, nint recipient, nint drop)
+    {
+        try
+        {
+            if (!Instances.TryGetValue(owner, out var window) || !window.IsVisible) return;
+            var point = default(Point);
+            if (!DragQueryPoint(drop, ref point)) return;
+            if (recipient != owner && (!ClientToScreen(recipient, ref point) || !ScreenToClient(owner, ref point))) return;
+
+            uint count = DragQueryFileW(drop, uint.MaxValue, null, 0);
+            if (count is 0 or >= 4096) return;
+            var paths = new List<string>((int)count);
+            char[] buffer = [];
+            for (uint i = 0; i < count; i++)
+            {
+                uint length = DragQueryFileW(drop, i, null, 0);
+                if (length is 0 or > 32767) continue;
+                if (length >= buffer.Length) buffer = new char[length + 1];
+                uint copied = DragQueryFileW(drop, i, buffer, (uint)buffer.Length);
+                if (copied == length) paths.Add(new string(buffer, 0, (int)copied));
+            }
+            if (paths.Count != 0)
+                window.OnFilesDropped(paths.ToArray(), point.X / window.DpiScale, point.Y / window.DpiScale);
+        }
+        finally { DragFinish(drop); }
     }
 
     internal static void ScrollFromEditor(nint owner, nuint flags, nint position)
@@ -943,32 +970,8 @@ internal abstract unsafe class LayeredWindow : IDisposable
                 break;
 
             case WmDropFiles:
-            {
-                nint hDrop = (nint)wParam;
-                try
-                {
-                    uint count = DragQueryFileW(hDrop, 0xFFFFFFFFu, null, 0);
-                    if (count > 0 && count < 4096)
-                    {
-                        var list = new List<string>((int)count);
-                        char[] buf = new char[1024];
-                        for (uint i = 0; i < count; i++)
-                        {
-                            uint len = DragQueryFileW(hDrop, i, buf, (uint)buf.Length);
-                            if (len > 0) list.Add(new string(buf, 0, (int)len));
-                        }
-                        var dropPt = default(Point);
-                        DragQueryPoint(hDrop, ref dropPt);
-                        if (list.Count > 0)
-                            win.OnFilesDropped(list.ToArray(), dropPt.X / win.DpiScale, dropPt.Y / win.DpiScale);
-                    }
-                }
-                finally
-                {
-                    DragFinish(hDrop);
-                }
+                ReceiveFileDrop(hwnd, hwnd, (nint)wParam);
                 return 0;
-            }
 
             case WmMouseWheel:
             case WmMouseHWheel:

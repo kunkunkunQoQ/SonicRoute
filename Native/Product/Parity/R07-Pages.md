@@ -21,7 +21,7 @@ WPF 对应 MainWindow.xaml 的 AppsPage、MainWindow.xaml.cs、MainWindow.AppRou
 |刷新应用|apps.refresh|TriggerRefresh(true) → Audio.Apps / Volume、RenderDevicesWithPhone、当前路由读回|临时，合并在途读取；按 identity 保留选择|源码|
 |应用选中及多选|apps.item.{identity} 按下、键盘激活、Ctrl/Shift/Ctrl+A|HandleAppRowClick → SetPrimarySelectedApp / TriggerRefresh|选中临时；不同应用切换递增代数，旧回调不能清除新操作|源码|
 |设备与手机页|apps.phone.add、apps.phone.{profile}、apps.phone.scroll|OpenPhoneConnection / OpenPhoneDevice → Store.SelectProfile；详情可返回设备或连接页|仅 Full，设备 profile 由 PhoneStore 管理|源码，硬件待验|
-|改名|apps.rename；右键 Rename；EDIT 输入/失焦|AliasEditor.Open，以进程名为键，修改 AppNames。双入口同一提交路径|停键 300 ms 或失焦立即写；Esc 在防抖期限内能够丢弃未确认输入；保存失败提示|源码|
+|改名|apps.rename；右键 Rename；EDIT 输入/失焦|AliasEditor.Open，从当前显示名进入并全选；以进程名为键修改 AppNames。点击后不编辑不新增别名，双入口同一提交路径|停键 300 ms 或失焦立即写；Esc 在防抖期限内能够丢弃未确认输入；保存失败提示|源码|
 |导入/恢复图标|apps.icon.import、apps.icon.reset，文件拖放|ImportCustomIconFromPath / ResetCustomIcon → 稳定进程名、图标文件、TrySetAppIcon|AppIcons 映射与图标文件；系统对话框取消不写，失败不显示成功|源码|
 |输出下拉与快捷端点|apps.out.combo、apps.out.dev.{id}；选择、Ctrl/Shift/组合多选|ApplyOutputSelection，经由 CurrentApp.SelectOutputAsync 或 SetOutputsAsync；原生路由写入与读回、镜像由共享业务处理。外部音频走 SetExternalOutputsAsync|Windows 音频策略和业务镜像存储。待定集合覆盖旧观测；同 PID 单/多选从输入线程按序进入同一队列。失败读回|源码，真实端点见总报告|
 |输入下拉与快捷端点|apps.in.combo、apps.in.dev.{id}|SelectInputRoute → Audio.SetRoute(pid,Capture,endpoint)，每次按输入顺序提交|由 Windows 音频策略负责；待定时屏蔽旧快照；结束按身份/代数刷新|源码，真实设备待验|
@@ -39,7 +39,7 @@ WPF 设置入口位于 MainWindow.xaml 的 SettingsPage、MainWindow.xaml.cs 的
 |设置/设备别名|st.names.toggle、st.devname.{out/in}.{id}、st.devchk.edit.{out/in}.{id}；笔形按钮/双击端点/输入|AliasEditor.Open，按 device.Id；未设置时留空；两类入口按各自的真实区域放置编辑器|DeviceNames，300 ms 防抖或失焦提交；删除别名恢复原名；写失败提示|源码|
 |设置/默认应用|st.appmode.{recent/last/fixed}、st.fixedapp.combo|RenderDefaultAppCard / OpenFixedAppCombo → 当前模式和实际进程，非 fixed 不注册下拉命中|DefaultAppMode、FixedAppName 即时；显示已关闭/无匹配应用时保留已保存进程名|源码|
 |设置/启动|st.startmin、st.startpanel、st.autostart、st.autostart.more、st.autostart.clean|ToggleAutoStart/CleanAutoStart 调隔离 HKCU Run 或 StoreStartup，回读实际启用；折叠只影响界面|StartMinimized、StartPanelOnStart、AutoStart/AutoStartStore；外部启动项由系统持有|源码，系统登录待验|
-|设置/音量步长|st.volstep.box、st.volstep.slider；EDIT Enter/失焦、拖动/键盘/滚轮|整数归一 1–20；非整数按冻结默认 4；滑动预览、释放/失捕获收尾|VolumeStep；拖动一轮最多提交一次，输入结束/离散键轮提交|源码|
+|设置/音量步长|st.volstep.box、st.volstep.slider；EDIT Enter/失焦、拖动/键盘/滚轮|整数归一 1–20；非法输入保留已保存值，值未变不写盘；滑动预览、释放/失捕获收尾|VolumeStep；拖动一轮最多提交一次，输入结束/离散键轮提交|源码|
 |设置/托盘|st.traywheel.everywhere、st.traywheel.paused|TrayWheelEverywhere → 重载实际钩子设置；暂停与托盘菜单复用 Host.SetTrayWheelPaused|TrayWheelEverywhere、TrayWheelPaused；读回钩子安装失败时恢复|源码|
 |设置/麦克风与面板|st.expmic、st.micinpanel、st.panelchangesysdef、st.panelretainedonly、st.micmute.persist、st.micmute.trackdef|开关 → 实际 ViewSettingsChanged，切换麦克风监视、快捷面板与 OSD 源|ExperimentalMic、MicInPanel、PanelChangeSystemDefault、PanelOutputVolumesRetainedOnly、MicMuteOsdPersistent、MicMuteOsdDefaultInputPersistent，各自即时提交|源码|
 |设置/展示和实验解锁|st.collapsedev、st.expmode、st.about.author|折叠设备组；五击作者解锁；模式影响实验导航和历史可见|CollapseDeviceSections、ExperimentalUnlocked、ExperimentalMode；未解锁不注册实验模式开关|源码|
@@ -52,7 +52,7 @@ WPF 设置入口位于 MainWindow.xaml 的 SettingsPage、MainWindow.xaml.cs 的
 |主题/不透明度与 OSD 滑块|th.opacity、th.osd.w/font/fin/fout、th.panel.h|ApplySliderDrag/OnFocusedKey，基于实际滑块几何，数值约束；不透明度实时绘制；宽度/字号松手预览|BackgroundOpacity、OsdWidth、OsdFontScale、OsdFadeInMs、OsdFadeOutMs、QuickPanelHeight；拖动结束/失捕获、键盘离散提交|源码|
 |主题/OSD 开关与位置|th.osd.adjust/preview/reset、volvisual/micpersist/mictrack、pos.{code}、ox/oy、more|宿主 BeginOsdAdjust、PreviewOsd、ResetOsdSettings；九宫格和数值 EDIT 更新位置；more 展开临时|OsdVolumeVisualEnabled、MicMuteOsdPersistent、MicMuteOsdDefaultInputPersistent、OsdPosition、OsdOffsetX/Y；重置同时清物理坐标等；提交失败不显示重置成功|源码|
 |主题/面板设置|th.panel.adjust/reset、posDef/posCus、cx/cy、peak、legacy、compactOut、fullOut、allOutVol|BeginQuickPanelAdjust 或改面板定位/行样式，以配置驱动真实面板；依旧保留上轮用户指定标题钉住行为|QuickPanelPosMode、QuickPanelCustomX/Y、ShowAppPeakMeter、QuickPanelUseLegacyAppRows、QuickPanelCompactShowOutputName、QuickPanelShowOutputName、QuickPanelShowAllOutputVolumes|源码|
-|实验/后台及历史|exp.polling、exp.history、exp.hist.limit/view/clear|实际 watcher 设置；开关历史存储、限 1–64 MB、OpenHistory、确认后 ClearAsync|BackgroundPollingFallbackEnabled、ExecutionHistoryEnabled、ExecutionHistoryLimitMb；历史内容另存。写失败不触发历史业务|源码|
+|实验/后台及历史|exp.polling、exp.history、exp.hist.limit/view/clear|实际 watcher 设置；开关历史存储、限 1–64 MB、OpenHistory、确认后 ClearAsync|BackgroundPollingFallbackEnabled、ExecutionHistoryEnabled、ExecutionHistoryLimitMb；历史内容另存。写配置失败不触发历史业务，缩减日志失败提示 History.ReadError|源码|
 |实验/其他设置与重置|exp.mode、exp.mic/micpanel、exp.panelretained、exp.osd.volvisual/pos/w/font/fin/fout/preview/theme、exp.resetroutes|同主设置和主题字段，OSD 预览调用宿主、theme 导航；重置调用 Audio.ResetRoutes，按实际返回报告|配置同对应主设置；重置路由由 Windows/音频业务负责；运行时导航无写入|源码|
 
 ### 快捷键和自动化

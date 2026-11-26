@@ -25,6 +25,7 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
     private readonly UiScrollState _editorScroll = new();
     private readonly Dictionary<string, Action> _clicks = new(StringComparer.Ordinal);
     private readonly Dictionary<string, Action> _rightClicks = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, (AutoRuleStep Step, AutoRuleAction Action)> _fileDropTargets = new(StringComparer.Ordinal);
 
     private List<AutoRule> _rules = new();
     private Endpoint[] _outputs = [];
@@ -217,6 +218,7 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
     {
         _clicks.Clear();
         _rightClicks.Clear();
+        _fileDropTargets.Clear();
         _visibleRuleRows.Clear();
         _stepCardRects.Clear();
         _stepVolSliders.Clear();
@@ -747,7 +749,7 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
         }
         else if (step.Action == AutoRuleAction.RunPowerShell)
         {
-            h += Math.Max(1, step.ProgramPaths.Count) * 36f + 36f;
+            h += step.ProgramPaths.Count * 36f + 36f;
         }
         h += 38f; // Delay row
         h += 24f; // StopOnFailure checkbox
@@ -880,9 +882,10 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
                 float choiceW = MathF.Min(132f, iw * 0.35f);
                 var pathRect = new UiRect(ix, y, MathF.Max(36f, iw - choiceW - 70f), 30f);
                 string pTag = $"step.{index}.li.{li}";
+                _fileDropTargets[pTag] = (step, step.Action);
                 UiPrimitives.DrawTextBox(g, t, hit, pTag, pathRect, item.Path, "C:\\...", focused: actions.ActiveInlineEditTag == pTag, fontSize: 11.5f);
                 RegisterBtn(pTag, pathRect, _editorViewport, hit, () =>
-                    actions.StartInlineEdit(pTag, pathRect, item.Path, null, (s, _) => { item.Path = s.Trim(); actions.Invalidate(); }), UiCursorKind.IBeam);
+                    actions.StartInlineEdit(pTag, pathRect, item.Path, null, (s, _) => { item.Path = s.Trim(); actions.Invalidate(); }, acceptFileDrop: true), UiCursorKind.IBeam);
 
                 var brRect = new UiRect(pathRect.Right + 4f, y, 28f, 30f);
                 UiPrimitives.DrawGhostIconButton(g, t, hit, $"step.{index}.libr.{li}", brRect, UiIcon.File, 13f);
@@ -909,30 +912,30 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
             }
 
             var addFileRect = new UiRect(ix, y, 148f, 28f);
-            UiPrimitives.DrawSecondaryButton(g, t, hit, $"step.{index}.liadd", addFileRect, L10n.T("Auto.AddFile"), fontSize: 11.5f);
-            RegisterBtn($"step.{index}.liadd", addFileRect, _editorViewport, hit, () =>
+            string addTag = $"step.{index}.liadd";
+            _fileDropTargets[addTag] = (step, step.Action);
+            UiPrimitives.DrawSecondaryButton(g, t, hit, addTag, addFileRect, L10n.T("Auto.AddFile"), fontSize: 11.5f);
+            RegisterBtn(addTag, addFileRect, _editorViewport, hit, () =>
             {
-                if (NativeDialogs.Open(actions.OwnerWindow.Handle, L10n.T("Auto.FileFilterAll") + " (*.*)|*.*|" + L10n.T("Auto.FileFilterExe") + " (*.exe)|*.exe") is { } f)
-                    step.LaunchItems.Add(new AutoLaunchItem { Path = f });
-                else
-                    step.LaunchItems.Add(new AutoLaunchItem());
+                var files = NativeDialogs.OpenMultiple(actions.OwnerWindow.Handle,
+                    L10n.T("Auto.FileFilterAll") + " (*.*)|*.*|" + L10n.T("Auto.FileFilterExe") + " (*.exe)|*.exe", L10n.T("Auto.AddFileTitle"));
+                AppendStepFiles(step, files);
                 actions.Invalidate();
             });
             y += 36f;
         }
         else if (step.Action == AutoRuleAction.RunPowerShell)
         {
-            if (step.ProgramPaths.Count == 0) step.ProgramPaths.Add("");
+            g.DrawText(L10n.T("Auto.Script"), new UiRect(x, y, lw - 6f, 30f), t.TextSecondary, 12f, 400, UiTextAlign.Leading, UiVertAlign.Center);
             for (int pi = 0; pi < step.ProgramPaths.Count; pi++)
             {
                 int pathIdx = pi;
-                if (pi == 0)
-                    g.DrawText(L10n.T("Auto.Script"), new UiRect(x, y, lw - 6f, 30f), t.TextSecondary, 12f, 400, UiTextAlign.Leading, UiVertAlign.Center);
                 var pRect = new UiRect(ix, y, MathF.Max(80f, iw - 34f), 30f);
                 string psTag = $"step.{index}.ps.{pi}";
+                _fileDropTargets[psTag] = (step, step.Action);
                 UiPrimitives.DrawTextBox(g, t, hit, psTag, pRect, step.ProgramPaths[pi], "script.ps1 / command", focused: actions.ActiveInlineEditTag == psTag, mono: true, fontSize: 11.5f);
                 RegisterBtn(psTag, pRect, _editorViewport, hit, () =>
-                    actions.StartInlineEdit(psTag, pRect, step.ProgramPaths[pathIdx], null, (s, _) => { step.ProgramPaths[pathIdx] = s; actions.Invalidate(); }, mono: true), UiCursorKind.IBeam);
+                    actions.StartInlineEdit(psTag, pRect, step.ProgramPaths[pathIdx], null, (s, _) => { step.ProgramPaths[pathIdx] = s; actions.Invalidate(); }, mono: true, acceptFileDrop: true), UiCursorKind.IBeam);
 
                 var rmRect = new UiRect(pRect.Right + 4f, y, 28f, 30f);
                 UiPrimitives.DrawGhostIconButton(g, t, hit, $"step.{index}.psrm.{pi}", rmRect, UiIcon.Close, 13f, iconColor: t.Fail);
@@ -940,8 +943,10 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
                 y += 36f;
             }
             var addPathRect = new UiRect(ix, y, 130f, 28f);
-            UiPrimitives.DrawSecondaryButton(g, t, hit, $"step.{index}.psadd", addPathRect, L10n.T("Auto.AddPath"), fontSize: 11.5f);
-            RegisterBtn($"step.{index}.psadd", addPathRect, _editorViewport, hit, () => { step.ProgramPaths.Add(""); actions.Invalidate(); });
+            string addTag = $"step.{index}.psadd";
+            _fileDropTargets[addTag] = (step, step.Action);
+            UiPrimitives.DrawSecondaryButton(g, t, hit, addTag, addPathRect, L10n.T("Auto.AddPath"), fontSize: 11.5f);
+            RegisterBtn(addTag, addPathRect, _editorViewport, hit, () => { step.ProgramPaths.Add(""); actions.Invalidate(); });
             y += 36f;
         }
 
@@ -952,14 +957,17 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
         UiPrimitives.DrawTextBox(g, t, hit, delayTag, delayRect, step.DelayMs.ToString(CultureInfo.InvariantCulture), "0", focused: actions.ActiveInlineEditTag == delayTag, fontSize: 12f);
         RegisterBtn(delayTag, delayRect, _editorViewport, hit, () =>
         {
-            actions.StartInlineEdit(delayTag, delayRect, step.DelayMs.ToString(CultureInfo.InvariantCulture), null, (s, _) =>
+            void UpdateDelay(string text)
             {
-                if (int.TryParse(s.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out int ms))
-                {
-                    step.DelayMs = Math.Clamp(ms, 0, 600000);
-                    actions.Invalidate();
-                }
-            });
+                text = text.Trim();
+                if (text.Length == 0) return;
+                bool valid = int.TryParse(text, out int value);
+                step.DelayMs = Math.Clamp(valid ? value : step.DelayMs, 0, 60000);
+                if (!valid || value != step.DelayMs || text.Length > 5)
+                    actions.SetInlineEditText(delayTag, step.DelayMs.ToString(CultureInfo.InvariantCulture));
+            }
+            actions.StartInlineEdit(delayTag, delayRect, step.DelayMs.ToString(CultureInfo.InvariantCulture),
+                UpdateDelay, (text, _) => UpdateDelay(text));
         }, UiCursorKind.IBeam);
         g.DrawText(L10n.T("Auto.DelayUnit") + " (" + L10n.T("Auto.DelayRange") + ")",
             new UiRect(delayRect.Right + 8f, y, MathF.Max(40f, iw - 88f), 30f), t.TextSecondary, 11f, 400, UiTextAlign.Leading, UiVertAlign.Center);
@@ -969,6 +977,29 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
         var stopRect = new UiRect(x, y, w, 22f);
         UiPrimitives.DrawCheckBox(g, t, hit, $"step.{index}.stop", stopRect, step.StopOnFailure, L10n.T("Auto.StopOnFailure"), 11.5f);
         RegisterBtn($"step.{index}.stop", stopRect, _editorViewport, hit, () => { step.StopOnFailure = !step.StopOnFailure; actions.Invalidate(); });
+    }
+
+    public void OnFilesDropped(string[] paths, string? targetId)
+    {
+        if (_editingRule == null || targetId == null || !_fileDropTargets.TryGetValue(targetId, out var target)
+            || target.Step.Action != target.Action || !_editingSteps.Contains(target.Step)) return;
+        actions.CloseInlineEdit(commit: true);
+        AppendStepFiles(target.Step, paths);
+    }
+
+    private static void AppendStepFiles(AutoRuleStep step, string[] paths)
+    {
+        foreach (string path in paths)
+        {
+            if (string.IsNullOrWhiteSpace(path)) continue;
+            if (step.Action == AutoRuleAction.LaunchProgram)
+            {
+                if (!step.LaunchItems.Any(item => string.Equals(item.Path, path, StringComparison.OrdinalIgnoreCase)))
+                    step.LaunchItems.Add(new AutoLaunchItem { Path = path });
+            }
+            else if (step.Action == AutoRuleAction.RunPowerShell && !step.ProgramPaths.Contains(path))
+                step.ProgramPaths.Add(path);
+        }
     }
 
     public bool OnPointerMove(float x, float y, bool leftDown)

@@ -448,10 +448,10 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
         {
             actions.StartInlineEdit("st.volstep.box", stepBoxRect, clampedStep.ToString(CultureInfo.InvariantCulture), null, (text, _) =>
             {
-                if (int.TryParse(text.Trim().TrimEnd('%'), NumberStyles.Integer, CultureInfo.InvariantCulture, out int v))
-                    cfg.VolumeStep = Math.Clamp(v, 1, 20);
-                else
-                    cfg.VolumeStep = 4;
+                if (!int.TryParse(text.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out int value)) return;
+                int step = Math.Clamp(value, 1, 20);
+                if (cfg.VolumeStep == step) return;
+                cfg.VolumeStep = step;
                 SaveConfig();
             });
         }, UiCursorKind.IBeam, L10n.T("St.VolumeStep"));

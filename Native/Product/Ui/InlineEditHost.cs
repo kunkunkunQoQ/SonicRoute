@@ -17,6 +17,7 @@ internal sealed unsafe class InlineEditHost : IDisposable
     private const uint WsChild = 0x40000000;
     private const uint WsVisible = 0x10000000;
     private const uint WsExToolWindow = 0x00000080;
+    private const uint WsExAcceptFiles = 0x00000010;
     private const uint EsAutoHScroll = 0x0080;
     private const uint EsPassword = 0x0020;
     private const uint EsLeft = 0x0000;
@@ -85,7 +86,8 @@ internal sealed unsafe class InlineEditHost : IDisposable
         bool password = false,
         bool selectAll = false,
         bool readOnlyMultiline = false,
-        int maxLength = 0)
+        int maxLength = 0,
+        bool acceptFileDrop = false)
     {
         if (_disposed) return;
         EnsureClass();
@@ -106,8 +108,9 @@ internal sealed unsafe class InlineEditHost : IDisposable
         _placeholder = "";
         UpdateColors(bg, fg);
 
+        uint dropStyle = acceptFileDrop ? WsExAcceptFiles : 0;
         _hostHwnd = CreateWindowExW(
-            WsExToolWindow, HostClassName, "", WsPopup,
+            WsExToolWindow | dropStyle, HostClassName, "", WsPopup,
             screenXPx + (int)MathF.Round(11 * dpi / 96f), screenYPx + (heightPx - Math.Max(1, (int)MathF.Round(fontSizeDip * 1.45f * dpi / 96f))) / 2,
             Math.Max(1, widthPx - (int)MathF.Round(22 * dpi / 96f)), Math.Max(1, (int)MathF.Round(fontSizeDip * 1.45f * dpi / 96f)),
             ownerHwnd, 0, GetModuleHandleW(null), 0);
@@ -120,7 +123,7 @@ internal sealed unsafe class InlineEditHost : IDisposable
         int editY = 0;
         _suppressChange = true;
         _editHwnd = CreateWindowExW(
-            0, "EDIT", readOnlyMultiline ? initialText?.ReplaceLineEndings("\r\n") ?? "" : initialText ?? "", editStyle,
+            dropStyle, "EDIT", readOnlyMultiline ? initialText?.ReplaceLineEndings("\r\n") ?? "" : initialText ?? "", editStyle,
             0, editY, Math.Max(1, widthPx - (int)MathF.Round(22 * dpi / 96f)), editH,
             _hostHwnd, 1001, GetModuleHandleW(null), 0);
         _suppressChange = false;
@@ -227,6 +230,23 @@ internal sealed unsafe class InlineEditHost : IDisposable
     [StructLayout(LayoutKind.Sequential)] private struct WinPoint { public int X, Y; }
     [DllImport("user32.dll")] private static extern bool ScreenToClient(nint hwnd, ref WinPoint point);
 
+    internal void SetText(string tag, string text)
+    {
+        if (!IsOpen || ActiveTag != tag || text == _lastChanged) return;
+        int caret = 0;
+        SendMessageW(_editHwnd, 0x00B0 /* EM_GETSEL */, 0, (nint)(&caret));
+        _suppressChange = true;
+        try
+        {
+            fixed (char* value = text)
+                SendMessageW(_editHwnd, 0x000C /* WM_SETTEXT */, 0, (nint)value);
+            _lastChanged = text;
+            caret = Math.Clamp(caret, 0, text.Length);
+            SendMessageW(_editHwnd, EmSetSel, (nuint)caret, caret);
+        }
+        finally { _suppressChange = false; }
+    }
+
     public string GetText()
     {
         if (_editHwnd == 0) return "";
@@ -326,6 +346,10 @@ internal sealed unsafe class InlineEditHost : IDisposable
 
         switch (msg)
         {
+            case LayeredWindow.WmDropFiles:
+                LayeredWindow.ReceiveFileDrop(host._ownerHwnd, hwnd, (nint)wParam);
+                return 0;
+
             case WmEraseBkgnd:
                 if (host._bgBrush != 0 && GetClientRect(hwnd, out var rc))
                 {
@@ -368,6 +392,11 @@ internal sealed unsafe class InlineEditHost : IDisposable
         if (!Edits.TryGetValue(hwnd, out var host))
             return DefWindowProcW(hwnd, msg, wParam, lParam);
 
+        if (msg == LayeredWindow.WmDropFiles)
+        {
+            LayeredWindow.ReceiveFileDrop(host._ownerHwnd, hwnd, (nint)wParam);
+            return 0;
+        }
         nint origProc = host._origEditProc;
         if (msg == 0x0102 /* WM_CHAR */ && wParam == 1 /* Ctrl+A */)
         {

@@ -43,6 +43,22 @@ internal sealed class ExperimentalPageView(IViewHostActions actions) : IViewPage
         actions.CloseInlineEdit(commit: true);
     }
 
+    private async Task ApplyHistoryLimitAsync(ExecutionHistoryStore store, int limit)
+    {
+        try
+        {
+            await store.SetLimitAsync(limit).ConfigureAwait(false);
+            if (store.LastError == null) return;
+        }
+        catch (Exception error) { ExceptionDiagnostics.Record("Native.HistoryLimit", error); }
+
+        actions.Host.TryPost(() =>
+        {
+            if (!_disposed && actions.Config.ExecutionHistoryLimitMb == limit && actions.OwnerWindow.IsVisible)
+                actions.ShowNotice(L10n.T("History.ReadError"));
+        });
+    }
+
     public void OnCaptureLost() => _scroll.EndDrag();
 
     public void RefreshData() => actions.Invalidate();
@@ -141,7 +157,7 @@ internal sealed class ExperimentalPageView(IViewHostActions actions) : IViewPage
                 actions.StartInlineEdit("exp.hist.limit", limRect,
                     Math.Clamp(cfg.ExecutionHistoryLimitMb, 1, 64).ToString(CultureInfo.InvariantCulture), null, (txt, viaEnter) =>
                     {
-                        if (int.TryParse(txt.Trim().Replace("MB", "", StringComparison.OrdinalIgnoreCase).Trim(), out int v) && v >= 1 && v <= 64)
+                        if (int.TryParse(txt.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out int v) && v >= 1 && v <= 64)
                         {
                             int previous = cfg.ExecutionHistoryLimitMb;
                             if (previous == v) return;
@@ -153,7 +169,7 @@ internal sealed class ExperimentalPageView(IViewHostActions actions) : IViewPage
                                 return;
                             }
                             actions.NotifySettingsChanged();
-                            _ = AutoRuleService.GetHistoryStore()?.SetLimitAsync(v);
+                            if (AutoRuleService.GetHistoryStore() is { } store) _ = ApplyHistoryLimitAsync(store, v);
                         }
                         else actions.ShowNotice(L10n.T("History.InvalidLimit"));
                     }, maxLength: 2);
@@ -326,18 +342,13 @@ internal sealed class ExperimentalPageView(IViewHostActions actions) : IViewPage
             actions.StartInlineEdit("exp.osd.font", fsRect, fontScale.ToString("0.00", CultureInfo.InvariantCulture), null, (txt, _) =>
             {
                 string cleaned = txt.Trim();
-                if (cleaned.EndsWith('%') && double.TryParse(cleaned.TrimEnd('%'), NumberStyles.Float, CultureInfo.InvariantCulture, out double pct))
-                {
-                    cfg.OsdFontScale = Math.Clamp(Math.Round(pct / 100.0, 2), 0.7, 2.0);
-                    if (!SaveConfig()) return;
-                    actions.Host.PreviewOsd();
-                }
-                else if (double.TryParse(cleaned, NumberStyles.Float, CultureInfo.InvariantCulture, out double val))
-                {
-                    cfg.OsdFontScale = Math.Clamp(Math.Round(val, 2), 0.7, 2.0);
-                    if (!SaveConfig()) return;
-                    actions.Host.PreviewOsd();
-                }
+                bool percentage = cleaned.EndsWith('%');
+                var number = percentage ? cleaned.AsSpan(0, cleaned.Length - 1) : cleaned.AsSpan();
+                if (!double.TryParse(number, NumberStyles.Float, CultureInfo.InvariantCulture, out double value) || !double.IsFinite(value)) return;
+                double scale = Math.Clamp(Math.Round(percentage ? value / 100 : value, 2), 0.7, 2.0);
+                if (scale == cfg.OsdFontScale) return;
+                cfg.OsdFontScale = scale;
+                if (SaveConfig()) actions.Host.PreviewOsd();
             }, mono: true);
         }, UiCursorKind.IBeam, null);
         oy += 52f;

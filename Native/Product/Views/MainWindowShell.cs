@@ -258,7 +258,8 @@ internal sealed class MainWindowShell : LayeredWindow, IViewHostActions
         bool password = false,
         bool selectAll = false,
         bool readOnlyMultiline = false,
-        int maxLength = 0)
+        int maxLength = 0,
+        bool acceptFileDrop = false)
     {
         if (Handle == 0 || !IsVisible) return;
         ClosePopups();
@@ -290,9 +291,12 @@ internal sealed class MainWindowShell : LayeredWindow, IViewHostActions
             password,
             selectAll,
             readOnlyMultiline,
-            maxLength);
+            maxLength,
+            acceptFileDrop);
         Invalidate();
     }
+
+    public void SetInlineEditText(string tag, string text) => _inlineEdit.SetText(tag, text);
 
     public void CloseInlineEdit(bool commit)
     {
@@ -378,7 +382,7 @@ internal sealed class MainWindowShell : LayeredWindow, IViewHostActions
     protected override void OnFilesDropped(string[] paths, float xDip, float yDip)
     {
         if (paths.Length == 0 || !IsVisible) return;
-        _activePage?.OnFilesDropped(paths);
+        _activePage?.OnFilesDropped(paths, _hit.HitTest(xDip, yDip)?.Id);
         Invalidate();
     }
 

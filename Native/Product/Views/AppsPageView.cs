@@ -1311,7 +1311,7 @@ internal sealed class AppsPageView : IViewPage
     {
         if (_selectedApp == null || string.IsNullOrWhiteSpace(_selectedApp.ProcessName)) return;
         string proc = _selectedApp.ProcessName!;
-        _aliasEditor.Open("apps.rename", _renameTitleRect, proc, device: false);
+        _aliasEditor.Open("apps.rename", _renameTitleRect, proc, device: false, displayName: GetAppDisplayLabel(_selectedApp));
     }
 
     private void ImportCustomIcon()
