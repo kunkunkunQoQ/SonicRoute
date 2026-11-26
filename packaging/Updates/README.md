@@ -14,7 +14,7 @@ See [RELEASE-CHECKLIST.md](./RELEASE-CHECKLIST.md) for candidate creation, the s
 4. The workflow automatically:
    - Reads the target release version from `build/Version.props` (e.g. `1.25` → `v1.25`).
    - Asserts preflight conditions (strictly `master` branch, commit SHA binding, monotonic version increase against remote releases and local tags, absence of conflicting published releases).
-   - Compiles and packages Full and Lite .NET 10 x64/ARM64 single EXEs, plus the Legacy x64 ZIP, via `Build-PortableRelease.ps1`. Full embeds the phone runtime; Lite excludes it.
+   - `Build-PortableRelease.ps1` builds the Native AOT solution and calls `Native/Build-Product.ps1` for Full and Lite x64/ARM64. It keeps the Legacy net48 x64 ZIP and writes the versioned portable assets to the candidate's `assets` directory. Full embeds the phone runtime.
    - Validates PE architecture (`0x8664`/`0xaa64`), FileVersion, edition/runtime, Full's embedded component manifests and single-EXE payload, the Legacy ZIP allowlist, `SHA256SUMS.txt`, and the protocol 2 update manifest.
    - Generates release notes: prioritizes curated `docs/release-v<version>.md` if maintained, or automatically extracts and groups conventional commits and PRs since the previous official release tag.
    - Creates a **Draft Release** pinned to the validated commit SHA and uploads all 7 assets.
