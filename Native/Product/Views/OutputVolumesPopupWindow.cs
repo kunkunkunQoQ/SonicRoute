@@ -28,7 +28,7 @@ internal sealed class OutputVolumesPopupWindow : LayeredWindow
 
     private readonly ApplicationHost _host;
     private readonly AppConfig _config;
-    private readonly Action? _onDefaultChanged;
+    private readonly Action<string> _selectDefault;
     private readonly Action? _onDeactivatedCheck;
     private readonly Action<string?, int?, bool?>? _onEndpointStateChanged;
     private readonly UiHitMap _hit = new();
@@ -51,14 +51,14 @@ internal sealed class OutputVolumesPopupWindow : LayeredWindow
     internal OutputVolumesPopupWindow(
         ApplicationHost host,
         AppConfig config,
-        Action? onDefaultChanged = null,
+        Action<string> selectDefault,
         Action? onDeactivatedCheck = null,
         Action<string?, int?, bool?>? onEndpointStateChanged = null)
         : base(UiMetrics.OutputPopupWidth, 160f, 220f, 90f)
     {
         _host = host;
         _config = config;
-        _onDefaultChanged = onDefaultChanged;
+        _selectDefault = selectDefault;
         _onDeactivatedCheck = onDeactivatedCheck;
         _onEndpointStateChanged = onEndpointStateChanged;
         _theme = UiThemePalette.Resolve(config);
@@ -455,16 +455,7 @@ internal sealed class OutputVolumesPopupWindow : LayeredWindow
         {
             if (dIdx >= 0 && dIdx < _rows.Count)
             {
-                string id = _rows[dIdx].Id;
-                _host.SubmitPanelAudio(() =>
-                {
-                    try
-                    {
-                        _host.Audio.SetDefault(Flow.Render, id);
-                        _host.PostContinuation(() => { if (!IsDisposed) { _onDefaultChanged?.Invoke(); RefreshData(); } });
-                    }
-                    catch { _host.PostContinuation(_host.ReportAudioWriteFailure); }
-                });
+                _selectDefault(_rows[dIdx].Id);
             }
         }
         else if (item.Id.StartsWith("ov.mute:", StringComparison.Ordinal) && TryGetDeviceIndex(item.Id.AsSpan(8), out int mIdx))

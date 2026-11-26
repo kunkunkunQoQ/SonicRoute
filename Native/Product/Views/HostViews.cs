@@ -161,22 +161,47 @@ internal sealed partial class ApplicationHost
     }
 
     private const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
-    private string RunEntry => "SonicRouteNativeAotPreview_" + _environment.InstanceId;
-    internal bool PreviewAutoStart
+    private string IsolatedAutoStartFlag => Path.Combine(_environment.DataDirectory, "autostart.enabled");
+
+    internal bool AutoStartEnabled
     {
         get
         {
+            if (_environment.IsIsolated) return File.Exists(IsolatedAutoStartFlag);
             using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(RunKey);
-            return key?.GetValue(RunEntry) is string;
+            return PortableStartupRegistration.Read(name => key?.GetValue(name) as string);
         }
     }
 
-    internal void SetPreviewAutoStart(bool enabled)
+    internal void SetAutoStart(bool enabled)
     {
+        if (_environment.IsIsolated)
+        {
+            if (enabled) File.WriteAllText(IsolatedAutoStartFlag, "");
+            else File.Delete(IsolatedAutoStartFlag);
+            return;
+        }
         using var key = Microsoft.Win32.Registry.CurrentUser.CreateSubKey(RunKey, writable: true);
-        if (enabled) key?.SetValue(RunEntry, '"' + Environment.ProcessPath + '"');
-        else key?.DeleteValue(RunEntry, false);
+        PortableStartupRegistration.Write(enabled, Environment.ProcessPath, (name, command) =>
+        {
+            if (command == null) key.DeleteValue(name, false);
+            else key.SetValue(name, command);
+        });
     }
+
+    private void RepairAutoStart()
+    {
+        if (!_config.AutoStart || _environment.IsPackaged || _environment.IsIsolated || Environment.ProcessPath is not { } executable) return;
+        try
+        {
+            using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(RunKey, writable: true);
+            if (key != null) PortableStartupRegistration.Repair(executable, name => key.GetValue(name) as string,
+                (name, command) => key.SetValue(name, command!));
+        }
+        catch (Exception error) { ExceptionDiagnostics.Record("Startup.AutoStart", error); }
+    }
+
+    internal void ExitForUpdate() => _window.TryPost(() => _window.RequestExit());
 
     internal void RefreshViewThemes() => Ui.LayeredWindow.RefreshVisibleThemes(() => Ui.UiThemePalette.Resolve(_config));
 
@@ -281,6 +306,23 @@ internal sealed partial class ApplicationHost
                     switchDeadline = null;
                     switchingSince = 0;
                     ShowOsd(feedback.Title, feedback.Text, volume: feedback.Volume, muted: feedback.Muted);
+                    break;
+
+                case FeedbackKind.PanelWarning:
+                    panelView?.ShowDeviceError(feedback.Text);
+                    break;
+
+                case FeedbackKind.OutputSilent:
+                    // A panel selection can supersede a hotkey with a pending or persistent switching OSD.
+                    switchDeadline?.Dispose();
+                    switchDeadline = null;
+                    if (switchingSince != 0)
+                    {
+                        switchingSince = 0;
+                        osdAnimation?.Dispose();
+                        osdAnimation = null;
+                        HideOsdWithIdleRelease();
+                    }
                     break;
 
                 case FeedbackKind.OutputPending:

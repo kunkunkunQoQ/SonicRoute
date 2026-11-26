@@ -294,7 +294,7 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
     {
         ControlReply reply = app.IsExternal
             ? await _host.Audio.SetExternalOutputsAsync(app, [targetDeviceId]).ConfigureAwait(false)
-            : await _host.CurrentApp.SelectOutputAsync((int)app.ProcessId, targetDeviceId).ConfigureAwait(false);
+            : await _host.CurrentApp.SelectOutputAsync((int)app.ProcessId, targetDeviceId, showOsd: false).ConfigureAwait(false);
         if (reply.Text.StartsWith("error:", StringComparison.OrdinalIgnoreCase)) throw new InvalidOperationException(reply.Text);
     });
 

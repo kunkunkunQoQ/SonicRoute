@@ -10,7 +10,7 @@ internal interface IMainThread
     IDisposable ScheduleOnce(TimeSpan delay, Action work);
 }
 
-internal enum FeedbackKind { OpenMain, TogglePanel, HidePanel, ShowPanel, TrayMenu, Osd, OutputPending, OutputSettled, MicStatus, SettingsWarning }
+internal enum FeedbackKind { OpenMain, TogglePanel, HidePanel, ShowPanel, TrayMenu, Osd, OutputPending, OutputSettled, MicStatus, SettingsWarning, OutputSilent, PanelWarning }
 internal sealed record HostFeedback(long Generation, FeedbackKind Kind, string Title, string Text, int? Volume = null, bool? Muted = null, bool? Success = null);
 
 // Optional views pull the latest state on attachment. Audio writes and rules belong to the host.

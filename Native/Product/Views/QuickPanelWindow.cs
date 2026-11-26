@@ -94,6 +94,8 @@ internal sealed class QuickPanelWindow : LayeredWindow
     private Task _externalOutputWrites = Task.CompletedTask;
 #endif
     private long _routeRevision;
+    private long _defaultDeviceRequest;
+    private string? _deviceError;
 
     private bool _pinned;
     private bool _loading;
@@ -502,6 +504,7 @@ internal sealed class QuickPanelWindow : LayeredWindow
 
     protected override void OnHidden()
     {
+        _deviceError = null;
         StopAnimationTimer();
         _timerInterval = 0;
         _animatingEntrance = false;
@@ -668,9 +671,9 @@ internal sealed class QuickPanelWindow : LayeredWindow
         rx = phoneRect.X - 6f;
 #endif
 
-        string verLabel = VersionLabel;
-        float verW = D2dSharedContext.Instance.MeasureText(verLabel, UiMetrics.FontFamily, 10.5f, 400, 80f, 20f, false).Width + 4f;
-        g.DrawText(verLabel, new UiRect(rx - verW, y, verW, 28f), theme.TextSecondary, 10.5f, 400, UiTextAlign.Trailing, UiVertAlign.Center);
+        var statusRect = new UiRect(titleRect.Right + 4f, y, MathF.Max(0f, rx - titleRect.Right - 4f), 28f);
+        g.DrawText(_deviceError ?? VersionLabel, statusRect, _deviceError == null ? theme.TextSecondary : theme.TextPrimary,
+            10.5f, 400, UiTextAlign.Trailing, UiVertAlign.Center);
 
         // 2. Output Device Selector + Expand Output Volumes Toggle
         y = headerRect.Bottom + 10f;
@@ -1976,8 +1979,8 @@ internal sealed class QuickPanelWindow : LayeredWindow
 #endif
         {
             write = !ctrl && !shift && !PcRoutingApi.IsPhoneOutputDevice(devId)
-                ? _host.CurrentApp.SelectOutputAsync(row.Pid, devId)
-                : _host.CurrentApp.SetOutputsAsync(row.Pid, preferred, nextOutputs);
+                ? _host.CurrentApp.SelectOutputAsync(row.Pid, devId, showOsd: false)
+                : _host.CurrentApp.SetOutputsAsync(row.Pid, preferred, nextOutputs, showOsd: false);
         }
         ObserveRoute(row.Identity, Flow.Render, write);
     }
@@ -2003,6 +2006,7 @@ internal sealed class QuickPanelWindow : LayeredWindow
 
     private async void ObserveRoute(string identity, Flow flow, Task<ControlReply> write)
     {
+        _deviceError = null;
         var key = (identity, flow);
         long version = ++_routeRevision;
         _pendingRoutes[key] = version;
@@ -2014,8 +2018,8 @@ internal sealed class QuickPanelWindow : LayeredWindow
             if (IsDisposed || _pendingRoutes.GetValueOrDefault(key) != version) return;
             _pendingRoutes.Remove(key);
             ++_routeRevision;
-            if (!applied) _host.ReportAudioWriteFailure();
-            else if (IsVisible) RefreshData();
+            if (!applied) ShowDeviceError(L10n.T("Tray.AudioActionFailed"));
+            if (IsVisible) RefreshData();
         });
     }
 
@@ -2046,6 +2050,37 @@ internal sealed class QuickPanelWindow : LayeredWindow
 #endif
     }
 
+    internal void ShowDeviceError(string message)
+    {
+        if (IsDisposed || !IsVisible) return;
+        _deviceError = message;
+        Invalidate();
+    }
+
+    private void SelectSystemDefault(string id)
+    {
+        _deviceError = null;
+        long request = ++_defaultDeviceRequest;
+        _host.SubmitPanelAudio(() =>
+        {
+            bool applied = false;
+            try
+            {
+                applied = _host.Audio.SetDefault(Flow.Render, id)
+                    && IdCmp.Equals(ProductAudio.DefaultId(Flow.Render, Role.Multimedia), id)
+                    && IdCmp.Equals(ProductAudio.DefaultId(Flow.Render, Role.Console), id);
+            }
+            catch (Exception ex) { ExceptionDiagnostics.Record("Panel.Default", ex); }
+            _host.PostContinuation(() =>
+            {
+                if (IsDisposed || request != _defaultDeviceRequest) return;
+                if (!applied) ShowDeviceError(L10n.T("Tray.AudioActionFailed"));
+                if (_outputVolumesPopup is { IsVisible: true }) _outputVolumesPopup.RefreshData();
+                _host.NotifyAudioVisualChanged();
+            });
+        });
+    }
+
     private void OpenMasterDeviceCombo(UiRect anchor)
     {
         var visibleOutputs = _outputs.Where(d => !_config.HiddenOutputDevices.Contains(d.Id)).ToArray();
@@ -2060,23 +2095,9 @@ internal sealed class QuickPanelWindow : LayeredWindow
         _comboPopup = ComboPopupWindow.ShowFor(_theme, this, anchor, choices, selected, picked =>
         {
             _comboPopup = null;
+            _deviceError = null;
             if (_config.PanelChangeSystemDefault)
-            {
-                _host.SubmitPanelAudio(() =>
-                {
-                    try
-                    {
-                        _host.Audio.SetDefault(Flow.Render, picked.Key);
-                        _host.TryPost(() =>
-                        {
-                            if (IsDisposed) return;
-                            RefreshData();
-                            _outputVolumesPopup?.RefreshData();
-                        });
-                    }
-                    catch (Exception ex) { ExceptionDiagnostics.Record("Panel.Default", ex); _host.TryPost(_host.ReportAudioWriteFailure); }
-                });
-            }
+                SelectSystemDefault(picked.Key);
             else
             {
                 _panelOutputId = picked.Key;
@@ -2139,7 +2160,7 @@ internal sealed class QuickPanelWindow : LayeredWindow
 
         if (_config.QuickPanelShowAllOutputVolumes && !_adjustMode)
         {
-            _outputVolumesPopup ??= new OutputVolumesPopupWindow(_host, _config, RefreshData, CheckAutoDismiss, OnOutputPopupEndpointChanged);
+            _outputVolumesPopup ??= new OutputVolumesPopupWindow(_host, _config, SelectSystemDefault, CheckAutoDismiss, OnOutputPopupEndpointChanged);
             _outputVolumesPopup.ShowForOwner(this, phoneOccupied);
         }
         else if (_outputVolumesPopup is { IsVisible: true })

@@ -98,6 +98,8 @@ internal static unsafe class NativeDialogs
         }
     }
 
+    internal static void ShowWarning(nint owner, string title, string message) => MessageBoxW(owner, message, title, 0x30);
+
     internal static void ShowError(nint owner, string title, string message) => MessageBoxW(owner, message, title, 0x10);
 
     internal static bool ConfirmImport(nint owner, string title, string message)
