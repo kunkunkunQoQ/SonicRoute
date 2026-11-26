@@ -8,13 +8,6 @@ namespace SonicRoute.Native.Product.Views;
 
 internal sealed class ThemePageView : IViewPage
 {
-    private static readonly (string Key, string LabelKey, UiIcon Icon)[] ThemeModes =
-    [
-        ("system", "St.ThemeSystem", UiIcon.Monitor),
-        ("light", "St.ThemeLight", UiIcon.Sun),
-        ("dark", "St.ThemeDark", UiIcon.Moon),
-    ];
-
     private readonly IViewHostActions _actions;
     private readonly UiScrollState _scroll = new();
     private readonly Dictionary<string, Action> _clicks = new(StringComparer.Ordinal);
@@ -65,7 +58,7 @@ internal sealed class ThemePageView : IViewPage
         string pageHint = L10n.T("Th.PageHint");
         float hintH = D2dSharedContext.Instance.MeasureText(pageHint, UiMetrics.FontFamily, 11.5f, 400, contentRect.Width, 60f, wrap: true).Height;
 
-        float card1H = 308f;
+        float card1H = 198f;
         float card2H = 148f;
         float card3H = 266f + (_osdMoreExpanded ? 164f : 0f);
         float card4H = 308f;
@@ -88,7 +81,7 @@ internal sealed class ThemePageView : IViewPage
 
         var card1 = new UiRect(contentRect.X, y, w, card1H);
         UiPrimitives.DrawCard(g, t, card1, UiMetrics.CardCornerRadius);
-        RenderModeAndAccentCard(g, t, hit, card1.Deflate(18f), cfg);
+        RenderAccentCard(g, t, hit, card1.Deflate(18f));
         y += card1H + 14f;
 
         var card2 = new UiRect(contentRect.X, y, w, card2H);
@@ -110,47 +103,8 @@ internal sealed class ThemePageView : IViewPage
         _scroll.Draw(g, t, hit, "th.scroll", contentRect);
     }
 
-    private void RenderModeAndAccentCard(D2dTarget g, UiThemePalette t, UiHitMap hit, UiRect inner, AppConfig cfg)
+    private void RenderAccentCard(D2dTarget g, UiThemePalette t, UiHitMap hit, UiRect box)
     {
-        float y = inner.Y;
-        DrawSectionBadgeHeader(g, t, new UiRect(inner.X, y, inner.Width, 38f), UiIcon.Palette, L10n.T("St.ThemeMode"), L10n.T("Th.ModeHint"));
-        y += 54f;
-
-        const float modeGap = 8f;
-        float modeW = MathF.Min(136f, (inner.Width - modeGap * 2f) / 3f);
-        for (int i = 0; i < ThemeModes.Length; i++)
-        {
-            var (key, labelKey, icon) = ThemeModes[i];
-            var mr = new UiRect(inner.X + i * (modeW + modeGap), y, modeW, 46f);
-            bool selected = string.Equals(cfg.ThemeMode, key, StringComparison.OrdinalIgnoreCase)
-                || (key == "system" && string.IsNullOrEmpty(cfg.ThemeMode));
-            string id = "th.mode." + key;
-            hit.Add(id, mr, UiCursorKind.Hand);
-            _clicks[id] = () =>
-            {
-                cfg.ThemeMode = key;
-                SaveAndNotifyTheme();
-            };
-
-            UiColor bg = selected ? t.NavSelected : hit.IsHover(id) ? t.NavHover : t.SurfaceBg;
-            g.FillRoundedRect(mr, 9f, bg);
-            g.DrawRoundedRect(mr, 9f, selected ? t.Accent : t.Border, 1f);
-            g.DrawIcon(icon, new UiRect(mr.X + 10f, mr.CenterY - 8f, 16f, 16f), selected ? t.Accent : t.TextSecondary, 1.8f);
-            g.DrawText(L10n.T(labelKey), new UiRect(mr.X + 33f, mr.Y, mr.Width - 42f, mr.Height),
-                t.TextPrimary, 12.5f, selected ? 600 : 400);
-
-            if (selected)
-            {
-                float cx = mr.Right - 4f;
-                float cy = mr.Y + 4f;
-                g.FillEllipse(cx, cy, 6.5f, 6.5f, t.Accent);
-                g.DrawIcon(UiIcon.Check, new UiRect(cx - 4.5f, cy - 4.5f, 9f, 9f), t.OnAccent, 2f);
-            }
-        }
-        y += 56f;
-
-        var box = new UiRect(inner.X, y, inner.Width, inner.Bottom - y);
-        g.DrawRoundedRect(box, 11f, t.Border, 1f);
         var boxIn = box.Deflate(14f, 12f);
 
         float previewW = MathF.Max(130f, (boxIn.Width - 14f) / 2.4f);
@@ -668,11 +622,6 @@ internal sealed class ThemePageView : IViewPage
         string previous = cfg.Accent;
         if (string.Equals(previous, value, StringComparison.OrdinalIgnoreCase)) return;
         cfg.Accent = value;
-        if (_actions.CommitSettings()) _actions.NotifyThemeChanged();
-    }
-
-    private void SaveAndNotifyTheme()
-    {
         if (_actions.CommitSettings()) _actions.NotifyThemeChanged();
     }
 

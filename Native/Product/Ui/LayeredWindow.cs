@@ -464,6 +464,9 @@ internal abstract unsafe class LayeredWindow : IDisposable
         _heldTrack = null;
     }
 
+    protected static bool ClientAreaAnimationsEnabled() =>
+        !SystemParametersInfoW(0x1042 /* SPI_GETCLIENTAREAANIMATION */, 0, out uint enabled, 0) || enabled != 0;
+
     protected void StartAnimationTimer(int intervalMs = 16)
     {
         if (Handle == 0 || _animTimerActive) return;

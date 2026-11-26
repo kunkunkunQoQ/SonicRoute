@@ -8,7 +8,7 @@ using SonicRoute.Updates;
 
 namespace SonicRoute.Native.Product.Views;
 
-internal sealed class MainWindowShell : LayeredWindow, IViewHostActions
+internal sealed partial class MainWindowShell : LayeredWindow, IViewHostActions
 {
     private static readonly string WindowTitle = $"{BuildIdentity.DisplayName} v{BuildIdentity.ProductVersion}";
 
@@ -331,6 +331,7 @@ internal sealed class MainWindowShell : LayeredWindow, IViewHostActions
         _activePage?.OnDeactivated();
         _sidebarAnimating = false;
         _sidebarWidth = _sidebarTargetWidth;
+        _modeAnimating = false;
         ReleaseRenderResources();
     }
 
@@ -348,6 +349,7 @@ internal sealed class MainWindowShell : LayeredWindow, IViewHostActions
             ClosePopups();
             _activePage?.OnDeactivated();
             StopAnimationTimer();
+            _modeAnimating = false;
             _sidebarAnimating = false;
             _sidebarWidth = _sidebarTargetWidth;
         }
@@ -396,7 +398,7 @@ internal sealed class MainWindowShell : LayeredWindow, IViewHostActions
 
     protected override void OnTickAnimation()
     {
-        bool anyAnim = false;
+        bool anyAnim = TickThemeSwitch();
         if (_sidebarAnimating)
         {
             float elapsedMs = (float)(Stopwatch.GetTimestamp() - _sidebarAnimStartTicks) * 1000f / Stopwatch.Frequency;
@@ -569,11 +571,12 @@ internal sealed class MainWindowShell : LayeredWindow, IViewHostActions
             DrawNavItem(g, MainNavTab.Experimental, L10n.T("Nav.Experimental"), UiIcon.Experiment, new UiRect(x, y, itemW, UiMetrics.NavItemHeight));
         }
 
+        float switchTop = DrawThemeSwitch(g, navRect);
         if (_config.MainSidebarCollapsed)
         {
             const string id = "shell.expandNavigation";
             var expand = new UiRect(navRect.X + (UiMetrics.NavCollapsedWidth - UiMetrics.NavItemHeight) * .5f,
-                navRect.Bottom - UiMetrics.NavItemHeight - 12f, UiMetrics.NavItemHeight, UiMetrics.NavItemHeight);
+                switchTop - UiMetrics.NavItemHeight - 5f, UiMetrics.NavItemHeight, UiMetrics.NavItemHeight);
             UiPrimitives.DrawGhostIconButton(g, _theme, _hit, id, expand, UiIcon.ExpandNav, 19f,
                 tooltip: L10n.T("Window.ExpandNavigation"));
         }
@@ -735,6 +738,11 @@ internal sealed class MainWindowShell : LayeredWindow, IViewHostActions
 
     private bool ActivateShellControl(string? clickId)
     {
+        if (clickId is "shell.mode.system" or "shell.mode.light" or "shell.mode.dark")
+        {
+            SelectThemeMode(clickId);
+            return true;
+        }
         switch (clickId)
         {
             case "shell.expandNavigation": if (_config.MainSidebarCollapsed) ToggleSidebar(); break;
