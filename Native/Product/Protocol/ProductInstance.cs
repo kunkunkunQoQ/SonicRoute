@@ -26,6 +26,7 @@ internal sealed class ProductInstance : IDisposable
     {
         if (!IsPrimary || _rules != null) throw new InvalidOperationException("Listener requires the primary instance.");
         _rules = new PipeListener(_profile.RulePipeName, async s => new ControlReply(await executeRule(s).ConfigureAwait(false)));
+        if (!_profile.IsIsolated) return;
         try { _control = new PipeListener(_profile.ControlPipeName, executeControl); }
         catch { _rules.Dispose(); _rules = null; throw; }
     }

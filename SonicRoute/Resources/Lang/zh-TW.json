@@ -15,6 +15,7 @@
   "Auto.ActionListSeparator": "、",
   "Config.CorruptRecovered": "設定檔損毀，原檔已保留於：{0}\n已讀取上次儲存的備份。",
   "Config.CorruptDefaults": "設定檔損毀，原檔已保留於：{0}\n此次使用預設值，原檔可供還原。",
+  "Config.FieldsRecovered": "以下設定的值無法讀取，已個別復原：{1}。其他設定均已保留。原始檔案：{0}",
   "Config.LoadBlocked": "無法讀取設定檔或另外保留原檔。為保護原有設定，已暫停儲存。\n原始檔案：{0}\n請檢查檔案與存取權限，修正後重新啟動 SonicRoute。",
   "App.RestartFailed": "無法重新啟動 SonicRoute。程式仍在執行，請稍後再試。",
   "Diagnostics.StartupFailed": "啟動失敗。診斷記錄：{0}",

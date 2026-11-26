@@ -34,10 +34,14 @@ internal sealed partial class PhoneClipboard : IDisposable
     private readonly Func<AndroidDevice, bool>? _isRemoved;
     private readonly Func<AndroidDevice, AndroidDevice?>? _resolveOnline;
     private readonly List<AndroidDevice> _enabledDevices = new();
+    private readonly List<AndroidDevice> _archivedDevices = new();
+    private readonly Func<AndroidDevice, AndroidDevice?>? _findSaved;
+    private Dictionary<string, JsonElement>? _otherSettings;
+    private bool _readFailed;
     private readonly object _saveGate = new();
     private Task _saveTask = Task.CompletedTask;
     private bool _saving;
-    private AndroidDevice[]? _pendingSave;
+    private ClipboardPreferences? _pendingSave;
 
     private CancellationTokenSource? _lifetime;
     private Channel<string>? _outgoing;
@@ -58,7 +62,8 @@ internal sealed partial class PhoneClipboard : IDisposable
         IMainThread owner,
         string? settingsPath = null,
         Func<AndroidDevice, bool>? isRemoved = null,
-        Func<AndroidDevice, AndroidDevice?>? resolveOnline = null)
+        Func<AndroidDevice, AndroidDevice?>? resolveOnline = null,
+        Func<AndroidDevice, AndroidDevice?>? findSaved = null)
     {
         _adb = adb;
         _window = window;
@@ -66,6 +71,7 @@ internal sealed partial class PhoneClipboard : IDisposable
         _settingsPath = settingsPath;
         _isRemoved = isRemoved;
         _resolveOnline = resolveOnline;
+        _findSaved = findSaved;
     }
 
     internal bool Enabled => Volatile.Read(ref _enabled) != 0 || _enabledDevices.Count > 0;
@@ -75,6 +81,7 @@ internal sealed partial class PhoneClipboard : IDisposable
     internal bool IsEnabled(AndroidDevice? device)
     {
         if (device == null) return false;
+        EnsureLoaded();
         lock (_enabledDevices)
             return _enabledDevices.Any(d => AndroidDeviceIdentity.MatchesSavedDevice(d, device));
     }
@@ -88,69 +95,65 @@ internal sealed partial class PhoneClipboard : IDisposable
         return L10n.T("Phone.ClipboardWaitingPhone");
     }
 
-    internal static bool HasConfiguredDevices(string path)
+    internal void Initialize(ClipboardPreferences saved)
     {
-        try
-        {
-            var info = new FileInfo(path);
-            if (!info.Exists || info.Length == 0 || info.Length > 64 * 1024) return false;
-            using var stream = File.OpenRead(path);
-            using var doc = JsonDocument.Parse(stream);
-            var root = doc.RootElement;
-            if (root.ValueKind != JsonValueKind.Object) return false;
-            if (!root.TryGetProperty("Version", out var v) || v.ValueKind != JsonValueKind.Number || !v.TryGetInt32(out int ver) || ver != 1)
-                return false;
-            if (!root.TryGetProperty("EnabledDevices", out var arr) || arr.ValueKind != JsonValueKind.Array)
-                return false;
-            foreach (var item in arr.EnumerateArray())
-            {
-                if (item.ValueKind != JsonValueKind.Object) continue;
-                if (item.TryGetProperty("Serial", out var s) && s.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(s.GetString()))
-                    return true;
-            }
-            return false;
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
-        {
-            return false;
-        }
+        if (_initialized || Volatile.Read(ref _disposed) != 0) return;
+        ApplyPreferences(saved);
+        Reconcile();
+        NotifyChanged();
     }
 
-    internal async Task InitializeAsync()
+    // Device management can open a previously idle phone store.
+    private void EnsureLoaded()
     {
-        if (_initialized || Volatile.Read(ref _disposed) != 0 || string.IsNullOrEmpty(_settingsPath)) return;
-        _initialized = true;
-        var loaded = await Task.Run(() => LoadEnabledDevices(_settingsPath)).ConfigureAwait(false);
-        if (Volatile.Read(ref _disposed) != 0 || loaded.Length == 0) return;
+        if (!_initialized) ApplyPreferences(_settingsPath == null ? new() : ClipboardPreferences.TryLoad(_settingsPath));
+    }
 
-        _owner.TryPost(() =>
-        {
-            if (Volatile.Read(ref _disposed) != 0) return;
-            lock (_enabledDevices)
-            {
-                foreach (var d in loaded)
-                {
-                    if (_isRemoved?.Invoke(d) == true) continue;
-                    if (_enabledDevices.Count >= 32) break;
-                    if (!_enabledDevices.Any(x => AndroidDeviceIdentity.MatchesSavedDevice(x, d)))
-                        _enabledDevices.Add(d);
-                }
-            }
-            Reconcile();
-            NotifyChanged();
-        });
+    private void ApplyPreferences(ClipboardPreferences? saved)
+    {
+        _initialized = true;
+        if (saved == null) { _readFailed = _saveError = true; return; }
+        _otherSettings = saved.Other;
+        _enabledDevices.AddRange(saved.Enabled);
+        _archivedDevices.AddRange(saved.Archived.Where(d => AndroidDeviceIdentity.StableKey(d) != null));
     }
 
     internal void Reconcile()
     {
         if (Volatile.Read(ref _disposed) != 0) return;
+        EnsureLoaded();
+        bool changed = false;
         AndroidDevice? target = null;
         lock (_enabledDevices)
         {
             for (int i = _enabledDevices.Count - 1; i >= 0; i--)
             {
-                if (_isRemoved?.Invoke(_enabledDevices[i]) == true)
+                var saved = _enabledDevices[i];
+                if (_isRemoved?.Invoke(saved) == true)
+                {
+                    if (AndroidDeviceIdentity.StableKey(saved) != null && !_archivedDevices.Any(d => AndroidDeviceIdentity.SamePhysicalDevice(saved, d)))
+                        _archivedDevices.Add(saved);
                     _enabledDevices.RemoveAt(i);
+                    changed = true;
+                }
+                else if (_findSaved?.Invoke(saved) is { } current && !AndroidDeviceIdentity.SameTransport(saved, current))
+                {
+                    _enabledDevices[i] = current;
+                    changed = true;
+                }
+            }
+            for (int i = _archivedDevices.Count - 1; i >= 0; i--)
+            {
+                var saved = _archivedDevices[i];
+                if (_findSaved?.Invoke(saved) is not { } current || !AndroidDeviceIdentity.SamePhysicalDevice(saved, current)
+                    || _isRemoved?.Invoke(current) == true) continue;
+                if (!IsEnabled(current))
+                {
+                    if (_enabledDevices.Count >= 32) continue;
+                    _enabledDevices.Add(current);
+                }
+                _archivedDevices.RemoveAt(i);
+                changed = true;
             }
             foreach (var saved in _enabledDevices)
             {
@@ -162,6 +165,7 @@ internal sealed partial class PhoneClipboard : IDisposable
                 }
             }
         }
+        if (changed) QueueSave();
         if (target != null)
             StartBridge(target);
         else if (Volatile.Read(ref _enabled) != 0)
@@ -174,6 +178,8 @@ internal sealed partial class PhoneClipboard : IDisposable
     {
         ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
         ArgumentNullException.ThrowIfNull(device);
+        EnsureLoaded();
+        if (_readFailed) { NotifyChanged(); return; }
         if (enabled && _isRemoved?.Invoke(device) == true) return;
 
         bool listChanged = false;
@@ -224,19 +230,6 @@ internal sealed partial class PhoneClipboard : IDisposable
         }
         if (listChanged) QueueSave();
         StopBridge(L10n.T("Phone.ClipboardDefaultHint"));
-    }
-
-    internal void DisableForDevice(AndroidDevice device)
-    {
-        bool listChanged;
-        lock (_enabledDevices)
-            listChanged = _enabledDevices.RemoveAll(d => AndroidDeviceIdentity.MatchesSavedDevice(d, device)) > 0;
-        if (listChanged) QueueSave();
-        if (_device is { } current && AndroidDeviceIdentity.MatchesSavedDevice(current, device))
-        {
-            StopBridge(L10n.T("Phone.ClipboardDefaultHint"));
-            Reconcile();
-        }
     }
 
     private void StartBridge(AndroidDevice device)
@@ -488,11 +481,11 @@ internal sealed partial class PhoneClipboard : IDisposable
 
     private void QueueSave()
     {
-        if (string.IsNullOrEmpty(_settingsPath)) return;
+        if (_readFailed || string.IsNullOrEmpty(_settingsPath)) return;
         lock (_saveGate)
         {
             lock (_enabledDevices)
-                _pendingSave = _enabledDevices.Select(d => d with { Name = "", State = "offline", TransportId = null }).ToArray();
+                _pendingSave = new(ClipboardPreferences.Snapshot(_enabledDevices), ClipboardPreferences.Snapshot(_archivedDevices), _otherSettings);
             if (_saving) return;
             _saving = true;
             _saveTask = Task.Run(SaveLoopAsync);
@@ -506,10 +499,11 @@ internal sealed partial class PhoneClipboard : IDisposable
             await Task.Delay(100).ConfigureAwait(false);
             while (true)
             {
-                AndroidDevice[] snapshot;
+                ClipboardPreferences snapshot;
                 lock (_saveGate) snapshot = _pendingSave!;
                 Directory.CreateDirectory(Path.GetDirectoryName(_settingsPath!)!);
-                AtomicFile.Write(_settingsPath!, stream => WriteJson(stream, snapshot));
+                AtomicFile.BackupBeforeWrite(_settingsPath!);
+                AtomicFile.Write(_settingsPath!, snapshot.Write);
                 lock (_saveGate)
                 {
                     if (ReferenceEquals(snapshot, _pendingSave))
@@ -528,65 +522,6 @@ internal sealed partial class PhoneClipboard : IDisposable
         {
             lock (_saveGate) _saving = false;
             _owner.TryPost(() => { _saveError = true; NotifyChanged(); });
-        }
-    }
-
-    private static void WriteJson(Stream stream, AndroidDevice[] devices)
-    {
-        using var writer = new Utf8JsonWriter(stream);
-        writer.WriteStartObject();
-        writer.WriteNumber("Version", 1);
-        writer.WritePropertyName("EnabledDevices");
-        writer.WriteStartArray();
-        foreach (var d in devices)
-        {
-            writer.WriteStartObject();
-            writer.WriteString("Serial", d.Serial);
-            writer.WriteString("Name", d.Name);
-            writer.WriteString("State", d.State);
-            writer.WriteBoolean("IsWifi", d.IsWifi);
-            if (d.HardwareId != null) writer.WriteString("HardwareId", d.HardwareId);
-            if (d.TransportId != null) writer.WriteString("TransportId", d.TransportId);
-            if (d.IdentityFingerprint != null) writer.WriteString("IdentityFingerprint", d.IdentityFingerprint);
-            writer.WriteEndObject();
-        }
-        writer.WriteEndArray();
-        writer.WriteEndObject();
-        writer.Flush();
-    }
-
-    private static AndroidDevice[] LoadEnabledDevices(string path)
-    {
-        try
-        {
-            var info = new FileInfo(path);
-            if (!info.Exists || info.Length == 0 || info.Length > 64 * 1024) return [];
-            using var stream = File.OpenRead(path);
-            using var doc = JsonDocument.Parse(stream);
-            var root = doc.RootElement;
-            if (root.ValueKind != JsonValueKind.Object) return [];
-            if (!root.TryGetProperty("Version", out var ver) || ver.ValueKind != JsonValueKind.Number || !ver.TryGetInt32(out int version) || version != 1)
-                return [];
-            if (!root.TryGetProperty("EnabledDevices", out var arr) || arr.ValueKind != JsonValueKind.Array)
-                return [];
-            var list = new List<AndroidDevice>();
-            foreach (var item in arr.EnumerateArray())
-            {
-                if (item.ValueKind != JsonValueKind.Object) continue;
-                string? serial = item.TryGetProperty("Serial", out var sp) && sp.ValueKind == JsonValueKind.String ? sp.GetString() : null;
-                if (string.IsNullOrWhiteSpace(serial) || serial.Length > 512) continue;
-                string? hw = item.TryGetProperty("HardwareId", out var hp) && hp.ValueKind == JsonValueKind.String ? hp.GetString() : null;
-                if (hw != null && hw.Length > 128) continue;
-                bool isWifi = item.TryGetProperty("IsWifi", out var wp) && wp.ValueKind == JsonValueKind.True;
-                string? fp = item.TryGetProperty("IdentityFingerprint", out var fpp) && fpp.ValueKind == JsonValueKind.String ? fpp.GetString() : null;
-                list.Add(new AndroidDevice(serial, "", "offline", isWifi, hw) { IdentityFingerprint = fp });
-                if (list.Count >= 32) break;
-            }
-            return list.DistinctBy(AndroidDeviceIdentity.Key).ToArray();
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
-        {
-            return [];
         }
     }
 

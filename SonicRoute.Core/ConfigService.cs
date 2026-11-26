@@ -10,6 +10,9 @@ namespace SonicRoute.Core
     /// <summary>应用配置（持久化到 %LocalAppData%\SonicRoute\config.json）。</summary>
     public sealed class AppConfig
     {
+        [System.Text.Json.Serialization.JsonExtensionData]
+        public Dictionary<string, JsonElement>? AdditionalFields { get; set; }
+
         /// <summary>快速界面隐藏的播放设备（短 ID 列表）。</summary>
         public List<string> HiddenOutputDevices { get; set; } = new();
 
@@ -199,6 +202,17 @@ namespace SonicRoute.Core
         /// <summary>JSON can explicitly assign null despite the declared non-null contracts.</summary>
         public void NormalizeCollections()
         {
+            AdditionalFields?.Remove("AppIconAssets"); // Only explicit exports contain icon payloads.
+            IgnoredUpdateVersion ??= "";
+            Language ??= "";
+            ThemeMode ??= "system";
+            Accent ??= "blue";
+            DefaultAppMode ??= "recent";
+            LastUsedAppName ??= "";
+            FixedAppName ??= "";
+            AirPlayReceiverName ??= "";
+            QuickPanelPosMode ??= "default";
+            OsdPosition ??= "TR";
             HiddenOutputDevices = NormalizeList(HiddenOutputDevices);
             HiddenInputDevices = NormalizeList(HiddenInputDevices);
             DisabledAutoSwitchApps = NormalizeList(DisabledAutoSwitchApps);
@@ -238,6 +252,7 @@ namespace SonicRoute.Core
         public AppConfig Snapshot()
         {
             var copy = (AppConfig)MemberwiseClone();
+            if (AdditionalFields != null) copy.AdditionalFields = new(AdditionalFields, StringComparer.Ordinal);
             copy.HiddenOutputDevices = new(HiddenOutputDevices ?? new());
             copy.HiddenInputDevices = new(HiddenInputDevices ?? new());
             copy.DisabledAutoSwitchApps = new(DisabledAutoSwitchApps ?? new());
@@ -252,7 +267,7 @@ namespace SonicRoute.Core
         }
     }
 
-    public static class ConfigService
+    public static partial class ConfigService
     {
         public static string ConfigPath => Path.Combine(
             AppDataRoot.DirectoryPath,
@@ -264,8 +279,9 @@ namespace SonicRoute.Core
             public string? PreservedPath { get; }
             public bool UsedBackup { get; }
             public bool SavesBlocked { get; }
-            internal LoadWarningInfo(string? preservedPath, bool usedBackup, bool savesBlocked)
-            { PreservedPath = preservedPath; UsedBackup = usedBackup; SavesBlocked = savesBlocked; }
+            public string[] RecoveredFields { get; }
+            internal LoadWarningInfo(string? preservedPath, bool usedBackup, bool savesBlocked, string[]? fields = null)
+            { PreservedPath = preservedPath; UsedBackup = usedBackup; SavesBlocked = savesBlocked; RecoveredFields = fields ?? Array.Empty<string>(); }
         }
         public static LoadWarningInfo? LoadWarning { get; private set; }
         private static bool _savesBlocked;
@@ -341,9 +357,17 @@ namespace SonicRoute.Core
             {
                 lock (_lock) if (_cache != null) return _cache;
                 // Serialize the one-time read/quarantine with saves and other first-load callers.
-                AutoRuleStore.MigrateLegacyIfNeeded();
+                bool migratedRules = AutoRuleStore.MigrateLegacyIfNeeded();
                 AppConfig cfg;
                 try { cfg = File.Exists(ConfigPath) ? ReadConfig(ConfigPath) : new AppConfig(); }
+#if NET10_0_OR_GREATER
+                catch (JsonException) when (TryRecoverFields(ConfigPath, out var recovered, out var fields, out var preserved))
+                {
+                    cfg = recovered;
+                    _savesBlocked = preserved == null;
+                    LoadWarning = new LoadWarningInfo(preserved, false, _savesBlocked, fields);
+                }
+#endif
                 catch (Exception ex)
                 {
                     ExceptionDiagnostics.Record("Config.Load", ex);
@@ -364,9 +388,15 @@ namespace SonicRoute.Core
                         catch (Exception preserveError)
                         { preserved = null; ExceptionDiagnostics.Record("Config.Preserve", preserveError); }
                     }
+                    if (usedBackup && preserved != null && !_savesBlocked)
+                    {
+                        try { AtomicFile.WriteAllText(ConfigPath, JsonSerializer.Serialize(cfg, WriteContract)); }
+                        catch (Exception restoreError) { _savesBlocked = true; ExceptionDiagnostics.Record("Config.RestoreBackup", restoreError); }
+                    }
                     LoadWarning = new LoadWarningInfo(preserved, usedBackup, _savesBlocked);
                 }
                 cfg.NormalizeCollections();
+                if (migratedRules) cfg.AdditionalFields?.Remove("AutoRules");
                 lock (_lock)
                 {
                     // A settings owner can publish a queued save while this cold read is in progress.

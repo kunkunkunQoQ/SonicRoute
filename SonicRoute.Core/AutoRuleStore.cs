@@ -445,46 +445,61 @@ namespace SonicRoute.Core
         /// 将旧 config.json 中的 AutoRules 字段迁移到独立目录（按规则名称命名）；Automation 目录已有文件则跳过。
         /// 迁移后 config.json 中的 AutoRules 键在下次 Save（整体序列化，AppConfig 已无该字段）时自然清除。
         /// </summary>
-        internal static void MigrateLegacyIfNeeded()
+        internal static bool MigrateLegacyIfNeeded()
         {
             try
             {
-                if (Directory.Exists(RulesDir)
-                    && Directory.GetFiles(RulesDir, "*.json").Length > 0) return;
+                string marker = Path.Combine(RulesDir, ".legacy-import");
+                bool resume = File.Exists(marker);
+                if (!resume && Directory.Exists(RulesDir) && Directory.EnumerateFiles(RulesDir, "*.json").Any()) return true;
                 var cfgPath = ConfigService.ConfigPath;
-                if (!File.Exists(cfgPath)) return;
+                if (!File.Exists(cfgPath)) return false;
                 using var doc = JsonDocument.Parse(File.ReadAllText(cfgPath));
                 if (!doc.RootElement.TryGetProperty("AutoRules", out var arr)
-                    || arr.ValueKind != JsonValueKind.Array) return;
+                    || arr.ValueKind != JsonValueKind.Array) return false;
 
 #if NET10_0_OR_GREATER
                 var legacy = arr.Deserialize(PersistenceJsonContext.Default.ListAutoRule);
 #else
                 var legacy = arr.Deserialize<List<AutoRule>>(ReadContract);
 #endif
-                if (legacy == null || legacy.Count == 0) return;
+                if (legacy == null || legacy.Count == 0) return true;
                 Directory.CreateDirectory(RulesDir);
-                var occupied = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                foreach (var f in Directory.GetFiles(RulesDir, "*.json"))
-                    occupied.Add(Path.GetFileNameWithoutExtension(f));
-                foreach (var r in legacy)
+                string legacyCopy = cfgPath + ".pre-automation.bak";
+                if (!File.Exists(legacyCopy))
+                    AtomicFile.Write(legacyCopy, output => { using var source = File.OpenRead(cfgPath); source.CopyTo(output); });
+                using (var guard = new FileStream(marker, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None))
                 {
-                    if (r == null || string.IsNullOrWhiteSpace(r.Id)) continue;
-                    var baseName = SanitizeFileName(r.Name);
-                    var fileName = baseName + ".json";
-                    int n = 1;
-                    while (occupied.Contains(Path.GetFileNameWithoutExtension(fileName)))
-                        fileName = $"{baseName}({n++}).json";
-                    occupied.Add(Path.GetFileNameWithoutExtension(fileName));
-                    AtomicFile.WriteAllText(
-                        Path.Combine(RulesDir, fileName),
-                        JsonSerializer.Serialize(r, WriteContract));
+                    var imported = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    var occupied = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    foreach (var f in Directory.GetFiles(RulesDir, "*.json"))
+                    {
+                        occupied.Add(Path.GetFileNameWithoutExtension(f));
+                        using var existing = JsonDocument.Parse(File.ReadAllText(f));
+                        if (existing.RootElement.TryGetProperty("Id", out var id) && id.GetString() is { } value) imported.Add(value);
+                    }
+                    foreach (var r in legacy)
+                    {
+                        if (r == null || string.IsNullOrWhiteSpace(r.Id) || !imported.Add(r.Id)) continue;
+                        var baseName = SanitizeFileName(r.Name);
+                        var fileName = baseName + ".json";
+                        int n = 1;
+                        while (occupied.Contains(Path.GetFileNameWithoutExtension(fileName)))
+                            fileName = $"{baseName}({n++}).json";
+                        occupied.Add(Path.GetFileNameWithoutExtension(fileName));
+                        AtomicFile.WriteAllText(
+                            Path.Combine(RulesDir, fileName),
+                            JsonSerializer.Serialize(r, WriteContract));
+                    }
                 }
+                File.Delete(marker);
                 Invalidate();
+                return true;
             }
-            catch
+            catch (Exception error)
             {
-                // 迁移失败静默：不阻断启动，用户下次保存规则时重新写入独立目录
+                ExceptionDiagnostics.Record("Automation.LegacyConfig", error);
+                return false;
             }
         }
     }

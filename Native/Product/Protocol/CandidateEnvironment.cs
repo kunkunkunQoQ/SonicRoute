@@ -11,10 +11,10 @@ namespace SonicRoute.Native.Product;
 /// <summary>Resolve every persistent/OS identity before the first Core singleton is touched.</summary>
 internal sealed class CandidateEnvironment
 {
-    private CandidateEnvironment(string root, string id)
+    private CandidateEnvironment(string root, string data, string id)
     {
         Root = root;
-        DataDirectory = Path.Combine(root, "data");
+        DataDirectory = data;
         InstanceId = id;
         var runtime = AppRuntimeIdentity.Current;
         MutexName = runtime.MutexName;
@@ -40,46 +40,81 @@ internal sealed class CandidateEnvironment
     internal string ActivationMessage { get; }
     internal string Edition => BuildIdentity.Edition;
     internal bool IsPackaged { get; }
+    internal bool IsIsolated => InstanceId.Length != 0;
 
     internal static CandidateEnvironment Open()
     {
         bool packaged = NativePackageIdentity.IsPackaged();
-        if (packaged && !NativePackageIdentity.GetApplicationUserModelId().StartsWith(
-            "SonicRoute.PhaseOne.Validation_", StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException("A candidate requires its isolated validation package identity.");
-
+        bool validationPackage = packaged && NativePackageIdentity.GetApplicationUserModelId().StartsWith(
+            "SonicRoute.PhaseOne.Validation_", StringComparison.OrdinalIgnoreCase);
         string local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-        string requested = Environment.GetEnvironmentVariable("SONICROUTE_CANDIDATE_ROOT") ?? local;
-        string profile = Environment.GetEnvironmentVariable("SONICROUTE_CANDIDATE_ID") ?? "v136-preview";
-        if (profile.Length is < 1 or > 48 || !profile.All(c => char.IsAsciiLetterOrDigit(c) || c == '-' || c == '_'))
-            throw new ArgumentException("Invalid candidate profile name.");
-        if (!Path.IsPathFullyQualified(requested) || requested.StartsWith(@"\\", StringComparison.Ordinal) ||
-            requested.Length < 3 || requested[1] != ':' || requested.AsSpan(2).Contains(':') ||
-            requested.Split('\\','/').Any(p => p.EndsWith('.') || p.EndsWith(' ')))
-            throw new ArgumentException("Candidate root must be an absolute local directory.");
-        string root = Path.Combine(Path.GetFullPath(requested), "SonicRoute.NativeCandidate", profile,
-            (packaged ? "Store-" : "") + BuildIdentity.Edition);
+        string productionData = Path.Combine(local, "SonicRoute");
+        string? requested = Environment.GetEnvironmentVariable("SONICROUTE_CANDIDATE_ROOT");
+        string? profile = Environment.GetEnvironmentVariable("SONICROUTE_CANDIDATE_ID");
+        string? overrideData = Environment.GetEnvironmentVariable("SONICROUTE_DATA_DIRECTORY");
+        string? id = Environment.GetEnvironmentVariable("SONICROUTE_INSTANCE_ID")?.Trim();
+        string root, data;
+        if (validationPackage || requested != null || profile != null)
+        {
+            profile ??= "v136-preview"; // Existing explicitly isolated launchers and validation packages.
+            ValidateName(profile);
+            root = Path.Combine(LocalDirectory(requested ?? local), "SonicRoute.NativeCandidate", profile,
+                (packaged ? "Store-" : "") + BuildIdentity.Edition);
+            data = Path.Combine(root, "data");
+            id = null; // Derive the original candidate identity from its root.
+        }
+        else
+        {
+            data = overrideData == null ? productionData : LocalDirectory(overrideData);
+            if (string.Equals(data, productionData, StringComparison.OrdinalIgnoreCase))
+            {
+                if (!string.IsNullOrEmpty(id)) throw new ArgumentException("An isolated instance requires a separate data directory.");
+                // The updater may forward the normal data path explicitly to its worker.
+                return new CandidateEnvironment(data, AppDataRoot.DirectoryPath, "");
+            }
+            root = data;
+            if (!string.IsNullOrEmpty(id)) ValidateName(id);
+        }
+
         string[] protectedDirectories = [
-            Path.Combine(local, "SonicRoute"), Path.Combine(local, "Packages"),
+            productionData, Path.Combine(local, "Packages"),
             Environment.GetFolderPath(Environment.SpecialFolder.Windows),
             Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
             Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86)
         ];
-        if (protectedDirectories.Any(p => p.Length > 0 && ContainsPath(p, root)))
-            throw new InvalidOperationException("Candidate data overlaps a protected installation or user profile.");
-        string data = Path.Combine(root, "data");
+        if (protectedDirectories.Any(p => p.Length > 0 && (ContainsPath(p, root) || ContainsPath(root, p))))
+            throw new InvalidOperationException("Isolated data overlaps a protected installation or user profile.");
         UpdateProtocol.RejectReparsePoints(data);
         UpdateProtocol.RejectReparsePoints(Path.Combine(data, "Updates"));
         Directory.CreateDirectory(data);
-        string key = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(root.ToUpperInvariant())))[..24];
-        string instance = "NativeCandidate_" + key;
+        if (string.IsNullOrEmpty(id))
+        {
+            string key = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(root.ToUpperInvariant())))[..24];
+            id = "NativeCandidate_" + key;
+        }
         Environment.SetEnvironmentVariable("SONICROUTE_DATA_DIRECTORY", data);
-        Environment.SetEnvironmentVariable("SONICROUTE_INSTANCE_ID", instance);
-        var result = new CandidateEnvironment(root, instance);
+        Environment.SetEnvironmentVariable("SONICROUTE_INSTANCE_ID", id);
+        Environment.SetEnvironmentVariable("SONICROUTE_ISOLATED_ADB_KEYS", Path.Combine(data, "adb-keys"));
+        var result = new CandidateEnvironment(root, data, id);
         if (!string.Equals(AppDataRoot.DirectoryPath, data, StringComparison.OrdinalIgnoreCase)
-            || !result.MutexName.Contains(instance, StringComparison.Ordinal))
-            throw new InvalidOperationException("Candidate identity was initialized out of order.");
+            || !result.MutexName.Contains(id, StringComparison.Ordinal))
+            throw new InvalidOperationException("Isolated identity was initialized out of order.");
         return result;
+    }
+
+    private static void ValidateName(string value)
+    {
+        if (value.Length is < 1 or > 80 || !value.All(c => char.IsAsciiLetterOrDigit(c) || c == '-' || c == '_'))
+            throw new ArgumentException("Invalid isolated profile name.");
+    }
+
+    private static string LocalDirectory(string path)
+    {
+        if (!Path.IsPathFullyQualified(path) || path.StartsWith(@"\\", StringComparison.Ordinal) ||
+            path.Length < 3 || path[1] != ':' || path.AsSpan(2).Contains(':') ||
+            path.Split('\\', '/').Any(p => p.EndsWith('.') || p.EndsWith(' ')))
+            throw new ArgumentException("An isolated data path must be an absolute local directory.");
+        return Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));
     }
 
     private static bool ContainsPath(string directory, string path)
@@ -91,7 +126,7 @@ internal sealed class CandidateEnvironment
 
     internal void EnsureInstallTarget(string path)
     {
-        if (!string.Equals(Path.GetDirectoryName(Path.GetFullPath(path)), InstallDirectory, StringComparison.OrdinalIgnoreCase))
+        if (IsIsolated && !string.Equals(Path.GetDirectoryName(Path.GetFullPath(path)), InstallDirectory, StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("Updates require a candidate executable in its profile's install directory.");
         UpdateProtocol.RejectReparsePoints(path);
     }

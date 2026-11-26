@@ -15,6 +15,7 @@
   "Auto.ActionListSeparator": ", ",
   "Config.CorruptRecovered": "El archivo de configuración está dañado. Se ha conservado el original en {0}.\nSe ha cargado la última copia de seguridad.",
   "Config.CorruptDefaults": "El archivo de configuración está dañado. Se ha conservado el original en {0}.\nSe usarán los ajustes predeterminados. Puedes utilizar el archivo original para recuperar la configuración.",
+  "Config.FieldsRecovered": "Se repararon los ajustes que no se pudieron leer: {1}. Se conservaron los demás. Archivo original: {0}",
   "Config.LoadBlocked": "No se ha podido leer el archivo de configuración o guardar una copia del original. Se ha suspendido el guardado para proteger tus ajustes.\nArchivo original: {0}\nCorrige el archivo o sus permisos de acceso y reinicia SonicRoute.",
   "App.RestartFailed": "SonicRoute no ha podido reiniciarse. La aplicación sigue abierta. Vuelve a intentarlo más tarde.",
   "Diagnostics.StartupFailed": "Error al iniciar. Registro de diagnóstico: {0}",

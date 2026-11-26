@@ -15,6 +15,7 @@
   "Auto.ActionListSeparator": ", ",
   "Config.CorruptRecovered": "설정 파일이 손상되었습니다. 원본 보관 위치: {0}\n이전 백업을 불러왔습니다.",
   "Config.CorruptDefaults": "설정 파일이 손상되었습니다. 원본 보관 위치: {0}\n기본 설정을 사용하며 원본은 복구용으로 보관됩니다.",
+  "Config.FieldsRecovered": "읽을 수 없는 설정을 복구했습니다: {1}. 나머지 설정은 유지했습니다. 원본 파일: {0}",
   "Config.LoadBlocked": "설정 파일을 읽거나 보관할 수 없습니다. 원래 설정을 보호하기 위해 저장을 일시 중지했습니다.\n원본: {0}\n파일 또는 접근 권한을 수정한 후 다시 시작하세요.",
   "App.RestartFailed": "SonicRoute를 다시 시작하지 못했습니다. 앱은 계속 실행 중입니다. 잠시 후 다시 시도하세요.",
   "Diagnostics.StartupFailed": "시작하지 못했습니다. 진단 로그: {0}",

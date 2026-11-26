@@ -24,6 +24,7 @@ internal sealed class AdbKeyStore : IDisposable
 
     public AdbKeyStore(string? directory = null)
     {
+        directory ??= Environment.GetEnvironmentVariable("SONICROUTE_ISOLATED_ADB_KEYS");
         _directory = string.IsNullOrWhiteSpace(directory)
             ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".android")
             : Path.GetFullPath(directory);

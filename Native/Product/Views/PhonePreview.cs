@@ -67,7 +67,7 @@ internal sealed class PhonePreview : IDisposable
         var runtime = new VirtualDisplayRuntime(Adb);
         Displays = new(() => new InProcessVirtualDisplayClient(Adb, runtime, () => Settings));
         Clipboard = new(Adb, shell, owner, Path.Combine(root, "phone-clipboard.json"),
-            d => Store.IsRemoved(d), d => Connections.Resolve(d));
+            d => Store.IsRemoved(d), d => Connections.Resolve(d), d => Store.FindProfile(d)?.LastDevice);
 
         Sources.Changed += Notify;
         Discovery.Changed += Observe;
@@ -521,7 +521,6 @@ internal sealed class PhonePreview : IDisposable
         foreach (var alias in aliases.DistinctBy(AndroidDeviceIdentity.Key))
         {
             Settings.ForgetPhoneRoutes(alias);
-            owner.TryPost(() => { if (Volatile.Read(ref closed) == 0) Clipboard.DisableForDevice(alias); });
             await Task.WhenAll(
                 Sources.RemovePhoneAsync(alias),
                 Displays.CloseDeviceAsync(alias),
@@ -939,14 +938,20 @@ internal sealed partial class ApplicationHost
         }
 
         string clipboardPath = Path.Combine(_environment.DataDirectory, "phone-clipboard.json");
-        bool hasClipboard = File.Exists(clipboardPath) && PhoneClipboard.HasConfiguredDevices(clipboardPath);
+        var preferences = File.Exists(clipboardPath) ? ClipboardPreferences.TryLoad(clipboardPath) : null;
 
-        if (hasSavedRoutes || hasClipboard)
+        if (hasSavedRoutes || preferences is { Enabled.Length: > 0 } or { Archived.Length: > 0 })
         {
             var p = Phone;
-            p.StartTracking();
-            if (hasClipboard) _ = p.Clipboard.InitializeAsync();
-            _ = p.RefreshAsync(restore: hasSavedRoutes);
+            _window.TryPost(() =>
+            {
+                if (preferences != null) p.Clipboard.Initialize(preferences);
+                if (hasSavedRoutes || p.Clipboard.Enabled)
+                {
+                    p.StartTracking();
+                    _ = p.RefreshAsync(restore: hasSavedRoutes);
+                }
+            });
         }
     }
 

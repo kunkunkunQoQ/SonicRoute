@@ -15,6 +15,8 @@ public sealed class SavedPlaybackSelection
 {
     public IReadOnlyList<string> Outputs { get; }
     public string Preferred { get; }
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? AdditionalFields { get; set; }
 
     [JsonConstructor]
     public SavedPlaybackSelection(IReadOnlyList<string> outputs, string? preferred)
@@ -97,7 +99,11 @@ public static class SavedPlaybackStore
                     else
                     {
                         changed = !entries.TryGetValue(appKey, out var previous) || !selection.Matches(previous);
-                        if (changed) entries[appKey] = ReuseSelection(appKey, selection);
+                        if (changed)
+                        {
+                            selection.AdditionalFields = previous?.AdditionalFields;
+                            entries[appKey] = ReuseSelection(appKey, selection);
+                        }
                     }
                     if (changed)
                     {
@@ -168,7 +174,8 @@ public static class SavedPlaybackStore
     }
 
     private static SavedPlaybackSelection ReuseSelection(string key, SavedPlaybackSelection selection) =>
-        _snapshot != null && _snapshot.TryGetValue(key, out var known) && known.Matches(selection) ? known : selection;
+        selection.AdditionalFields == null && _snapshot != null && _snapshot.TryGetValue(key, out var known)
+        && known.AdditionalFields == null && known.Matches(selection) ? known : selection;
 
     private static bool IsStorageError(Exception error) => error is IOException or UnauthorizedAccessException
         or System.Security.SecurityException or JsonException or WaitHandleCannotBeOpenedException;

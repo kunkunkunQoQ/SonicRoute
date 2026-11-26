@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text.Json;
 
 namespace SonicRoute.AndroidAudio;
 
@@ -8,6 +9,9 @@ public sealed record AndroidStreamSettings(string? AudioEncoder = null, int Audi
     string? AudioDecoder = null, string? VideoDecoder = null, string? HevcEncoder = null,
     string? AudioLatencyMode = AndroidStreamSettings.LatencyModeBalanced)
 {
+    [System.Text.Json.Serialization.JsonExtensionData]
+    public Dictionary<string, JsonElement>? AdditionalFields { get; set; }
+
     public const string ConcentusDecoder = "concentus-opus";
     public const string RawPcmDecoder = ScrcpyAudioProtocol.RawPcmDecoderId;
     public const string WindowsVideoDecoder = "windows-h264-d3d11";

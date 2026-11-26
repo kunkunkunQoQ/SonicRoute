@@ -95,5 +95,7 @@ internal static class PcRoutingApi
         return valid.ToArray();
     }
 
-    internal static string MirrorOwnerName(int pid) => @"Local\SonicRoute.AudioMirror.NativeCandidate." + pid;
+    private static readonly string MirrorOwnerPrefix = string.IsNullOrEmpty(Environment.GetEnvironmentVariable("SONICROUTE_INSTANCE_ID"))
+        ? @"Local\SonicRoute.AudioMirror." : @"Local\SonicRoute.AudioMirror.NativeCandidate.";
+    internal static string MirrorOwnerName(int pid) => MirrorOwnerPrefix + pid;
 }

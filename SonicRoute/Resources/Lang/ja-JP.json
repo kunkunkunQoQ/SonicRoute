@@ -15,6 +15,7 @@
   "Auto.ActionListSeparator": "、",
   "Config.CorruptRecovered": "設定ファイルが破損しています。元のファイルの保存先：{0}\n前回のバックアップを読み込みました。",
   "Config.CorruptDefaults": "設定ファイルが破損しています。元のファイルの保存先：{0}\n今回は既定の設定を使用します。元のファイルは復元に利用できます。",
+  "Config.FieldsRecovered": "読み取れなかった設定を修復しました：{1}。その他の設定は保持されています。元のファイル：{0}",
   "Config.LoadBlocked": "設定ファイルを読み込めないか、元のファイルを退避できません。元の設定を保護するため、保存を一時停止しました。\n元のファイル：{0}\nファイルとアクセス権を確認し、問題を解消してから SonicRoute を再起動してください。",
   "App.RestartFailed": "SonicRoute を再起動できませんでした。現在も実行中です。しばらくしてからもう一度お試しください。",
   "Diagnostics.StartupFailed": "起動に失敗しました。診断ログ：{0}",

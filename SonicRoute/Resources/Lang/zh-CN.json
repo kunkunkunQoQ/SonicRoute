@@ -15,6 +15,7 @@
   "Auto.ActionListSeparator": "、",
   "Config.CorruptRecovered": "配置文件损坏，原文件已保留在：{0}\n已读取上次保存的备份。",
   "Config.CorruptDefaults": "配置文件损坏，原文件已保留在：{0}\n本次使用默认设置，原文件可用于恢复。",
+  "Config.FieldsRecovered": "以下设置的值无法读取，已单独恢复：{1}。其余设置已保留。原文件：{0}",
   "Config.LoadBlocked": "无法读取或另存原配置文件。为保护原设置，已暂停保存。\n原文件：{0}\n请检查文件和访问权限，修复后重新启动 SonicRoute。",
   "App.RestartFailed": "SonicRoute 未能重新启动，目前仍在运行。请稍后重试。",
   "Diagnostics.StartupFailed": "启动失败。诊断日志：{0}",

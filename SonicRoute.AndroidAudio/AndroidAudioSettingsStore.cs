@@ -17,6 +17,9 @@ public sealed record AndroidWindowSize(int Width, int Height)
 public sealed record AndroidAppAudioSettings(int Volume = 100, string? OutputId = null,
     AndroidVirtualDisplaySize? DisplaySize = null, AndroidWindowSize? WindowSize = null)
 {
+    [System.Text.Json.Serialization.JsonExtensionData]
+    public Dictionary<string, JsonElement>? AdditionalFields { get; set; }
+
     // Only an explicitly selected multi-output source is eligible for automatic capture.
     public string?[]? ResumeOutputs { get; init; }
 }
@@ -33,6 +36,7 @@ public sealed class AndroidAudioSettingsStore
     private bool _writing;
     private long _revision;
     private bool _loadedSafely = true;
+    private Dictionary<string, JsonElement>? _additionalFields;
     public string FilePath { get; }
 
     public AndroidAudioSettingsStore(string filePath)
@@ -70,6 +74,7 @@ public sealed class AndroidAudioSettingsStore
                     WindowSize = entry.Value.WindowSize?.IsValid() == true ? entry.Value.WindowSize : null
                 };
             }
+            _additionalFields = saved.AdditionalFields;
             if (saved.Streams != null)
                 foreach (var entry in saved.Streams)
                     if (!string.IsNullOrEmpty(entry.Key) && entry.Value != null) _streams[entry.Key] = entry.Value.Normalize();
@@ -93,7 +98,9 @@ public sealed class AndroidAudioSettingsStore
         lock (_gate)
         {
             string key = AndroidDeviceIdentity.Key(device);
-            if (GetStreaming(device) == next) return;
+            var previous = GetStreaming(device);
+            next.AdditionalFields ??= previous.AdditionalFields;
+            if (previous == next) return;
             _streams[key] = next;
             ++_revision;
             if (!_writing) { _writing = true; _save = Task.Run(SaveAsync); }
@@ -163,8 +170,8 @@ public sealed class AndroidAudioSettingsStore
             var beforeStreams = new Dictionary<string, AndroidStreamSettings>(_streams, StringComparer.Ordinal);
             Directory.CreateDirectory(Path.GetDirectoryName(FilePath)!);
             string backup = FilePath + ".pre-rebind-" + Guid.NewGuid().ToString("N") + ".bak";
-            AtomicFile.Write(backup, s => JsonSerializer.Serialize(s, new SettingsFile(3, _apps, _streams), AndroidSettingsJsonContext.Default.SettingsFile));
-            AtomicFile.Write(FilePath, s => JsonSerializer.Serialize(s, new SettingsFile(3, apps, streams), AndroidSettingsJsonContext.Default.SettingsFile));
+            AtomicFile.Write(backup, s => JsonSerializer.Serialize(s, FileState(_apps, _streams), AndroidSettingsJsonContext.Default.SettingsFile));
+            AtomicFile.Write(FilePath, s => JsonSerializer.Serialize(s, FileState(apps, streams), AndroidSettingsJsonContext.Default.SettingsFile));
             foreach (var entry in apps) _apps[entry.Key] = entry.Value;
             foreach (var entry in streams) _streams[entry.Key] = entry.Value;
             ++_revision;
@@ -188,7 +195,7 @@ public sealed class AndroidAudioSettingsStore
                         if (beforeStreams.TryGetValue(newKey, out var original)) restoredStreams[newKey] = original;
                         else restoredStreams.Remove(newKey);
                     }
-                    AtomicFile.Write(FilePath, s => JsonSerializer.Serialize(s, new SettingsFile(3, restoredApps, restoredStreams), AndroidSettingsJsonContext.Default.SettingsFile));
+                    AtomicFile.Write(FilePath, s => JsonSerializer.Serialize(s, FileState(restoredApps, restoredStreams), AndroidSettingsJsonContext.Default.SettingsFile));
                     _apps.Clear(); foreach (var entry in restoredApps) _apps[entry.Key] = entry.Value;
                     _streams.Clear(); foreach (var entry in restoredStreams) _streams[entry.Key] = entry.Value;
                     ++_revision;
@@ -331,7 +338,7 @@ public sealed class AndroidAudioSettingsStore
                     if (!_loadedSafely) { _writing = false; return; }
                     Directory.CreateDirectory(Path.GetDirectoryName(FilePath)!);
                     AtomicFile.BackupBeforeWrite(FilePath);
-                    AtomicFile.Write(FilePath, stream => JsonSerializer.Serialize(stream, new SettingsFile(3, _apps, _streams), AndroidSettingsJsonContext.Default.SettingsFile));
+                    AtomicFile.Write(FilePath, stream => JsonSerializer.Serialize(stream, FileState(_apps, _streams), AndroidSettingsJsonContext.Default.SettingsFile));
                     _writing = false; return;
                 }
             }
@@ -341,5 +348,12 @@ public sealed class AndroidAudioSettingsStore
     }
     public Task FlushAsync() { lock (_gate) return _save; }
     internal sealed record SettingsFile(int Version, Dictionary<string, AndroidAppAudioSettings> Apps,
-        Dictionary<string, AndroidStreamSettings>? Streams = null);
+        Dictionary<string, AndroidStreamSettings>? Streams = null)
+    {
+        [System.Text.Json.Serialization.JsonExtensionData]
+        public Dictionary<string, JsonElement>? AdditionalFields { get; set; }
+    }
+
+    private SettingsFile FileState(Dictionary<string, AndroidAppAudioSettings> apps, Dictionary<string, AndroidStreamSettings> streams) =>
+        new(3, apps, streams) { AdditionalFields = _additionalFields };
 }

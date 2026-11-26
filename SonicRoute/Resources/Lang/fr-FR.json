@@ -15,6 +15,7 @@
   "Auto.ActionListSeparator": ", ",
   "Config.CorruptRecovered": "Le fichier de configuration est endommagé. L’original a été conservé ici : {0}\nLa dernière sauvegarde a été chargée.",
   "Config.CorruptDefaults": "Le fichier de configuration est endommagé. L’original a été conservé ici : {0}\nLes paramètres par défaut sont utilisés. Vous pouvez utiliser le fichier d’origine pour restaurer vos paramètres.",
+  "Config.FieldsRecovered": "Les paramètres illisibles ont été réparés : {1}. Les autres paramètres ont été conservés. Fichier d’origine : {0}",
   "Config.LoadBlocked": "Impossible de lire le fichier de configuration ou d’en conserver une copie. L’enregistrement est suspendu pour protéger vos paramètres.\nFichier d’origine : {0}\nCorrigez le fichier ou ses autorisations d’accès, puis redémarrez SonicRoute.",
   "App.RestartFailed": "SonicRoute n’a pas pu redémarrer. L’application est toujours ouverte. Réessayez dans un instant.",
   "Diagnostics.StartupFailed": "Échec du démarrage. Journal de diagnostic : {0}",

@@ -37,6 +37,7 @@ internal static partial class Program
 
     private static int Start(CandidateEnvironment env, string[] args)
     {
+        if (args.FirstOrDefault() == "--control" && !env.IsIsolated) { CommandOutput.Write("isolated_profile_required"); return 2; }
         if (!ProductProtocol.BeforeStartup(env, ref args)) return 0;
         var mode = ProductProtocol.ParseRule(args, out var selector);
         if (mode == RuleMode.Help)
@@ -60,17 +61,16 @@ internal static partial class Program
         if (!instance.IsPrimary)
         {
             if (mode == RuleMode.Run) return WriteRule(instance.SendRuleAsync(selector).GetAwaiter().GetResult());
-            // The hidden HWND is created after the mutex. The control pipe also accepts
-            // activation during that startup window.
-            if (!NativeApplicationWindow.ActivateExisting(env.ActivationTitle, env.ActivationMessage))
+            // WPF and Native publish the same activation HWND after acquiring their mutex.
+            for (int attempt = 0; attempt < 50; attempt++)
             {
-                string activate = JsonSerializer.Serialize(new ControlRequest("activate", []), HostJson.Default.ControlRequest);
-                return instance.SendControlAsync(activate).GetAwaiter().GetResult() == "ok" ? 0 : 6;
+                if (NativeApplicationWindow.ActivateExisting(env.ActivationTitle, env.ActivationMessage)) return 0;
+                Thread.Sleep(100);
             }
-            return 0;
+            return 6;
         }
 
-        var config = ApplicationHost.LoadSettings();
+        var config = ApplicationHost.LoadSettings(env.IsIsolated);
         bool temporary = mode == RuleMode.Run;
         using var window = new NativeApplicationWindow(env.ActivationTitle, env.ActivationMessage, "", trayEnabled: !temporary);
         using var host = new ApplicationHost(env, window, instance, config);

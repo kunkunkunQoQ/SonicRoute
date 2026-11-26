@@ -7,6 +7,7 @@ namespace SonicRoute.AndroidAudio;
 
 public sealed record AndroidPhoneProfile(string Name, AndroidDevice? LastDevice, IReadOnlyList<AndroidApp> RetainedApps)
 {
+    internal Dictionary<string, JsonElement>? AdditionalFields { get; init; }
     public string ReceiveFolder { get; init; } = AndroidFileTransfer.Downloads;
     public string Id { get; init; } = Guid.NewGuid().ToString("N");
     public IReadOnlyList<string> DisabledSmartVolumeApps { get; init; } = Array.Empty<string>();
@@ -45,7 +46,7 @@ public sealed class AndroidPhoneStore
     private readonly object _gate = new();
     private readonly Func<string>? _defaultName;
     private sealed record State(IReadOnlyList<AndroidPhoneProfile> Profiles, string SelectedId,
-        IReadOnlyList<AndroidDevice>? RemovedDevices = null, IReadOnlyList<AndroidPhoneProfile>? RemovedProfiles = null);
+        IReadOnlyList<AndroidDevice>? RemovedDevices = null, IReadOnlyList<AndroidPhoneProfile>? RemovedProfiles = null, Dictionary<string, JsonElement>? AdditionalFields = null);
     private State _state;
     private Task _save = Task.CompletedTask;
     private bool _writing;
@@ -100,12 +101,14 @@ public sealed class AndroidPhoneStore
             using var json = JsonDocument.Parse(file);
             int version = json.RootElement.GetProperty("Version").GetInt32();
             AndroidPhoneProfile[] profiles; string? selected;
+            Dictionary<string, JsonElement>? additionalFields;
             IReadOnlyList<AndroidDevice>? removed = null;
             IReadOnlyList<AndroidPhoneProfile>? removedProfiles = null;
             if (version == 1)
             {
                 var saved = json.RootElement.Deserialize(AndroidSettingsJsonContext.Default.LegacyFile);
                 if (saved?.Apps == null) return false;
+                additionalFields = saved.AdditionalFields;
                 profiles = [LoadProfile(new(Guid.NewGuid().ToString("N"), saved.Name, saved.Device, saved.Apps, saved.DisabledSmartVolumePackages))];
                 selected = profiles[0].Id;
             }
@@ -114,6 +117,7 @@ public sealed class AndroidPhoneStore
                 var saved = json.RootElement.Deserialize(AndroidSettingsJsonContext.Default.PhoneFile);
                 if (saved?.Phones == null || saved.Phones.Length is < 1 or > 32) return false;
                 profiles = saved.Phones.Select(LoadProfile).DistinctBy(p => p.Id).ToArray();
+                additionalFields = saved.AdditionalFields;
                 selected = saved.SelectedId;
                 removed = Array.AsReadOnly((saved.RemovedDevices ?? []).Where(d => d != null && !string.IsNullOrWhiteSpace(d.Serial)
                     && d.Serial.Length <= 512 && (d.HardwareId?.Length ?? 0) <= 128)
@@ -122,7 +126,7 @@ public sealed class AndroidPhoneStore
                     removedProfiles = LoadRemovedProfiles(archived);
             }
             else return false;
-            loaded = new(Array.AsReadOnly(profiles), profiles.FirstOrDefault(p => p.Id == selected)?.Id ?? profiles[0].Id, removed, removedProfiles);
+            loaded = new(Array.AsReadOnly(profiles), profiles.FirstOrDefault(p => p.Id == selected)?.Id ?? profiles[0].Id, removed, removedProfiles, additionalFields);
             legacy = version < 3;
             return true;
         }
@@ -151,6 +155,7 @@ public sealed class AndroidPhoneStore
         return WithQuickPanelApps(new(CleanName(saved.Name), saved.Device, Array.AsReadOnly(apps))
         {
             Id = saved.Id,
+            AdditionalFields = saved.AdditionalFields,
             ManuallyDisconnected = saved.ManuallyDisconnected,
             LastWirelessAddress = AndroidPhoneProfile.WirelessAddress(saved.LastWirelessAddress)
                 ?? (saved.Device is { IsWifi: true } wifi ? AndroidPhoneProfile.WirelessAddress(wifi.Serial) : null),
@@ -571,16 +576,28 @@ public sealed class AndroidPhoneStore
     {
         if (_legacyFormat) BackupBeforeMigration();
         var saved = new PhoneFile(3, state.SelectedId, state.Profiles.Select(SaveProfile).ToArray(), state.RemovedDevices?.ToArray(),
-            state.RemovedProfiles?.Select(SaveProfile).ToArray());
+            state.RemovedProfiles?.Select(SaveProfile).ToArray()) { AdditionalFields = state.AdditionalFields };
         Directory.CreateDirectory(Path.GetDirectoryName(FilePath)!);
         AtomicFile.BackupBeforeWrite(FilePath);
         AtomicFile.Write(FilePath, stream => JsonSerializer.Serialize(stream, saved, AndroidSettingsJsonContext.Default.PhoneFile));
         _legacyFormat = false;
     }
     private static SavedPhone SaveProfile(AndroidPhoneProfile profile) => new(profile.Id, profile.Name, profile.LastDevice,
-        profile.RetainedApps.ToArray(), profile.DisabledSmartVolumeApps.ToArray(), profile.ReceiveFolder, profile.ManuallyDisconnected, profile.LastWirelessAddress);
-    internal sealed record LegacyFile(int Version, string Name, AndroidDevice? Device, AndroidApp[] Apps, string[]? DisabledSmartVolumePackages = null);
-    internal sealed record SavedPhone(string Id, string Name, AndroidDevice? Device, AndroidApp[] Apps, string[]? DisabledSmartVolumePackages = null, string? ReceiveFolder = null, bool ManuallyDisconnected = false, string? LastWirelessAddress = null);
+        profile.RetainedApps.ToArray(), profile.DisabledSmartVolumeApps.ToArray(), profile.ReceiveFolder, profile.ManuallyDisconnected, profile.LastWirelessAddress) { AdditionalFields = profile.AdditionalFields };
+    internal sealed record LegacyFile(int Version, string Name, AndroidDevice? Device, AndroidApp[] Apps, string[]? DisabledSmartVolumePackages = null)
+    {
+        [System.Text.Json.Serialization.JsonExtensionData]
+        public Dictionary<string, JsonElement>? AdditionalFields { get; set; }
+    }
+    internal sealed record SavedPhone(string Id, string Name, AndroidDevice? Device, AndroidApp[] Apps, string[]? DisabledSmartVolumePackages = null, string? ReceiveFolder = null, bool ManuallyDisconnected = false, string? LastWirelessAddress = null)
+    {
+        [System.Text.Json.Serialization.JsonExtensionData]
+        public Dictionary<string, JsonElement>? AdditionalFields { get; set; }
+    }
     internal sealed record PhoneFile(int Version, string SelectedId, SavedPhone[] Phones, AndroidDevice[]? RemovedDevices = null,
-        SavedPhone[]? RemovedProfiles = null);
+        SavedPhone[]? RemovedProfiles = null)
+    {
+        [System.Text.Json.Serialization.JsonExtensionData]
+        public Dictionary<string, JsonElement>? AdditionalFields { get; set; }
+    }
 }

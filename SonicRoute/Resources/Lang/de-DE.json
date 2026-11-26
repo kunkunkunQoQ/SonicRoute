@@ -15,6 +15,7 @@
   "Auto.ActionListSeparator": ", ",
   "Config.CorruptRecovered": "Die Einstellungsdatei ist beschädigt. Das Original wurde hier gesichert: {0}\nDie letzte Sicherung wurde geladen.",
   "Config.CorruptDefaults": "Die Einstellungsdatei ist beschädigt. Das Original wurde hier gesichert: {0}\nEs gelten die Standardeinstellungen. Das Original steht für die Wiederherstellung zur Verfügung.",
+  "Config.FieldsRecovered": "Diese Einstellungen konnten nicht gelesen werden und wurden repariert: {1}. Andere Einstellungen wurden beibehalten. Originaldatei: {0}",
   "Config.LoadBlocked": "Die Einstellungsdatei konnte nicht gelesen oder das Original nicht gesichert werden. Zum Schutz Ihrer Einstellungen wurde das Speichern angehalten.\nOriginaldatei: {0}\nKorrigieren Sie die Datei oder ihre Zugriffsrechte und starten Sie SonicRoute neu.",
   "App.RestartFailed": "SonicRoute konnte nicht neu gestartet werden und läuft weiterhin. Versuchen Sie es später erneut.",
   "Diagnostics.StartupFailed": "Start fehlgeschlagen. Diagnoseprotokoll: {0}",

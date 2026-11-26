@@ -31,17 +31,15 @@ internal sealed partial class ApplicationHost : IDisposable, IMainThread
             return true;
         }));
         _config = config;
-        if (ConfigService.LoadWarning is { } warning)
-            _feedback.Publish(FeedbackKind.SettingsWarning, "Config.Load", warning.PreservedPath ?? ConfigService.ConfigPath);
         _window.CallbackError += HandleError;
         _window.Signal += OnSignal;
     }
 
-    internal static AppConfig LoadSettings()
+    internal static AppConfig LoadSettings(bool isolated)
     {
         bool newProfile = !File.Exists(ConfigService.ConfigPath);
         AppConfig config = ConfigService.Load();
-        if (newProfile && ConfigService.LoadWarning == null
+        if (isolated && newProfile && ConfigService.LoadWarning == null
             && Environment.GetEnvironmentVariable("SONICROUTE_DISABLE_DEFAULT_HOTKEYS") == "1")
         {
             // Isolated automated test runs can opt out of global hotkeys via env var;
@@ -64,7 +62,23 @@ internal sealed partial class ApplicationHost : IDisposable, IMainThread
 
     internal int Run(string[] args, string? selector)
     {
-        if (selector == null) StartViews();
+        if (selector == null)
+        {
+            StartViews();
+            if (ConfigService.LoadWarning is { } warning)
+            {
+                string key = warning.SavesBlocked ? "Config.LoadBlocked" : warning.RecoveredFields.Length > 0 ? "Config.FieldsRecovered"
+                    : warning.UsedBackup ? "Config.CorruptRecovered" : "Config.CorruptDefaults";
+                NativeDialogs.ShowWarning(_window.Handle, BuildIdentity.DisplayName,
+                    string.Format(L10n.T(key), warning.PreservedPath ?? ConfigService.ConfigPath, string.Join(", ", warning.RecoveredFields)));
+            }
+            if (!_environment.IsIsolated)
+            {
+                RepairAutoStart();
+                string help = L10n.T("Auto.ShortCliHelp");
+                _ = Task.Run(() => RuleCommandLine.EnsureShortCommand(help));
+            }
+        }
         StartServices(selector == null);
         if (selector == null)
         {
@@ -211,7 +225,7 @@ internal sealed partial class ApplicationHost : IDisposable, IMainThread
         AutoRuleStore.Shutdown();
         if (!ConfigService.PendingSaves.Wait(TimeSpan.FromSeconds(3)))
             HandleError(new TimeoutException("Configuration write did not finish before shutdown."));
-        if (Environment.GetEnvironmentVariable("SONICROUTE_CANDIDATE_METRICS") == "1")
+        if (_environment.IsIsolated && Environment.GetEnvironmentVariable("SONICROUTE_CANDIDATE_METRICS") == "1")
         {
             var released = new AudioRelease(Native.Audio.Com.Owners, Native.Audio.Subscription.Active, Native.Audio.MtaLifetime.Active);
             var receipt = new ExitReceipt(Environment.ProcessId, released, GC.GetTotalAllocatedBytes(true), DateTimeOffset.UtcNow);

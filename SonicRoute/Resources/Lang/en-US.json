@@ -15,6 +15,7 @@
   "Auto.ActionListSeparator": ", ",
   "Config.CorruptRecovered": "The settings file is damaged. The original was saved at {0}\nYour last backup has been loaded.",
   "Config.CorruptDefaults": "The settings file is damaged. The original was saved at {0}\nDefault settings are in use. You can use the original file for recovery.",
+  "Config.FieldsRecovered": "The following settings could not be read and were repaired: {1}. Other settings were kept. Original file: {0}",
   "Config.LoadBlocked": "SonicRoute couldn’t read the settings file or set the original aside. Saving is paused to protect your settings.\nOriginal file: {0}\nFix the file or its permissions, then restart SonicRoute.",
   "App.RestartFailed": "SonicRoute couldn’t restart. It’s still running. Try again later.",
   "Diagnostics.StartupFailed": "Startup failed. Diagnostic log: {0}",

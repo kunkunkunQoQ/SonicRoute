@@ -1,10 +1,13 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace SonicRoute.Core.Models
 {
     /// <summary>自动化规则触发方式。</summary>
+    [JsonConverter(typeof(StoredRuleEnum<AutoRuleTrigger>))]
     public enum AutoRuleTrigger
     {
         /// <summary>按下快捷键（全局）</summary>
@@ -27,6 +30,7 @@ namespace SonicRoute.Core.Models
     }
 
     /// <summary>自动化规则执行的操作。</summary>
+    [JsonConverter(typeof(StoredRuleEnum<AutoRuleAction>))]
     public enum AutoRuleAction
     {
         /// <summary>切换系统播放设备</summary>
@@ -134,6 +138,9 @@ namespace SonicRoute.Core.Models
     /// </summary>
     public sealed class AutoLaunchItem
     {
+        [JsonExtensionData]
+        public Dictionary<string, JsonElement>? AdditionalFields { get; set; }
+
         /// <summary>要启动的文件 / 程序路径。</summary>
         public string Path { get; set; } = "";
 
@@ -156,6 +163,9 @@ namespace SonicRoute.Core.Models
     /// </summary>
     public sealed class AutoRuleStep
     {
+        [JsonExtensionData]
+        public Dictionary<string, JsonElement>? AdditionalFields { get; set; }
+
         /// <summary>执行的操作。</summary>
         public AutoRuleAction Action { get; set; } = AutoRuleAction.SetSystemOutput;
 
@@ -212,6 +222,7 @@ namespace SonicRoute.Core.Models
                 .Where(i => i != null && !string.IsNullOrWhiteSpace(i.Path))
                 .Select(i => new AutoLaunchItem
                 {
+                    AdditionalFields = i.AdditionalFields == null ? null : new(i.AdditionalFields),
                     Path = i.Path.Trim(),
                     OpenWith = (i.OpenWith ?? "").Trim(),
                     OpenWithName = (i.OpenWithName ?? "").Trim()
@@ -244,6 +255,7 @@ namespace SonicRoute.Core.Models
         /// </summary>
         public AutoRuleStep Clone() => new()
         {
+            AdditionalFields = AdditionalFields == null ? null : new(AdditionalFields),
             Action = Action,
             TargetRuleId = TargetRuleId ?? "",
             TargetApp = TargetApp ?? "",
@@ -274,6 +286,7 @@ namespace SonicRoute.Core.Models
             var items = isLaunch ? CurrentLaunchItems() : new List<AutoLaunchItem>();
             return new AutoRuleStep
             {
+                AdditionalFields = AdditionalFields == null ? null : new(AdditionalFields),
                 Action = Action,
                 TargetRuleId = TargetRuleId ?? "",
                 TargetApp = TargetApp ?? "",
@@ -301,6 +314,9 @@ namespace SonicRoute.Core.Models
     /// </summary>
     public sealed class AutoRule
     {
+        [JsonExtensionData]
+        public Dictionary<string, JsonElement>? AdditionalFields { get; set; }
+
         /// <summary>规则唯一 ID（快捷键注册键 Rule:{Id}）。</summary>
         public string Id { get; set; } = Guid.NewGuid().ToString("N");
 
@@ -370,7 +386,7 @@ namespace SonicRoute.Core.Models
         /// <summary>获取独立步骤副本；旧单步骤规则统一在这里兼容。</summary>
         public List<AutoRuleStep> CloneSteps()
         {
-            if (Actions.Count > 0) return Actions.Select(step => step.Clone()).ToList();
+            if (Actions?.Count > 0) return Actions.Where(step => step != null).Select(step => step.Clone()).ToList();
             return new List<AutoRuleStep>
             {
                 new AutoRuleStep
@@ -401,6 +417,7 @@ namespace SonicRoute.Core.Models
         public AutoRule Clone()
         {
             var copy = (AutoRule)MemberwiseClone();
+            if (AdditionalFields != null) copy.AdditionalFields = new(AdditionalFields);
             copy.ScheduleWeekdays = new List<int>(ScheduleWeekdays ?? new List<int>());
             copy.Actions = (Actions ?? new List<AutoRuleStep>()).Where(step => step != null).Select(step => step.Clone()).ToList();
             return copy;
@@ -411,9 +428,10 @@ namespace SonicRoute.Core.Models
         {
             var copy = new AutoRule
             {
+                AdditionalFields = AdditionalFields == null ? null : new(AdditionalFields),
                 Name = name, Enabled = false, Trigger = Trigger, TriggerApp = TriggerApp ?? "",
                 ScheduleMode = ScheduleMode, ScheduleTime = ScheduleTime ?? "",
-                ScheduleWeekdays = new List<int>(ScheduleWeekdays)
+                ScheduleWeekdays = new List<int>(ScheduleWeekdays ?? new List<int>())
             };
             copy.SetSteps(CloneSteps());
             return copy;
