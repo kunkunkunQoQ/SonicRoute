@@ -36,6 +36,7 @@ if ($boundPublish) {
     # The live installation can be the normal publish output. Never publish over it in place.
     $publishDirectory = Join-Path $OutputRoot ('.tmp/publish-' + [guid]::NewGuid().ToString('N'))
 }
+Assert-EditionPath $publishDirectory
 if (Test-Path -LiteralPath $destination) {
     foreach ($item in Get-ChildItem -LiteralPath $destination -Force -Recurse) {
         if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) { throw 'Existing edition output contains a link or junction.' }
@@ -47,20 +48,11 @@ $active = @(Get-Process -Name 'SonicRoute*' -ErrorAction SilentlyContinue | Wher
 })
 if ($active.Count) { throw 'This edition output or named package is running; keep it unchanged until it exits.' }
 New-Item -ItemType Directory -Path $destination -Force | Out-Null
-$previousTemp = $env:TEMP
-$previousTmp = $env:TMP
-$env:TEMP = $env:TMP = Join-Path $OutputRoot ('.tmp\' + $Edition + '-' + $Architecture)
-Assert-EditionPath $env:TEMP
-New-Item -ItemType Directory -Path $env:TEMP -Force | Out-Null
 $log = Join-Path $OutputRoot "build/$Edition-$Architecture/publish.log"
 # -NoReadyToRun remains accepted for callers of the former managed build.
-try {
-    & (Join-Path $repo 'Native/Build-Product.ps1') -Edition $Edition -Architecture $Architecture -Dotnet $dotnet `
-        -OutputRoot $OutputRoot -PublishDirectory $publishDirectory -VsRoot $VsRoot -ToolCache $ToolCache | Out-Null
-} finally {
-    $env:TEMP = $previousTemp
-    $env:TMP = $previousTmp
-}
+# NuGet uses the common temp directory for locks on the shared package cache.
+& (Join-Path $repo 'Native/Build-Product.ps1') -Edition $Edition -Architecture $Architecture -Dotnet $dotnet `
+    -OutputRoot $OutputRoot -PublishDirectory $publishDirectory -VsRoot $VsRoot -ToolCache $ToolCache | Out-Null
 $temporaryAsset = Join-Path $OutputRoot ($variant.Asset + '.' + [guid]::NewGuid().ToString('N') + '.tmp')
 if ($Edition -eq 'Lite' -and (Test-Path -LiteralPath (Join-Path $publishDirectory 'AndroidRuntime'))) { throw 'Lite output contains phone runtime files.' }
 # Only the single executable is distributed; legacy loose files in a reused Full build

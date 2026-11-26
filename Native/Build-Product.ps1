@@ -32,7 +32,7 @@ try {
     . (Join-Path $PSScriptRoot 'Set-Phase1Toolchain.ps1') -Architecture $Architecture -VsRoot $VsRoot -ToolCache $ToolCache
     & $Dotnet publish Native/Product/Product.csproj -c Release -r "win-$Architecture" `
         "-p:SonicRouteEdition=$Edition" "-p:ArtifactsPath=$build" -p:IlcUseEnvironmentalTools=true -o $publish *> $log
-    if ($LASTEXITCODE) { Get-Content $log -Tail 20; throw "Publish failed ($LASTEXITCODE). See $log." }
+    if ($LASTEXITCODE) { Get-Content $log -Tail 20 | Write-Host; throw "Publish failed ($LASTEXITCODE). See $log." }
     if (Select-String -Path $log -Pattern '\b(?:warning|警告) IL[23]\d{3}\b' -Quiet) {
         throw "Review AOT or trimming diagnostics in $log."
     }
