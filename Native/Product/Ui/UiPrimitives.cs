@@ -529,7 +529,7 @@ internal static class UiPrimitives
 
     public static void DrawComboBox(D2dTarget g, UiThemePalette t, UiHitMap hit, string id, UiRect rect, string text, bool open = false, float fontSize = 12.5f, bool enabled = true)
     {
-        if (enabled) hit.Add(id, rect, UiCursorKind.Hand);
+        if (enabled) hit.Add(id, rect, UiCursorKind.Hand, text);
         bool hot = enabled && hit.IsHover(id);
         float opacity = enabled ? 1f : 0.5f;
         g.FillRoundedRect(rect, UiMetrics.ComboCornerRadius, t.SurfaceBg.WithAlphaFraction(opacity));

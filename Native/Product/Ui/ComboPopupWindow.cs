@@ -7,7 +7,7 @@ internal readonly record struct ComboChoice(string Key, string Label, UiIcon? Ic
 
 /// <summary>
 /// Floating scrollable dropdown popup matching WPF App.xaml RoundedComboBox + RoundedComboItem.
-/// Supports full keyboard navigation, type-ahead prefix cycling, auto-widening, and close notifications.
+/// Supports full keyboard navigation, type-ahead prefix cycling, anchor-width sizing, and close notifications.
 /// </summary>
 internal sealed class ComboPopupWindow : LayeredWindow
 {
@@ -37,7 +37,7 @@ internal sealed class ComboPopupWindow : LayeredWindow
         string selectedKey,
         Action<ComboChoice> onSelected,
         LayeredWindow owner)
-        : base(180f, 120f, 100f, 36f)
+        : base(180f, 120f, 1f, 1f)
     {
         _theme = theme;
         _choices = choices;
@@ -68,25 +68,23 @@ internal sealed class ComboPopupWindow : LayeredWindow
         Action<ComboChoice> onSelected)
     {
         var pop = new ComboPopupWindow(theme, choices, selectedKey, onSelected, owner);
-        var pt = owner.DipToScreenPx(comboRectDip.X, comboRectDip.Bottom + 4f);
-        GetMonitorWorkAreaForPoint(pt.X, pt.Y, out int ml, out int mt, out int mr, out int mb, out uint monDpi);
+        var topLeft = owner.DipToScreenPx(comboRectDip.X, comboRectDip.Y);
+        var bottomRight = owner.DipToScreenPx(comboRectDip.Right, comboRectDip.Bottom);
+        var center = owner.DipToScreenPx(comboRectDip.CenterX, comboRectDip.CenterY);
+        GetMonitorWorkAreaForPoint(center.X, center.Y, out int ml, out int mt, out int mr, out int mb, out uint monDpi);
         float scale = monDpi / 96f;
-        float workW = MathF.Max(100f, (mr - ml - 8) / scale);
-
-        var ctx = D2dSharedContext.Instance;
-        float maxLabelW = 0f;
-        for (int i = 0; i < choices.Count; i++)
-        {
-            float lw = ctx.MeasureText(choices[i].Label, UiMetrics.FontFamily, 13f, 400, workW, ItemH, false).Width;
-            if (choices[i].Icon.HasValue) lw += 20f;
-            if (lw > maxLabelW) maxLabelW = lw;
-        }
+        int widthPx = Math.Clamp(bottomRight.X - topLeft.X, 1, Math.Max(1, mr - ml));
+        int xPx = Math.Clamp(topLeft.X, ml, Math.Max(ml, mr - widthPx));
+        int gapPx = (int)MathF.Round(4f * scale);
+        int below = Math.Max(0, mb - bottomRight.Y - gapPx);
+        int above = Math.Max(0, topLeft.Y - gapPx - mt);
         float contentH = choices.Count * ItemH;
-        float viewH = Math.Clamp(contentH, 28f, MathF.Max(28f, MathF.Min(MaxListHeight, (mb - mt - 8) / scale) - Pad * 2f));
-        // Outer border, both 4 DIP row margins, 10 DIP text insets, and the track gutter.
-        float padW = Pad * 2 + 8f + 20f + 1f + (contentH > viewH ? UiMetrics.ScrollBarWidth + 2f : 0);
-        float wDip = MathF.Min(workW, MathF.Max(comboRectDip.Width, MathF.Ceiling(maxLabelW) + padW));
-        float hDip = viewH + Pad * 2f;
+        int desiredHeight = (int)MathF.Ceiling(MathF.Min(MaxListHeight, MathF.Max(28f, contentH) + Pad * 2f) * scale);
+        bool openAbove = desiredHeight > below && above > below;
+        int heightPx = Math.Clamp(desiredHeight, 1, Math.Max(1, openAbove ? above : below));
+        int yPx = openAbove ? topLeft.Y - gapPx - heightPx : bottomRight.Y + gapPx;
+        yPx = Math.Clamp(yPx, mt, Math.Max(mt, mb - heightPx));
+        float viewH = MathF.Max(0f, heightPx / scale - Pad * 2f);
 
         pop._scroll.ContentHeight = contentH;
         pop._scroll.ViewportHeight = viewH;
@@ -102,21 +100,12 @@ internal sealed class ComboPopupWindow : LayeredWindow
             }
         }
 
-        int wPx = (int)MathF.Round(wDip * scale);
-        int hPx = (int)MathF.Round(hDip * scale);
-        int xPx = Math.Clamp(pt.X, ml + 4, Math.Max(ml + 4, mr - wPx - 4));
-        int yPx = pt.Y;
-        if (yPx + hPx > mb - 4)
-        {
-            var above = owner.DipToScreenPx(comboRectDip.X, comboRectDip.Y - 4f);
-            yPx = Math.Max(mt + 4, above.Y - hPx);
-        }
-
-        pop.ResizeDip(wDip, hDip);
-        pop.MovePx(xPx, yPx);
+        pop.SetBoundsPx(xPx, yPx, widthPx / scale, heightPx / scale);
         pop.Show(activate: true);
         return pop;
     }
+
+    protected override UiHitMap InputMap => _hit;
 
     internal override void ApplyTheme(UiThemePalette theme)
     {
@@ -154,7 +143,9 @@ internal sealed class ComboPopupWindow : LayeredWindow
                 g.DrawIcon(icon, new UiRect(label.X, label.CenterY - 7f, 14f, 14f), ink);
                 label = label.Deflate(20f, 0, 0, 0);
             }
-            g.DrawText(_choices[i].Label, label, ink, 13f, 400, UiTextAlign.Leading, UiVertAlign.Center);
+            // The full label stays available to the tooltip, type-ahead and selection callbacks.
+            _hit.Add(_choices[i].Key, UiHitMap.Intersect(view, r), UiCursorKind.Arrow, _choices[i].Label);
+            g.DrawText(_choices[i].Label, label, ink, 13f, 400, UiTextAlign.Leading, UiVertAlign.Center, wrap: false, ellipsis: true);
         }
         g.PopClip();
 
