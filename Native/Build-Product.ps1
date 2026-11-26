@@ -15,8 +15,8 @@ if (!$Dotnet) {
 $variant = "$Edition-$Architecture"
 $build = Join-Path $OutputRoot "build/$variant"
 $publish = Join-Path $OutputRoot "candidate/$variant"
-$log = Join-Path $publish 'publish.log'
-$null = New-Item -ItemType Directory -Path $publish -Force
+$log = Join-Path $build 'publish.log'
+$null = New-Item -ItemType Directory -Path $publish,$build -Force
 Push-Location (Join-Path $PSScriptRoot '..')
 try {
     & $Dotnet publish Native/Product/Product.csproj -c Release -r "win-$Architecture" `

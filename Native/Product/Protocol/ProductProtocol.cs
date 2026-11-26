@@ -40,7 +40,7 @@ internal static class ProductProtocol
     }
 
     internal static UpdateService CreateUpdates(CandidateEnvironment profile, Func<Action, CancellationToken, Task> onOwner)
-        => new(FileVersionInfo.GetVersionInfo(UpdateBootstrap.ExecutablePath).ProductVersion ?? "1.36",
+        => new(BuildIdentity.ProductVersion,
             profile.Edition, onOwner, profile.EnsureInstallTarget);
 
     internal static Task<bool> RestartAsync() => RestartCoordinator.TryStartAsync(UpdateBootstrap.ExecutablePath, start: info =>

@@ -1,5 +1,5 @@
 <Project>
-  <Target Name="GenerateVersionedLegacyManifest" BeforeTargets="SetWin32ManifestProperties"
+  <Target Name="GenerateVersionedApplicationManifest" BeforeTargets="SetWin32ManifestProperties"
           DependsOnTargets="PrepareForBuild">
     <PropertyGroup>
       <ApplicationManifest>$(IntermediateOutputPath)SonicRoute.app.manifest</ApplicationManifest>

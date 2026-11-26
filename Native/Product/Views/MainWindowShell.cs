@@ -10,10 +10,7 @@ namespace SonicRoute.Native.Product.Views;
 
 internal sealed class MainWindowShell : LayeredWindow, IViewHostActions
 {
-    internal static readonly string ProductVersion =
-        FileVersionInfo.GetVersionInfo(UpdateBootstrap.ExecutablePath).ProductVersion?.Split('+')[0]
-        ?? typeof(MainWindowShell).Assembly.GetName().Version?.ToString(3) ?? "0.0";
-    private static readonly string WindowTitle = $"{BuildIdentity.DisplayName} v{ProductVersion}";
+    private static readonly string WindowTitle = $"{BuildIdentity.DisplayName} v{BuildIdentity.ProductVersion}";
 
     private const uint WmSysCommand = 0x0112;
     private const nuint ScMoveCaption = 0xF012;

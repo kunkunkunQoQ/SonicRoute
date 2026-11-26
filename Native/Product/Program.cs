@@ -12,6 +12,11 @@ internal static partial class Program
     [STAThread]
     private static int Main(string[] args)
     {
+        if (args is ["--version"])
+        {
+            CommandOutput.Write(BuildIdentity.ProductVersion);
+            return 0;
+        }
         CandidateEnvironment? environment = null;
         try
         {

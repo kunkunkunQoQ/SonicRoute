@@ -54,20 +54,8 @@ namespace SonicRoute
         private RuleCommandServer? _ruleCommandServer;
         private static int _activateMsg;
 
-        /// <summary>从程序集版本读取显示版本号（v1.13），随 csproj &lt;Version&gt; 自动更新。</summary>
-        public static string DisplayVersion
-        {
-            get
-            {
-                var asm = System.Reflection.Assembly.GetExecutingAssembly();
-                var attr = (System.Reflection.AssemblyInformationalVersionAttribute?)Attribute.GetCustomAttribute(
-                    asm, typeof(System.Reflection.AssemblyInformationalVersionAttribute));
-                var v = attr?.InformationalVersion ?? asm.GetName().Version?.ToString(3) ?? "0.0";
-                int plus = v.IndexOf('+');
-                if (plus > 0) v = v.Substring(0, plus);
-                return "v" + v;
-            }
-        }
+        public static string DisplayVersion => "v" + BuildIdentity.ProductVersion;
+
         private System.Windows.Interop.HwndSource? _activateSink;
         // 麦克风静音状态后台检测（低频轮询兜底）：外部程序/Windows 修改静音状态时立即更新 OSD
         private System.Windows.Threading.DispatcherTimer? _micMuteWatchTimer;

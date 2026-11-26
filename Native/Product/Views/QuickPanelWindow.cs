@@ -47,7 +47,7 @@ internal sealed class QuickPanelWindow : LayeredWindow
         public int ExtIconW, ExtIconH, ExtIconVer;
     }
 
-    private static readonly string VersionLabel = "v" + MainWindowShell.ProductVersion;
+    private static readonly string VersionLabel = "v" + BuildIdentity.ProductVersion;
     private readonly ApplicationHost _host;
     private readonly AppConfig _config;
     private readonly Action? _onOpenMain;

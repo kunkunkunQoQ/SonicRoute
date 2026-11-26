@@ -803,7 +803,7 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
     {
         var updates = actions.Host.Updates;
         bool store = updates.IsPackaged;
-        string displayVersion = MainWindowShell.ProductVersion;
+        string displayVersion = BuildIdentity.ProductVersion;
         string versionLine = string.Format(L10n.T("Upd.Current"), "v" + displayVersion, AppRuntimeIdentity.Current.CommandEdition, UpdateBootstrap.Architecture)
             + " · " + UpdateProtocol.RuntimeName;
         string? newestLine = updates.Release != null ? string.Format(L10n.T("Upd.Newest"), updates.Release.Tag) : null;
@@ -958,7 +958,7 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
         UiPrimitives.DrawCard(g, t, new UiRect(x, y, w, cardHeight));
         var author = new UiRect(x + pad, y + pad + 16f, w - pad * 2, 18f);
         register("st.about.author", author, OnAuthorLabelClicked, UiCursorKind.Hand, L10n.T("St.ExpAuthorTip"));
-        g.DrawText(L10n.T("App.About") + " v" + MainWindowShell.ProductVersion, author, t.TextSecondary, 11.5f);
+        g.DrawText(L10n.T("App.About") + " v" + BuildIdentity.ProductVersion, author, t.TextSecondary, 11.5f);
 
         float cursor = author.X;
         float linkY = author.Bottom + 12f;

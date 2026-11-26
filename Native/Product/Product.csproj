@@ -7,6 +7,7 @@
     <AssemblyTitle>SonicRoute</AssemblyTitle>
     <AssemblyTitle Condition="'$(SonicRouteEdition)'=='Lite'">SonicRoute Lite</AssemblyTitle>
     <Product>SonicRoute</Product>
+    <Description>SonicRoute .NET 10 Native AOT</Description>
     <PublishAot>true</PublishAot>
     <TrimmerSingleWarn>false</TrimmerSingleWarn>
     <JsonSerializerIsReflectionEnabledByDefault>false</JsonSerializerIsReflectionEnabledByDefault>
@@ -28,6 +29,7 @@
     <EmbeddedResource Include="../../SonicRoute/Resources/Lang/*.json" LogicalName="SonicRoute.Resources.Lang.%(Filename)%(Extension)" />
     <EmbeddedResource Include="../../SonicRoute/SonicRoute.png" LogicalName="SonicRoute.SonicRoute.png" />
   </ItemGroup>
+  <Import Project="../../build/Version.targets" />
   <Import Project="Protocol/Protocol.targets" />
   <Import Project="Routing/Routing.targets" />
   <Import Project="Automation/Automation.targets" />

@@ -7,7 +7,9 @@ if(Test-Path -LiteralPath $out){throw 'Use a new directory for each candidate.'}
 $layout=[IO.Directory]::CreateDirectory((Join-Path $out 'layout')).FullName
 $root=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 [xml]$manifest=[IO.File]::ReadAllText((Join-Path $root 'packaging/Store/AppxManifest.xml'))
-$manifest.Package.Identity.SetAttribute('Version','1.36.0.0')
+$hostVersion = [Diagnostics.FileVersionInfo]::GetVersionInfo((Get-Item -LiteralPath $HostExe).FullName).FileVersion
+if ($hostVersion -notmatch '^\d+\.\d+\.\d+\.0$') { throw 'Expected a four-part SonicRoute file version ending in zero.' }
+$manifest.Package.Identity.SetAttribute('Version', $hostVersion)
 $manifest.Package.Properties.Description='SonicRoute Native AOT phase 1 verification'
 if($TestIdentity){
     $manifest.Package.Identity.SetAttribute('Name','SonicRoute.PhaseOne.Validation')
