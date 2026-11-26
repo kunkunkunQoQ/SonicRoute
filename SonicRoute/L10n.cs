@@ -141,9 +141,7 @@ namespace SonicRoute
                             return ParseLangJson(fs);
                     return new Dictionary<string, string>();
                 }
-                var resName = "SonicRoute.Resources.Lang." + lang + ".json";
-                using var embedded = typeof(L10n).Assembly.GetManifestResourceStream(resName);
-                var table = embedded == null ? new Dictionary<string, string>() : ParseLangJson(embedded);
+                var table = TranslationEntries(ReadBuiltin(lang));
                 var ext = Path.Combine(ExternalLangDir, lang + ".json");
                 // 带 Lang.Custom 的同名外置文件不覆盖内置语言内容（仅作为附加语言存在于下拉框）
                 if (File.Exists(ext) && !_customLangCodes.Contains(lang))
@@ -162,10 +160,25 @@ namespace SonicRoute
             return new Dictionary<string, string>();
         }
 
-        private static Dictionary<string, string> ParseLangJson(Stream s)
+        private static Dictionary<string, string>? ReadBuiltin(string code)
         {
-            var dict = LanguageFiles.Read(s)
-                       ?? new Dictionary<string, string>();
+            var assembly = typeof(L10n).Assembly;
+#if SONICROUTE_NATIVE_PC
+            using var source = assembly.GetManifestResourceStream("SonicRoute.Resources.Lang.zip");
+            if (source == null) return null;
+            using var archive = new System.IO.Compression.ZipArchive(source);
+            using var stream = archive.GetEntry(code + ".json")?.Open();
+#else
+            using var stream = assembly.GetManifestResourceStream("SonicRoute.Resources.Lang." + code + ".json");
+#endif
+            return stream == null ? null : LanguageFiles.Read(stream);
+        }
+
+        private static Dictionary<string, string> ParseLangJson(Stream s) => TranslationEntries(LanguageFiles.Read(s));
+
+        private static Dictionary<string, string> TranslationEntries(Dictionary<string, string>? entries)
+        {
+            var dict = entries ?? new Dictionary<string, string>();
             dict.Remove("Lang.Code");
             dict.Remove("Lang.NativeName");
             dict.Remove("Lang.Custom");
@@ -198,14 +211,10 @@ namespace SonicRoute
             try
             {
                 Directory.CreateDirectory(dir);
-                var asm = typeof(L10n).Assembly;
                 foreach (var (code, native) in BuiltinLanguages)
                 {
-                    var resName = "SonicRoute.Resources.Lang." + code + ".json";
-                    using var rs = asm.GetManifestResourceStream(resName);
-                    if (rs == null) return false;
-                    var d = LanguageFiles.Read(rs)
-                            ?? new Dictionary<string, string>();
+                    var d = ReadBuiltin(code);
+                    if (d == null) return false;
                     d["Lang.Code"] = code;
                     d["Lang.NativeName"] = native;
                     LanguageFiles.WriteAtomic(Path.Combine(dir, code + ".json"),
@@ -222,26 +231,8 @@ namespace SonicRoute
 
         private static HashSet<string> LoadZhKeys()
         {
-            var set = new HashSet<string>();
-            try
-            {
-                const string resName = "SonicRoute.Resources.Lang.zh-CN.json";
-                using var rs = typeof(L10n).Assembly.GetManifestResourceStream(resName);
-                if (rs != null)
-                {
-                    var d = LanguageFiles.Read(rs);
-                    if (d != null)
-                    {
-                        // 与 ParseLangJson 一致剔除特殊键，避免覆盖率被 Lang.Code/NativeName/Custom 虚增
-                        d.Remove("Lang.Code");
-                        d.Remove("Lang.NativeName");
-                        d.Remove("Lang.Custom");
-                        foreach (var k in d.Keys) set.Add(k);
-                    }
-                }
-            }
-            catch { }
-            return set;
+            try { return new HashSet<string>(TranslationEntries(ReadBuiltin("zh-CN")).Keys); }
+            catch { return new HashSet<string>(); }
         }
 
         /// <summary>实验设置-导入语言：从 json 读取语言代码（Lang.Code，缺省用文件名）写入外置目录。

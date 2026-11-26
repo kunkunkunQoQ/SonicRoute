@@ -79,6 +79,50 @@ public static class SonicRouteReleaseBundle {
     return ([SonicRouteReleaseBundle]::Read($Path) | ConvertFrom-Json)
 }
 
+# Native AOT's diagnostic export is present even in stripped Release builds.
+function Assert-NativeAotImage([IO.BinaryReader]$Reader, [int]$PeOffset) {
+    $stream=$Reader.BaseStream
+    $stream.Position=$PeOffset+6
+    $sectionCount=$Reader.ReadUInt16()
+    $stream.Position=$PeOffset+20
+    $optionalSize=$Reader.ReadUInt16()
+    $optional=$PeOffset+24
+    $stream.Position=$optional
+    if($Reader.ReadUInt16() -ne 0x20b -or $optionalSize -lt 240){throw 'Expected a PE32+ native image.'}
+    $stream.Position=$optional+112
+    $exportRva=$Reader.ReadUInt32()
+    $stream.Position=$optional+112+14*8
+    if(!$exportRva -or $Reader.ReadUInt64() -ne 0){throw 'Invalid Native AOT export or CLR directory.'}
+    $sections=for($i=0;$i -lt $sectionCount;$i++){
+        $stream.Position=$optional+$optionalSize+40*$i+12
+        [pscustomobject]@{Rva=$Reader.ReadUInt32();Length=$Reader.ReadUInt32();Raw=$Reader.ReadUInt32()}
+    }
+    function Resolve-Rva([long]$Address,[int]$Length){
+        foreach($s in $sections){
+            $delta=$Address-[long]$s.Rva
+            if($delta -ge 0 -and $delta+$Length -le $s.Length -and [long]$s.Raw+$delta+$Length -le $stream.Length){
+                return ([long]$s.Raw+$delta)
+            }
+        }
+        throw 'Invalid export address in native image.'
+    }
+    $stream.Position=(Resolve-Rva $exportRva 40)+24
+    $names=$Reader.ReadUInt32()
+    $null=$Reader.ReadUInt32()
+    $table=$Reader.ReadUInt32()
+    if($names -lt 1 -or $names -gt 8192){throw 'Invalid number of exported names.'}
+    $nameOffsets=Resolve-Rva $table (4*$names)
+    $expected='DotNetRuntimeDebugHeader'
+    for($i=0;$i -lt $names;$i++){
+        $stream.Position=$nameOffsets+4*$i
+        $nameRva=$Reader.ReadUInt32()
+        $stream.Position=Resolve-Rva $nameRva 1
+        $name=[Text.Encoding]::ASCII.GetString($Reader.ReadBytes($expected.Length+1))
+        if($name -ceq ($expected+[char]0)){return}
+    }
+    throw 'Missing Native AOT runtime diagnostic export.'
+}
+
 function Assert-ReleaseExecutable([string]$Path, [string]$Architecture, [string]$Edition, [string]$Runtime, [string]$Version) {
     $parts=$Version.Split('.')
     $numeric=[version](($parts+(@('0')*(4-$parts.Count)))-join '.')
@@ -92,6 +136,10 @@ function Assert-ReleaseExecutable([string]$Path, [string]$Architecture, [string]
         if($offset -lt 64 -or $offset -gt $reader.BaseStream.Length-6){throw 'Invalid PE header.'}
         $reader.BaseStream.Position=$offset;$machine=if($Architecture -eq 'arm64'){0xaa64}else{0x8664}
         if($reader.ReadUInt32() -ne 0x4550 -or $reader.ReadUInt16() -ne $machine){throw "Wrong PE architecture: $Path"}
+        if($Runtime -eq 'net10' -and $info.Comments -ceq 'SonicRoute .NET 10 Native AOT'){
+            Assert-NativeAotImage $reader $offset
+            return
+        }
     } finally {$reader.Dispose()}
     if($Runtime -eq 'net48') {
         # Windows PowerShell supplies the CLR reflection-only context even when invoked by pwsh.

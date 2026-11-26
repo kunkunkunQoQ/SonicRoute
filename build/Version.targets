@@ -1,5 +1,5 @@
 <Project>
-  <Target Name="GenerateVersionedApplicationManifest" BeforeTargets="SetWin32ManifestProperties"
+  <Target Name="GenerateVersionedApplicationManifest" BeforeTargets="_SetExternalWin32ManifestProperties;_SetEmbeddedWin32ManifestProperties"
           DependsOnTargets="PrepareForBuild">
     <PropertyGroup>
       <ApplicationManifest>$(IntermediateOutputPath)SonicRoute.app.manifest</ApplicationManifest>

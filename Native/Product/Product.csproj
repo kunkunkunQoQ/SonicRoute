@@ -26,9 +26,18 @@
     <ProjectReference Include="../../SonicRoute.Core/SonicRoute.Core.csproj" />
     <ProjectReference Include="../../StoreInterop/StoreInterop.csproj" />
     <Compile Include="../../SonicRoute/CoalescedVolumeWriter.cs;../../SonicRoute/ForegroundChangeSource.cs;../../SonicRoute/L10n.cs;../../SonicRoute/LanguageFiles.cs;../../SonicRoute/LanguageJsonContext.cs;../../SonicRoute/HostStartup.cs;../../SonicRoute/CommandOutput.cs" />
-    <EmbeddedResource Include="../../SonicRoute/Resources/Lang/*.json" LogicalName="SonicRoute.Resources.Lang.%(Filename)%(Extension)" />
+    <BuiltinLanguage Include="../../SonicRoute/Resources/Lang/*.json" />
     <EmbeddedResource Include="../../SonicRoute/SonicRoute.png" LogicalName="SonicRoute.SonicRoute.png" />
   </ItemGroup>
+  <Target Name="PackBuiltinLanguages" Inputs="@(BuiltinLanguage);../../SonicRoute/Resources/Lang;$(MSBuildProjectFullPath)" Outputs="$(IntermediateOutputPath)languages.zip">
+    <MakeDir Directories="$(IntermediateOutputPath)" />
+    <ZipDirectory SourceDirectory="../../SonicRoute/Resources/Lang" DestinationFile="$(IntermediateOutputPath)languages.zip" Overwrite="true" />
+  </Target>
+  <Target Name="EmbedBuiltinLanguages" BeforeTargets="AssignTargetPaths" DependsOnTargets="PackBuiltinLanguages">
+    <ItemGroup>
+      <EmbeddedResource Include="$(IntermediateOutputPath)languages.zip" LogicalName="SonicRoute.Resources.Lang.zip" />
+    </ItemGroup>
+  </Target>
   <Import Project="../../build/Version.targets" />
   <Import Project="Protocol/Protocol.targets" />
   <Import Project="Routing/Routing.targets" />
