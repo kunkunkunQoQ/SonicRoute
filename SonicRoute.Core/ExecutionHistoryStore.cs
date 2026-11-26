@@ -281,7 +281,7 @@ namespace SonicRoute.Core
 
 #if NET10_0_OR_GREATER
     // JSONL must remain compact. Do not reuse the indented config/rule context.
-    [System.Text.Json.Serialization.JsonSourceGenerationOptions(WriteIndented = false, GenerationMode = System.Text.Json.Serialization.JsonSourceGenerationMode.Serialization)]
+    [System.Text.Json.Serialization.JsonSourceGenerationOptions(WriteIndented = false)]
     [System.Text.Json.Serialization.JsonSerializable(typeof(ExecutionHistoryEntry))]
     internal partial class ExecutionHistoryJsonContext : System.Text.Json.Serialization.JsonSerializerContext { }
 #endif

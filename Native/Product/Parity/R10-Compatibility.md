@@ -37,7 +37,7 @@
 | `config.json`、`config.json.bak`、导入/导出文件 | `ConfigService`、`AppIconFiles` → 相同共享服务、`ConfigService.Recovery` | 1.37 在普通读写保留未知 JSON 键及子树。仅显式导出打包的 `AppIconAssets` 不跟随日常写盘，导入时由原资源导入逻辑验证。WPF 冻结程序能忽略这种额外键，回退后若继续使用旧程序保存，它可能丢弃它不认识的扩展。 |
 | `Icons/*.png`、`Lang/*.json` | `AppIconFiles`，`L10n.ExternalLangDir`、`LanguageFiles` → 相同实现 | 只接受原名规则的受管图标，配置映射与导出载荷分离。九种语言内置，附加/覆盖语言外部文件使用原 code、native name、自定义名称字段，UTF-8。启动没有格式转换。 |
 | `Automation/*.json`、历史 `AutoRules` | 冻结 `AutoRuleStore`、`Models/AutoRule` → 同名服务及 `StoredRuleEnum` | 包含 ID、启用、名称、热键、触发、计划和星期、上次执行、动作/首动作旧镜像、目标、音量、延迟、停止条件、OSD 文本、程序路径/打开方式/启动模式。保留规则、步骤及 launch item 扩展字段。接受合法枚举名称及数字，写回冻结的数值表示。单规则损坏不连带重置其他规则。若真正旧式内嵌集合须拆分，将原文件复制到 `config.json.pre-automation.bak`，独占迁移标记和规则 ID 供失败后续跑；已有正式规则目录优先。 |
-| `ExecutionHistory/<CommandEdition>/recent.jsonl`、`previous.jsonl` | `AutoRuleService`、`ExecutionHistoryStore` → 共享实现 | UTF-8 逐行事件，含触发、步骤结果等。按版型、隔离 ID、用户配置限额轮换；保留旧行，不要求升级时重写日志。 |
+| `ExecutionHistory/<CommandEdition>/recent.jsonl`、`previous.jsonl` | `AutoRuleService`、`ExecutionHistoryStore` → 共享实现 | UTF-8 逐行事件，含触发、步骤结果等。按版型、隔离 ID、用户配置限额轮换；保留旧行。原生历史 JSON 上下文此前只生成写入快速路径，导致读每条记录时抛 InvalidOperationException。现生成同一 DTO 的读写契约，保持原有文件内容与编码。 |
 | `playback-outputs.json`、备份；Windows 音频路由 | `SavedPlaybackStore`、`LocalAppOutputMirrors` → 同一存储、`PcRoutingApi.MirrorOwnerName` | 只有多输出需要额外存储应用→Outputs/Preferred；保留每个应用的扩展字段。同根跨进程文件互斥下读回后合并应用级修改。正式进程镜像所有者锁恢复冻结 `Local\SonicRoute.AudioMirror.<pid>`。系统默认端点、实际端点/会话音量、静音及单路应用策略仍由 Windows 音频服务负责。夹具实测既有路由改动后保留未知字段。 |
 | `android-phone.json` 及备份 | 冻结 `AndroidAudioHost.PhoneStorePath`、`AndroidPhoneStore` → `PhonePreview`、相同存储 | v1 单机、v2/v3 多机档案；选中 ID、设备身份和上次连接、固定应用、智能音量例外、接收目录、手动断开、归档/移除档案。读取已知格式，首次修改旧格式保留 pre-connection-management 备份。索引及档案扩展字段往返。旧 Native 候选若只有 `android-phones.json`，仅在正式文件缺失时复制并保留源。夹具只改合成离线档案。 |
 | `android-audio.json` 及备份 | 冻结 `AndroidAudioHost`、`AndroidAudioSettingsStore` → `PhonePreview.Settings`、相同存储 | v1–v3，按设备/应用保存音量、输出、恢复多设备播放意愿、虚拟显示及窗口尺寸；按设备保存编解码器、音视频码率、FPS、延迟。新读写保留容器、应用设置、编码流设置扩展。档案绑定迁移有独立回退副本。实际声音/编解码待真机。 |
@@ -60,5 +60,6 @@
 |---|---|
 | 冻结源码审查 | 上述存储入口直接对照冻结 SHA；主配置每个公开持久化属性均已归类。冻结中便携与 Full/Lite 均无另一个 exe 同目录配置发现逻辑。 |
 | 自动化存储夹具 | `r10-evidence/compat-codec/check.ps1` 从全新合成数据目录运行，各读取阶段使用独立 pwsh 进程和 .NET 10 Full Release 产出的程序集。六个场景见 `result.json`，另有 `clipboard-check.json`。覆盖数值和集合坏值局部恢复、逐字节原件、中文扩展、正常保存及新进程重读、主文件损坏后备份重建和再次启动、旧规则迁移与枚举、路由、离线档案、手机音频与剪贴板。无真实业务、系统输入、手机传输结论。 |
+| 冻结运行历史原件读回 | Lite 的历史目录 `R10d57c453c4c1647d4_Lite` 与启动 ID 对应，原样读取同一份 397 字节 UTF-8 recent.jsonl。修复前零行及 InvalidOperationException，修复后一行、LastError 为空，规则名、时间、动作、步骤数与原记录相符；文件 SHA-256 保持不变。见 `r10-evidence/compat-codec/history-wpf-lite.json`。 |
 | 正式升级与回退 | 两份冻结 WPF EXE 实际通过 UI 生成隔离原件，源文件清单及哈希在 `r10-evidence/frozen/{Full,Lite}/manifest.json`。产品系统输入、重启、回退数据、各项是否通过及未覆盖条件记录在 `r10-evidence/upgrade-report.md`。 |
 | 待实机 | 正式 Store 安装/更新和系统启动任务、真实用户注册表及 PATH、外部 ADB/手机认证、物理设备恢复及剪贴板收发、AirPlay 配对、跨版本系统音频端点与双进程同时编辑，须相应环境及用户确认。 |
