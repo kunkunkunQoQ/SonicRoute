@@ -208,10 +208,8 @@ internal sealed class ColorPickerWindow : LayeredWindow
         int i = Array.IndexOf(ChannelIds, id);
         if (i >= 0)
         {
-            var r = _channels[i];
-            var pt = DipToScreenPx(r.X, r.Y);
-            _inlineEdit.Open(Handle, id, _values[i], pt.X, pt.Y, (int)MathF.Round(r.Width * DpiScale),
-                (int)MathF.Round(r.Height * DpiScale), 13f, Dpi, _theme.SurfaceBg, _theme.TextPrimary, mono: i == 6, selectAll: true);
+            _inlineEdit.Open(this, id, _values[i], _channels[i], 13f, _theme.SurfaceBg, _theme.TextPrimary,
+                mono: i == 6, selectAll: true);
             Invalidate();
             return true;
         }

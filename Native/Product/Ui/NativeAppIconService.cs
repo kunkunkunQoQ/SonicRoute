@@ -40,9 +40,8 @@ internal static class NativeAppIconService
             using var ms = new MemoryStream();
             stream.CopyTo(ms);
             byte[] png = ms.ToArray();
-            if (SonicRoute.Native.Graphics.WicIconLoader.TryDecodePngToBgra32(png, 48, 48, out byte[] pixels, out int w, out int h))
+            if (UiBitmap.TryDecodePng(png, 48, out byte[] pixels, out int w, out int h))
             {
-                Premultiply(pixels);
                 _brandIcon = new IconBitmap(pixels, w, h);
                 return _brandIcon;
             }
@@ -92,9 +91,8 @@ internal static class NativeAppIconService
                         try
                         {
                             byte[] png = AppIconFiles.ReadPng(customFile);
-                            if (SonicRoute.Native.Graphics.WicIconLoader.TryDecodePngToBgra32(png, 64, 64, out byte[] pixels, out int w, out int h))
+                            if (UiBitmap.TryDecodePng(png, 64, out byte[] pixels, out int w, out int h))
                             {
-                                Premultiply(pixels);
                                 PutCache(cKey, new IconBitmap(pixels, w, h));
                                 onLoaded?.Invoke();
                             }
@@ -357,7 +355,7 @@ internal static class NativeAppIconService
                 ReleaseDC(0, hdc);
             }
 
-            Premultiply(pixels);
+            UiBitmap.Premultiply(pixels);
             result = new IconBitmap(pixels, w, h);
             return true;
         }
@@ -365,23 +363,6 @@ internal static class NativeAppIconService
         {
             if (ii.HbmColor != 0) DeleteObject(ii.HbmColor);
             if (ii.HbmMask != 0) DeleteObject(ii.HbmMask);
-        }
-    }
-
-    private static void Premultiply(byte[] pixels)
-    {
-        for (int i = 0; i < pixels.Length; i += 4)
-        {
-            byte a = pixels[i + 3];
-            if (a == 255) continue;
-            if (a == 0)
-            {
-                pixels[i] = 0; pixels[i + 1] = 0; pixels[i + 2] = 0;
-                continue;
-            }
-            pixels[i] = (byte)(pixels[i] * a / 255);
-            pixels[i + 1] = (byte)(pixels[i + 1] * a / 255);
-            pixels[i + 2] = (byte)(pixels[i + 2] * a / 255);
         }
     }
 

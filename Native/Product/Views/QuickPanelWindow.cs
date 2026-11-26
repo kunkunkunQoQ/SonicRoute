@@ -1917,7 +1917,7 @@ internal sealed class QuickPanelWindow : LayeredWindow
 
         var choices = BuildOutputChoicesForRow(row);
         string[] order = choices.Select(c => c.Id).ToArray();
-        bool isMultiExternal = IsMultiOutputExternal(row.App);
+        bool isMultiExternal = PlaybackSelection.IsMultiOutputExternal(_host.Audio, row.App);
         if (row.IsExternal && !isMultiExternal)
         {
             ctrl = false;
@@ -1926,7 +1926,7 @@ internal sealed class QuickPanelWindow : LayeredWindow
         if (!row.IsExternal && ctrl && shift && PcRoutingApi.IsPhoneOutputDevice(devId))
             return;
 
-        string[] nextOutputs = SelectPlaybackRange(order, row.SelectedOutputs, devId, row.OutputAnchor, ctrl, shift);
+        string[] nextOutputs = PlaybackSelection.SelectRange(order, row.SelectedOutputs, devId, row.OutputAnchor, ctrl, shift);
         if (nextOutputs.Length == 0) nextOutputs = [AudioService.SystemDefaultDeviceId];
 
 #if SONICROUTE_PHONE
@@ -1949,11 +1949,11 @@ internal sealed class QuickPanelWindow : LayeredWindow
             : !ctrl && !shift ? (!PcRoutingApi.IsPhoneOutputDevice(devId) ? devId : null)
             : row.SelectedOutputs.Contains(row.NativeOutputId) && nextOutputs.Contains(row.NativeOutputId, IdCmp) ? row.NativeOutputId : null;
 
-        string preferred = SelectOptimisticPrimaryOutput(
+        string preferred = PlaybackSelection.SelectPrimary(
             nextOutputs,
             explicitPrimary ?? row.NativeOutputId,
             preferPhysical: !row.IsExternal,
-            lowPriorityId: LowPriorityOutputId(row.App));
+            lowPriorityId: PlaybackSelection.LowPriorityOutputId(_host.Audio, row.App));
 
         row.SelectedOutputs = new HashSet<string>(nextOutputs, IdCmp);
         row.NativeOutputId = preferred;
@@ -2095,12 +2095,8 @@ internal sealed class QuickPanelWindow : LayeredWindow
 
     private void CloseCombo()
     {
-        if (_comboPopup is { } pop)
-        {
-            _comboPopup = null;
-            pop.Closed -= OnComboClosed;
-            if (!pop.IsDisposed) { pop.CloseWindow(); pop.Dispose(); }
-        }
+        if (_comboPopup != null) _comboPopup.Closed -= OnComboClosed;
+        ComboPopupWindow.Close(ref _comboPopup);
     }
 
     private void ToggleOutputVolumesPopup()
@@ -2357,76 +2353,6 @@ internal sealed class QuickPanelWindow : LayeredWindow
         });
     }
 
-    private bool IsMultiOutputExternal(AudioAppInfo app)
-    {
-#if SONICROUTE_PHONE
-        return app.IsExternal && _host.Audio.ExternalAudio?.FindSession(app.ExternalSourceId) is IMultiOutputAudioSession;
-#else
-        return false;
-#endif
-    }
-
-    private string? LowPriorityOutputId(AudioAppInfo app)
-    {
-#if SONICROUTE_PHONE
-        return app.IsExternal && _host.Audio.ExternalAudio?.FindSession(app.ExternalSourceId) is AndroidAudioSession
-            ? AndroidAudioSession.SourcePhoneOutputId
-            : null;
-#else
-        return null;
-#endif
-    }
-
-    private static string[] SelectPlaybackRange(string[] order, HashSet<string> selected, string clicked, string? anchor, bool ctrl, bool shift)
-    {
-        if (!shift && !ctrl) return [clicked];
-        var result = new HashSet<string>(selected, IdCmp);
-        if (shift && ctrl)
-        {
-            result.Add(clicked);
-        }
-        else if (shift)
-        {
-            anchor ??= order.FirstOrDefault(result.Contains);
-            int start = Array.FindIndex(order, id => IdCmp.Equals(id, anchor));
-            int end = Array.FindIndex(order, id => IdCmp.Equals(id, clicked));
-            if (start < 0 || end < 0) result.Add(clicked);
-            else for (int i = Math.Min(start, end); i <= Math.Max(start, end); i++) result.Add(order[i]);
-        }
-        else if (!result.Remove(clicked))
-        {
-            result.Add(clicked);
-        }
-        var visible = order.Where(result.Contains);
-        return visible.Concat(selected.Where(id => result.Contains(id) && !order.Contains(id, IdCmp))).ToArray();
-    }
-
-    private static string SelectOptimisticPrimaryOutput(IReadOnlyList<string> outputs, string? currentOutputId, bool preferPhysical, string? lowPriorityId)
-    {
-        if (outputs.Count == 0) return AudioService.SystemDefaultDeviceId;
-
-        string? Pick(bool filtered)
-        {
-            string? first = null, matchedCurrent = null, systemDefault = null;
-            for (int i = 0; i < outputs.Count; i++)
-            {
-                string id = outputs[i];
-                if (filtered)
-                {
-                    if (preferPhysical && PcRoutingApi.IsPhoneOutputDevice(id)) continue;
-                    if (lowPriorityId != null && IdCmp.Equals(id, lowPriorityId)) continue;
-                }
-                if (!preferPhysical && AudioService.IsSystemDefault(id)) return id;
-                first ??= id;
-                if (AudioService.IsSystemDefault(id)) systemDefault ??= id;
-                if (currentOutputId != null && IdCmp.Equals(id, currentOutputId)) matchedCurrent = id;
-            }
-            return matchedCurrent ?? systemDefault ?? first;
-        }
-
-        return Pick(true) ?? Pick(false) ?? AudioService.SystemDefaultDeviceId;
-    }
-
     private bool TryGetExternalIcon(string key, byte[] png, out byte[] bgra, out int w, out int h, out int ver)
     {
         if (_extIconCache.TryGetValue(key, out var cached))
@@ -2434,17 +2360,8 @@ internal sealed class QuickPanelWindow : LayeredWindow
             bgra = cached.Pixels; w = cached.W; h = cached.H; ver = cached.Ver;
             return true;
         }
-        if (SonicRoute.Native.Graphics.WicIconLoader.TryDecodePngToBgra32(png, 48, 48, out byte[] pixels, out int pw, out int ph))
+        if (UiBitmap.TryDecodePng(png, 48, out byte[] pixels, out int pw, out int ph))
         {
-            for (int i = 0; i < pixels.Length; i += 4)
-            {
-                byte a = pixels[i + 3];
-                if (a == 255) continue;
-                if (a == 0) { pixels[i] = pixels[i + 1] = pixels[i + 2] = 0; continue; }
-                pixels[i] = (byte)(pixels[i] * a / 255);
-                pixels[i + 1] = (byte)(pixels[i + 1] * a / 255);
-                pixels[i + 2] = (byte)(pixels[i + 2] * a / 255);
-            }
             int nextVer = ++_extIconVer;
             if (_extIconCache.Count >= 64) _extIconCache.Clear();
             _extIconCache[key] = (pixels, pw, ph, nextVer);

@@ -102,7 +102,7 @@ internal sealed partial class PhoneDevicePageView
             if (_selectedCatalog.Contains(app.Package)) g.FillRoundedRect(row, 6f, theme.NavSelected);
             else if (_hit.IsHover(id)) g.FillRoundedRect(row, 6f, theme.NavHover);
             var icon = new UiRect(row.X + 6f, row.CenterY - 14f, 28f, 28f);
-            if (TryGetAppIcon(app, out var pixels, out int width, out int height, out int version))
+            if (_appIcons.TryGet(app, out var pixels, out int width, out int height, out int version))
                 g.DrawBgraBitmap("phonepage.icon:" + app.Package, pixels, width, height, icon, version: version);
             bool pinned = retained.Any(item => item.Package == app.Package);
             var pin = new UiRect(row.Right - 34f, row.CenterY - 14f, 28f, 28f);

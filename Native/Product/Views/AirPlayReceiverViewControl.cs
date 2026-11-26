@@ -416,9 +416,8 @@ internal sealed class AirPlayReceiverViewControl
         int gen = Interlocked.Increment(ref _artGen);
         _ = Task.Run(() =>
         {
-            if (!SonicRoute.Native.Graphics.WicIconLoader.TryDecodePngToBgra32(png, 72, 72, out byte[] pixels, out int pw, out int ph))
+            if (!UiBitmap.TryDecodePng(png, 72, out byte[] pixels, out int pw, out int ph))
                 return;
-            PremultiplyBgra32(pixels);
             _host.TryPost(() =>
             {
                 if (_attached && Volatile.Read(ref _artGen) == gen && ReferenceEquals(_lastArtworkPng, png))
@@ -437,18 +436,6 @@ internal sealed class AirPlayReceiverViewControl
         return false;
     }
 
-    private static void PremultiplyBgra32(byte[] pixels)
-    {
-        for (int i = 0; i < pixels.Length; i += 4)
-        {
-            byte a = pixels[i + 3];
-            if (a == 255) continue;
-            if (a == 0) { pixels[i] = pixels[i + 1] = pixels[i + 2] = 0; continue; }
-            pixels[i] = (byte)(pixels[i] * a / 255);
-            pixels[i + 1] = (byte)(pixels[i + 1] * a / 255);
-            pixels[i + 2] = (byte)(pixels[i + 2] * a / 255);
-        }
-    }
 
     internal static string GetStageLabel(AirPlayStatus status) => L10n.T(status.Stage switch
     {

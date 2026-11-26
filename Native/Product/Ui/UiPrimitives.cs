@@ -284,6 +284,37 @@ internal enum UiSliderStyle { Standard, PanelRow }
 
 internal static class UiPrimitives
 {
+    internal static float MeasureWrappedTextHeight(string text, float size, float width) =>
+        MathF.Ceiling(D2dSharedContext.Instance.MeasureText(text, UiMetrics.FontFamily, size, 400, MathF.Max(1f, width), 2048f, true).Height);
+
+    internal static float MeasureSettingsSwitchHeight(string title, string hint, float width)
+    {
+        float textWidth = width - 84f;
+        float textHeight = MeasureWrappedTextHeight(title, 12.5f, textWidth);
+        if (hint.Length != 0) textHeight += 3f + MeasureWrappedTextHeight(hint, 11.5f, textWidth);
+        return 21f + MathF.Max(20f, textHeight);
+    }
+
+    internal static float DrawSettingsSwitchWithHint(
+        D2dTarget g, UiThemePalette t, UiHitMap hit,
+        string id, UiRect rect, UiIcon icon, string title, string hint, bool isChecked, bool drawBottomBorder,
+        Action onClick, Action<string, UiRect, Action, UiCursorKind, string?> register)
+    {
+        register(id, rect, onClick, UiCursorKind.Hand, string.IsNullOrEmpty(hint) ? null : hint);
+        float textW = MathF.Max(1f, rect.Width - 84f);
+        float titleH = MeasureWrappedTextHeight(title, 12.5f, textW);
+        float hintH = hint.Length == 0 ? 0f : MeasureWrappedTextHeight(hint, 11.5f, textW);
+        float textY = rect.CenterY - (titleH + (hintH == 0f ? 0f : 3f + hintH) + 1f) * .5f;
+        g.DrawIcon(icon, new UiRect(rect.X + 2f, rect.CenterY - 8.5f, 17f, 17f), t.TextSecondary, 1.8f);
+        g.DrawText(title, new UiRect(rect.X + 32f, textY, textW, titleH), t.TextPrimary, 12.5f, 400, UiTextAlign.Leading, UiVertAlign.Top, wrap: true, ellipsis: false);
+        if (hintH > 0)
+            g.DrawText(hint, new UiRect(rect.X + 32f, textY + titleH + 3f, textW, hintH), t.TextSecondary, 11.5f, 400, UiTextAlign.Leading, UiVertAlign.Top, wrap: true, ellipsis: false);
+        DrawSwitch(g, t, hit, id, new UiRect(rect.Right - 36f, rect.CenterY - 12f, 34f, 24f), isChecked);
+        if (drawBottomBorder)
+            g.DrawLine(rect.X, rect.Bottom - .5f, rect.Right, rect.Bottom - .5f, t.Border, 1f, roundCaps: false);
+        return rect.Bottom;
+    }
+
     public static void DrawCard(D2dTarget g, UiThemePalette t, UiRect rect, float radius = UiMetrics.CardCornerRadius, bool alt = false, bool highlightBorder = false)
     {
         g.FillRoundedRect(rect, radius, alt ? t.SurfaceAlt : t.SurfaceBgAlpha);

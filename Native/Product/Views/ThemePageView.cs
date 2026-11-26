@@ -259,17 +259,17 @@ internal sealed class ThemePageView : IViewPage
 
         DrawToggleRow(g, t, hit, "th.osd.volvisual", new UiRect(inner.X, y, inner.Width, 38f),
             L10n.T("Theme.OsdVolumeVisual"), L10n.T("Theme.OsdVolumeVisualHint"), cfg.OsdVolumeVisualEnabled,
-            () => { cfg.OsdVolumeVisualEnabled = !cfg.OsdVolumeVisualEnabled; SaveAndNotifySettings(); });
+            () => { cfg.OsdVolumeVisualEnabled = !cfg.OsdVolumeVisualEnabled; _actions.CommitSettings(notify: true); });
         y += 44f;
 
         DrawToggleRow(g, t, hit, "th.osd.micpersist", new UiRect(inner.X, y, inner.Width, 28f),
             L10n.T("Theme.MicMuteOsdPersist"), null, cfg.MicMuteOsdPersistent,
-            () => { cfg.MicMuteOsdPersistent = !cfg.MicMuteOsdPersistent; SaveAndNotifySettings(); });
+            () => { cfg.MicMuteOsdPersistent = !cfg.MicMuteOsdPersistent; _actions.CommitSettings(notify: true); });
         y += 34f;
 
         DrawToggleRow(g, t, hit, "th.osd.mictrack", new UiRect(inner.X, y, inner.Width, 28f),
             L10n.T("Theme.MicMuteTrackInput"), null, cfg.MicMuteOsdDefaultInputPersistent,
-            () => { cfg.MicMuteOsdDefaultInputPersistent = !cfg.MicMuteOsdDefaultInputPersistent; SaveAndNotifySettings(); });
+            () => { cfg.MicMuteOsdDefaultInputPersistent = !cfg.MicMuteOsdDefaultInputPersistent; _actions.CommitSettings(notify: true); });
         y += 36f;
 
         g.DrawLine(inner.X, y, inner.Right, y, t.Border, 1f, roundCaps: false);
@@ -325,7 +325,7 @@ internal sealed class ThemePageView : IViewPage
             cfg.QuickPanelPosMode = "default";
             cfg.QuickPanelCustomX = -1;
             cfg.QuickPanelCustomY = -1;
-            if (!SaveAndNotifySettings()) return;
+            if (!_actions.CommitSettings(notify: true)) return;
             _actions.ShowNotice(L10n.T("Exp.PanelPosResetDone"));
         };
 
@@ -348,25 +348,25 @@ internal sealed class ThemePageView : IViewPage
 
         DrawToggleRow(g, t, hit, "th.panel.peak", new UiRect(inner.X, y, inner.Width, 30f),
             L10n.T("Theme.AppPeakMeter"), null, cfg.ShowAppPeakMeter,
-            () => { cfg.ShowAppPeakMeter = !cfg.ShowAppPeakMeter; SaveAndNotifySettings(); });
+            () => { cfg.ShowAppPeakMeter = !cfg.ShowAppPeakMeter; _actions.CommitSettings(notify: true); });
         y += 38f;
 
         DrawToggleRow(g, t, hit, "th.panel.legacy", new UiRect(inner.X, y, inner.Width, 38f),
             L10n.T("Theme.PanelLegacyRows"), L10n.T("Theme.PanelLegacyRowsHint"), cfg.QuickPanelUseLegacyAppRows,
-            () => { cfg.QuickPanelUseLegacyAppRows = !cfg.QuickPanelUseLegacyAppRows; SaveAndNotifySettings(); });
+            () => { cfg.QuickPanelUseLegacyAppRows = !cfg.QuickPanelUseLegacyAppRows; _actions.CommitSettings(notify: true); });
         y += 46f;
 
         if (cfg.QuickPanelUseLegacyAppRows)
         {
             DrawToggleRow(g, t, hit, "th.panel.compactOut", new UiRect(inner.X + 20f, y, inner.Width - 20f, 36f),
                 L10n.T("Theme.PanelCompactOutputName"), L10n.T("Theme.PanelCompactOutputNameHint"), cfg.QuickPanelCompactShowOutputName,
-                () => { cfg.QuickPanelCompactShowOutputName = !cfg.QuickPanelCompactShowOutputName; SaveAndNotifySettings(); });
+                () => { cfg.QuickPanelCompactShowOutputName = !cfg.QuickPanelCompactShowOutputName; _actions.CommitSettings(notify: true); });
         }
         else
         {
             DrawToggleRow(g, t, hit, "th.panel.fullOut", new UiRect(inner.X, y, inner.Width, 36f),
                 L10n.T("Theme.PanelOutputName"), L10n.T("Theme.PanelOutputNameHint"), cfg.QuickPanelShowOutputName,
-                () => { cfg.QuickPanelShowOutputName = !cfg.QuickPanelShowOutputName; SaveAndNotifySettings(); });
+                () => { cfg.QuickPanelShowOutputName = !cfg.QuickPanelShowOutputName; _actions.CommitSettings(notify: true); });
         }
     }
 
@@ -657,7 +657,7 @@ internal sealed class ThemePageView : IViewPage
         cfg.OsdFontScale = 1.0;
         cfg.OsdFadeInMs = 100;
         cfg.OsdFadeOutMs = 200;
-        if (!SaveAndNotifySettings()) return;
+        if (!_actions.CommitSettings(notify: true)) return;
         _actions.Host.PreviewOsd();
         _actions.ShowNotice(L10n.T("Exp.OsdResetDone"));
     }
@@ -674,13 +674,6 @@ internal sealed class ThemePageView : IViewPage
     private void SaveAndNotifyTheme()
     {
         if (_actions.CommitSettings()) _actions.NotifyThemeChanged();
-    }
-
-    private bool SaveAndNotifySettings()
-    {
-        if (!_actions.CommitSettings()) return false;
-        _actions.NotifySettingsChanged();
-        return true;
     }
 
     public void Dispose()

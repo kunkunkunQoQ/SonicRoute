@@ -1253,7 +1253,7 @@ internal sealed class AppsPageView : IViewPage
     {
         if (_actions.Config.HiddenPanelApps.Count == 0) return;
         _actions.Config.HiddenPanelApps.Clear();
-        if (_actions.CommitSettings()) _actions.NotifySettingsChanged();
+        _actions.CommitSettings(notify: true);
     }
 
     private void BatchToggleMute(List<AudioAppInfo> targets, bool targetMute)
@@ -1286,7 +1286,7 @@ internal sealed class AppsPageView : IViewPage
             if (!include) configList.RemoveAll(x => IdCmp.Equals(x, pn));
             else if (!configList.Contains(pn, IdCmp)) configList.Add(pn);
         }
-        if (_actions.CommitSettings()) _actions.NotifySettingsChanged();
+        _actions.CommitSettings(notify: true);
     }
 
     private async void BatchResetRoutes(List<AudioAppInfo> targets)
@@ -1453,7 +1453,7 @@ internal sealed class AppsPageView : IViewPage
 
     private void ApplyOutputSelection(AudioAppInfo app, DeviceChoice[] choices, string deviceId, bool ctrl, bool shift)
     {
-        bool isMultiExternal = IsMultiOutputExternal(app);
+        bool isMultiExternal = PlaybackSelection.IsMultiOutputExternal(_actions.Host.Audio, app);
         if (app.IsExternal && !isMultiExternal)
         {
             ctrl = false;
@@ -1464,7 +1464,7 @@ internal sealed class AppsPageView : IViewPage
 
         string[] order = choices.Select(c => c.Id).ToArray();
         var currentSelected = _pendingOutputs ?? _selectedOutputs;
-        string[] nextOutputs = SelectPlaybackRange(order, currentSelected, deviceId, _outputRangeAnchor, ctrl, shift);
+        string[] nextOutputs = PlaybackSelection.SelectRange(order, currentSelected, deviceId, _outputRangeAnchor, ctrl, shift);
         if (nextOutputs.Length == 0) nextOutputs = new[] { AudioService.SystemDefaultDeviceId };
 
 #if SONICROUTE_PHONE
@@ -1487,11 +1487,11 @@ internal sealed class AppsPageView : IViewPage
             : !ctrl && !shift ? (!PcRoutingApi.IsPhoneOutputDevice(deviceId) ? deviceId : null)
             : _pendingPrimary != null && nextOutputs.Contains(_pendingPrimary, IdCmp) ? _pendingPrimary : null;
 
-        string preferred = SelectOptimisticPrimaryOutput(
+        string preferred = PlaybackSelection.SelectPrimary(
             nextOutputs,
             explicitPrimary ?? _nativeOutput,
             preferPhysical: !app.IsExternal,
-            lowPriorityId: LowPriorityOutputId(app));
+            lowPriorityId: PlaybackSelection.LowPriorityOutputId(_actions.Host.Audio, app));
 
         _pendingOutputs = new HashSet<string>(nextOutputs, IdCmp);
         _pendingPrimary = preferred;
@@ -1556,85 +1556,15 @@ internal sealed class AppsPageView : IViewPage
         });
     }
 
-    private static string[] SelectPlaybackRange(string[] order, HashSet<string> selected, string clicked, string? anchor, bool ctrl, bool shift)
-    {
-        if (!shift && !ctrl) return new[] { clicked };
-        var result = new HashSet<string>(selected, IdCmp);
-        if (shift && ctrl)
-        {
-            result.Add(clicked);
-        }
-        else if (shift)
-        {
-            anchor ??= order.FirstOrDefault(result.Contains);
-            int start = Array.FindIndex(order, id => IdCmp.Equals(id, anchor));
-            int end = Array.FindIndex(order, id => IdCmp.Equals(id, clicked));
-            if (start < 0 || end < 0) result.Add(clicked);
-            else for (int i = Math.Min(start, end); i <= Math.Max(start, end); i++) result.Add(order[i]);
-        }
-        else if (!result.Remove(clicked))
-        {
-            result.Add(clicked);
-        }
-        var visible = order.Where(result.Contains);
-        return visible.Concat(selected.Where(id => result.Contains(id) && !order.Contains(id, IdCmp))).ToArray();
-    }
-
-    private static string SelectOptimisticPrimaryOutput(IReadOnlyList<string> outputs, string? currentOutputId, bool preferPhysical, string? lowPriorityId = null)
-    {
-        if (outputs.Count == 0) return AudioService.SystemDefaultDeviceId;
-
-        string? Pick(bool filtered)
-        {
-            string? first = null, matchedCurrent = null, systemDefault = null;
-            for (int i = 0; i < outputs.Count; i++)
-            {
-                string id = outputs[i];
-                if (filtered)
-                {
-                    if (preferPhysical && PcRoutingApi.IsPhoneOutputDevice(id)) continue;
-                    if (lowPriorityId != null && IdCmp.Equals(id, lowPriorityId)) continue;
-                }
-                if (!preferPhysical && AudioService.IsSystemDefault(id)) return id;
-                first ??= id;
-                if (AudioService.IsSystemDefault(id)) systemDefault ??= id;
-                if (currentOutputId != null && IdCmp.Equals(id, currentOutputId)) matchedCurrent = id;
-            }
-            return matchedCurrent ?? systemDefault ?? first;
-        }
-
-        return Pick(true) ?? Pick(false) ?? AudioService.SystemDefaultDeviceId;
-    }
-
-    private bool IsMultiOutputExternal(AudioAppInfo app)
-    {
-#if SONICROUTE_PHONE
-        return app.IsExternal && _actions.Host.Audio.ExternalAudio?.FindSession(app.ExternalSourceId) is IMultiOutputAudioSession;
-#else
-        return false;
-#endif
-    }
-
-    private string? LowPriorityOutputId(AudioAppInfo app)
-    {
-#if SONICROUTE_PHONE
-        return app.IsExternal && _actions.Host.Audio.ExternalAudio?.FindSession(app.ExternalSourceId) is AndroidAudioSession
-            ? AndroidAudioSession.SourcePhoneOutputId
-            : null;
-#else
-        return null;
-#endif
-    }
-
     private string GetDisplayedPrimaryOutput()
     {
         if (_pendingOutputs is { Count: > 0 } && _selectedApp != null)
         {
-            return SelectOptimisticPrimaryOutput(
+            return PlaybackSelection.SelectPrimary(
                 _pendingOutputs.ToArray(),
                 _pendingPrimary ?? _nativeOutput,
                 preferPhysical: !_selectedApp.IsExternal,
-                lowPriorityId: LowPriorityOutputId(_selectedApp));
+                lowPriorityId: PlaybackSelection.LowPriorityOutputId(_actions.Host.Audio, _selectedApp));
         }
         return _nativeOutput;
     }
@@ -1729,7 +1659,7 @@ internal sealed class AppsPageView : IViewPage
         string proc = _selectedApp.ProcessName!;
         var list = _actions.Config.DisabledAutoSwitchApps;
         if (list.RemoveAll(x => IdCmp.Equals(x, proc)) == 0) list.Add(proc);
-        if (_actions.CommitSettings()) _actions.NotifySettingsChanged();
+        _actions.CommitSettings(notify: true);
     }
 
     private void ToggleShowInQuickPanel()
@@ -1738,7 +1668,7 @@ internal sealed class AppsPageView : IViewPage
         string proc = _selectedApp.ProcessName!;
         var list = _actions.Config.HiddenPanelApps;
         if (list.RemoveAll(x => IdCmp.Equals(x, proc)) == 0) list.Add(proc);
-        if (_actions.CommitSettings()) _actions.NotifySettingsChanged();
+        _actions.CommitSettings(notify: true);
     }
 
     private void ResetSelectedAppRoutes()
@@ -1836,17 +1766,8 @@ internal sealed class AppsPageView : IViewPage
 
     private static NativeAppIconService.IconBitmap? DecodePngBitmap(byte[] png)
     {
-        if (!SonicRoute.Native.Graphics.WicIconLoader.TryDecodePngToBgra32(png, 64, 64, out byte[] pixels, out int w, out int h))
+        if (!UiBitmap.TryDecodePng(png, 64, out byte[] pixels, out int w, out int h))
             return null;
-        for (int i = 0; i < pixels.Length; i += 4)
-        {
-            byte a = pixels[i + 3];
-            if (a == 255) continue;
-            if (a == 0) { pixels[i] = pixels[i + 1] = pixels[i + 2] = 0; continue; }
-            pixels[i] = (byte)(pixels[i] * a / 255);
-            pixels[i + 1] = (byte)(pixels[i + 1] * a / 255);
-            pixels[i + 2] = (byte)(pixels[i + 2] * a / 255);
-        }
         return new NativeAppIconService.IconBitmap(pixels, w, h);
     }
 

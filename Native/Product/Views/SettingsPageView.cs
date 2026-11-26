@@ -3,10 +3,8 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
-using System.IO.Pipes;
 using System.Linq;
 using System.Text;
-using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using SonicRoute.Core;
@@ -140,7 +138,7 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
             _clicks[id] = onClick;
             if (r.Bottom > viewport.Y && r.Y < viewport.Bottom)
             {
-                var clipped = ClipToViewport(r, viewport);
+                var clipped = UiHitMap.Intersect(r, viewport);
                 if (!clipped.IsEmpty) hit.Add(id, clipped, cursor, tooltip);
             }
         }
@@ -276,7 +274,7 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
                         return;
                     }
                     actions.Config.Language = L10n.CurrentLanguage;
-                    SaveConfig();
+                    actions.CommitSettings(notify: true);
                     actions.RefreshAll();
                 }, register);
                 cy += 36f;
@@ -327,7 +325,7 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
             var rect = new UiRect(x + pad + column * (choiceW + gap), choicesY, choiceW, choiceH);
             bool selected = string.Equals(cfg.DefaultAppMode, mode, StringComparison.OrdinalIgnoreCase);
             DrawAppChoiceCard(g, t, hit, "st.appmode." + mode, rect, icon, labels.Title, labels.Hint, labels.TitleH, labels.HintH,
-                selected, () => { cfg.DefaultAppMode = mode; SaveConfig(); }, register);
+                selected, () => { cfg.DefaultAppMode = mode; actions.CommitSettings(notify: true); }, register);
         }
         Choice(0, "recent", UiIcon.Clock, recent);
         Choice(1, "last", UiIcon.History, last);
@@ -351,19 +349,19 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
     {
         const float pad = 19f;
         float innerW = w - pad * 2f;
-        float Row(string title, string hint) => SwitchHeight(L10n.T(title), L10n.T(hint), innerW);
+        float Row(string title, string hint) => UiPrimitives.MeasureSettingsSwitchHeight(L10n.T(title), L10n.T(hint), innerW);
         float startMinH = Row("St.StartMinimized", "Settings.StartMinimizedHint");
         float autoStartH = Row("St.AutoStart", "Settings.AutoStartHint");
         float startPanelH = Row("St.StartPanel", "Settings.StartPanelHint");
         float trayH = Row("St.TrayWheelEverywhere", "St.TrayWheelEverywhereHint");
         float micH = Row("St.ExperimentalMic", "St.ExperimentalMicHint");
-        float micPanelH = cfg.ExperimentalMic ? SwitchHeight(L10n.T("Exp.MicPanel"), "", innerW - 32f) + 6f : 0f;
+        float micPanelH = cfg.ExperimentalMic ? UiPrimitives.MeasureSettingsSwitchHeight(L10n.T("Exp.MicPanel"), "", innerW - 32f) + 6f : 0f;
         float systemH = Row("St.PanelChangeSystemDefault", "St.PanelChangeSystemDefaultHint");
         float retainedH = Row("St.PanelOutputVolumesRetainedOnly", "St.PanelOutputVolumesRetainedOnlyHint");
         float collapseH = Row("Exp.Collapse", "Exp.CollapseHint");
         float experimentalH = cfg.ExperimentalUnlocked ? Row("St.ExperimentalMode", "St.ExperimentalModeHint") : 0f;
-        float volRowH = MathF.Max(30f, TextHeight(L10n.T("St.VolumeStep"), 12.5f, innerW - 112f)
-            + TextHeight(L10n.T("St.VolumeStepHint"), 11.5f, innerW - 112f)) + 20f;
+        float volRowH = MathF.Max(30f, UiPrimitives.MeasureWrappedTextHeight(L10n.T("St.VolumeStep"), 12.5f, innerW - 112f)
+            + UiPrimitives.MeasureWrappedTextHeight(L10n.T("St.VolumeStepHint"), 11.5f, innerW - 112f)) + 20f;
         bool packaged = actions.Host.EnvironmentInfo.IsPackaged;
         float startupH = startMinH + autoStartH + startPanelH + (packaged ? 0f : 26f + (_autoStartMoreExpanded ? 40f : 0f));
         float cardH = pad * 2f + 24f + startupH + volRowH + trayH + micH + micPanelH + systemH + retainedH + collapseH + experimentalH;
@@ -375,16 +373,16 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
         cy += 24f;
 
         // Start minimized
-        cy = DrawSettingsSwitchWithHint(g, t, hit, "st.startmin", new UiRect(x + pad, cy, innerW, startMinH),
+        cy = UiPrimitives.DrawSettingsSwitchWithHint(g, t, hit, "st.startmin", new UiRect(x + pad, cy, innerW, startMinH),
             UiIcon.Monitor, L10n.T("St.StartMinimized"), L10n.T("Settings.StartMinimizedHint"), cfg.StartMinimized, true, () =>
             {
                 cfg.StartMinimized = !cfg.StartMinimized;
-                SaveConfig();
+                actions.CommitSettings(notify: true);
             }, register);
 
         // Auto-start switch (MSIX Store StartupTask vs portable HKCU Run)
-        bool autoStart = packaged ? cfg.AutoStartStore : actions.Host.PreviewAutoStart;
-        cy = DrawSettingsSwitchWithHint(g, t, hit, "st.autostart", new UiRect(x + pad, cy, innerW, autoStartH),
+        bool autoStart = packaged ? cfg.AutoStartStore : actions.Host.AutoStartEnabled;
+        cy = UiPrimitives.DrawSettingsSwitchWithHint(g, t, hit, "st.autostart", new UiRect(x + pad, cy, innerW, autoStartH),
             UiIcon.Power, L10n.T("St.AutoStart"), L10n.T("Settings.AutoStartHint"), autoStart, true, () =>
             {
                 if (_autoStartBusy) return;
@@ -414,11 +412,11 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
         }
 
         // Start panel on start
-        cy = DrawSettingsSwitchWithHint(g, t, hit, "st.startpanel", new UiRect(x + pad, cy, innerW, startPanelH),
+        cy = UiPrimitives.DrawSettingsSwitchWithHint(g, t, hit, "st.startpanel", new UiRect(x + pad, cy, innerW, startPanelH),
             UiIcon.Application, L10n.T("St.StartPanel"), L10n.T("Settings.StartPanelHint"), cfg.StartPanelOnStart, true, () =>
             {
                 cfg.StartPanelOnStart = !cfg.StartPanelOnStart;
-                SaveConfig();
+                actions.CommitSettings(notify: true);
             }, register);
 
         // WPF VolumeStepBox commits on Enter or normal focus loss.
@@ -440,67 +438,67 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
                 int step = Math.Clamp(value, 1, 20);
                 if (cfg.VolumeStep == step) return;
                 cfg.VolumeStep = step;
-                SaveConfig();
+                actions.CommitSettings(notify: true);
             }, centered: true);
         }, UiCursorKind.IBeam, L10n.T("St.VolumeStep"));
         cy += volRowH;
 
-        cy = DrawSettingsSwitchWithHint(g, t, hit, "st.traywheel.everywhere", new UiRect(x + pad, cy, innerW, trayH),
+        cy = UiPrimitives.DrawSettingsSwitchWithHint(g, t, hit, "st.traywheel.everywhere", new UiRect(x + pad, cy, innerW, trayH),
             UiIcon.Speaker, L10n.T("St.TrayWheelEverywhere"), L10n.T("St.TrayWheelEverywhereHint"), cfg.TrayWheelEverywhere, true, () =>
             {
                 cfg.TrayWheelEverywhere = !cfg.TrayWheelEverywhere;
-                SaveConfig();
+                actions.CommitSettings(notify: true);
             }, register);
 
-        cy = DrawSettingsSwitchWithHint(g, t, hit, "st.expmic", new UiRect(x + pad, cy, innerW, micH),
+        cy = UiPrimitives.DrawSettingsSwitchWithHint(g, t, hit, "st.expmic", new UiRect(x + pad, cy, innerW, micH),
             UiIcon.Microphone, L10n.T("St.ExperimentalMic"), L10n.T("St.ExperimentalMicHint"), cfg.ExperimentalMic, true, () =>
             {
                 cfg.ExperimentalMic = !cfg.ExperimentalMic;
-                if (!SaveConfig()) return;
+                if (!actions.CommitSettings(notify: true)) return;
                 actions.ShowNotice(L10n.T("St.ExpMicNeedRestart"));
             }, register);
 
         if (cfg.ExperimentalMic)
         {
-            cy = DrawSettingsSwitchWithHint(g, t, hit, "st.micinpanel", new UiRect(x + pad + 32f, cy + 6f, innerW - 32f, micPanelH - 6f),
+            cy = UiPrimitives.DrawSettingsSwitchWithHint(g, t, hit, "st.micinpanel", new UiRect(x + pad + 32f, cy + 6f, innerW - 32f, micPanelH - 6f),
                 UiIcon.Microphone, L10n.T("Exp.MicPanel"), "", cfg.MicInPanel, true, () =>
                 {
                     cfg.MicInPanel = !cfg.MicInPanel;
-                    if (!SaveConfig()) return;
+                    if (!actions.CommitSettings(notify: true)) return;
                     actions.ShowNotice(L10n.T("St.ExpMicPanelNeedRestart"));
                 }, register);
         }
 
-        cy = DrawSettingsSwitchWithHint(g, t, hit, "st.panelchangesysdef", new UiRect(x + pad, cy, innerW, systemH),
+        cy = UiPrimitives.DrawSettingsSwitchWithHint(g, t, hit, "st.panelchangesysdef", new UiRect(x + pad, cy, innerW, systemH),
             UiIcon.Switch, L10n.T("St.PanelChangeSystemDefault"), L10n.T("St.PanelChangeSystemDefaultHint"), cfg.PanelChangeSystemDefault, true, () =>
             {
                 cfg.PanelChangeSystemDefault = !cfg.PanelChangeSystemDefault;
-                SaveConfig();
+                actions.CommitSettings(notify: true);
             }, register);
 
-        cy = DrawSettingsSwitchWithHint(g, t, hit, "st.panelretainedonly", new UiRect(x + pad, cy, innerW, retainedH),
+        cy = UiPrimitives.DrawSettingsSwitchWithHint(g, t, hit, "st.panelretainedonly", new UiRect(x + pad, cy, innerW, retainedH),
             UiIcon.Speaker, L10n.T("St.PanelOutputVolumesRetainedOnly"), L10n.T("St.PanelOutputVolumesRetainedOnlyHint"), cfg.PanelOutputVolumesRetainedOnly, true, () =>
             {
                 cfg.PanelOutputVolumesRetainedOnly = !cfg.PanelOutputVolumesRetainedOnly;
-                SaveConfig();
+                actions.CommitSettings(notify: true);
             }, register);
 
-        cy = DrawSettingsSwitchWithHint(g, t, hit, "st.collapsedev", new UiRect(x + pad, cy, innerW, collapseH),
+        cy = UiPrimitives.DrawSettingsSwitchWithHint(g, t, hit, "st.collapsedev", new UiRect(x + pad, cy, innerW, collapseH),
             UiIcon.Options, L10n.T("Exp.Collapse"), L10n.T("Exp.CollapseHint"), cfg.CollapseDeviceSections, true, () =>
             {
                 cfg.CollapseDeviceSections = !cfg.CollapseDeviceSections;
                 _keepDevicesExpanded = !cfg.CollapseDeviceSections;
                 _deviceNamesExpanded = !cfg.CollapseDeviceSections;
-                SaveConfig();
+                actions.CommitSettings(notify: true);
             }, register);
 
         if (cfg.ExperimentalUnlocked)
         {
-            DrawSettingsSwitchWithHint(g, t, hit, "st.expmode", new UiRect(x + pad, cy, innerW, experimentalH),
+            UiPrimitives.DrawSettingsSwitchWithHint(g, t, hit, "st.expmode", new UiRect(x + pad, cy, innerW, experimentalH),
                 UiIcon.Experiment, L10n.T("St.ExperimentalMode"), L10n.T("St.ExperimentalModeHint"), cfg.ExperimentalMode, true, () =>
                 {
                     cfg.ExperimentalMode = !cfg.ExperimentalMode;
-                    if (!SaveConfig()) return;
+                    if (!actions.CommitSettings(notify: true)) return;
                     if (!cfg.ExperimentalMode) AutoRuleService.StopExecutionHistory();
                     actions.ShowNotice(L10n.T("St.ExpModeNeedRestart"));
                 }, register);
@@ -583,7 +581,7 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
                 {
                     cfg.HiddenOutputDevices.Clear();
                 }
-                SaveConfig();
+                actions.CommitSettings(notify: true);
             }, UiCursorKind.Hand, null);
             cy += 30f;
 
@@ -609,7 +607,7 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
                     {
                         cfg.HiddenInputDevices.Clear();
                     }
-                    SaveConfig();
+                    actions.CommitSettings(notify: true);
                 }, UiCursorKind.Hand, null);
                 cy += 30f;
 
@@ -687,7 +685,7 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
                     hiddenList.RemoveAll(id => string.Equals(id, dev.Id, StringComparison.OrdinalIgnoreCase));
                 else
                     hiddenList.Add(dev.Id);
-                SaveConfig();
+                actions.CommitSettings(notify: true);
             }, UiCursorKind.Hand, dev.DisplayName);
 
         }
@@ -830,7 +828,7 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
         const float pad = 19f;
         float innerW = w - pad * 2f;
         float verH = newestLine != null ? 42f : 23f;
-        float autoH = store ? 0f : SwitchHeight(L10n.T("Upd.Automatic"), L10n.T("Upd.AutomaticHint"), innerW);
+        float autoH = store ? 0f : UiPrimitives.MeasureSettingsSwitchHeight(L10n.T("Upd.Automatic"), L10n.T("Upd.AutomaticHint"), innerW);
         int statusLines = 1 + (outcomeLine != null ? 1 : 0) + (dlLine != null ? 1 : 0) + (errLine != null ? 1 : 0);
         float statusH = statusLines * 18f + 16f;
         float progH = showProgress ? 16f : 0f;
@@ -868,11 +866,11 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
         // Auto-check updates switch row (unpackaged only)
         if (!store)
         {
-            cy = DrawSettingsSwitchWithHint(g, t, hit, "st.about.autochk", new UiRect(x + pad, cy, innerW, autoH),
+            cy = UiPrimitives.DrawSettingsSwitchWithHint(g, t, hit, "st.about.autochk", new UiRect(x + pad, cy, innerW, autoH),
                 UiIcon.Clock, L10n.T("Upd.Automatic"), L10n.T("Upd.AutomaticHint"), cfg.AutoCheckUpdates, true, () =>
                 {
                     cfg.AutoCheckUpdates = !cfg.AutoCheckUpdates;
-                    if (!SaveConfig()) return;
+                    if (!actions.CommitSettings(notify: true)) return;
                     updates.AutomaticSettingChanged(cfg.AutoCheckUpdates);
                 }, register);
         }
@@ -982,37 +980,6 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
         return y + cardHeight;
     }
 
-    internal static float TextHeight(string text, float size, float width) =>
-        MathF.Ceiling(D2dSharedContext.Instance.MeasureText(text, UiMetrics.FontFamily, size, 400, MathF.Max(1f, width), 2048f, true).Height);
-
-    internal static float SwitchHeight(string title, string hint, float width)
-    {
-        float textWidth = width - 84f;
-        float textHeight = TextHeight(title, 12.5f, textWidth);
-        if (hint.Length != 0) textHeight += 3f + TextHeight(hint, 11.5f, textWidth);
-        return 21f + MathF.Max(20f, textHeight);
-    }
-
-    internal static float DrawSettingsSwitchWithHint(
-        D2dTarget g, UiThemePalette t, UiHitMap hit,
-        string id, UiRect rect, UiIcon icon, string title, string hint, bool isChecked, bool drawBottomBorder,
-        Action onClick, Action<string, UiRect, Action, UiCursorKind, string?> register)
-    {
-        register(id, rect, onClick, UiCursorKind.Hand, string.IsNullOrEmpty(hint) ? null : hint);
-        float textW = MathF.Max(1f, rect.Width - 84f);
-        float titleH = TextHeight(title, 12.5f, textW);
-        float hintH = hint.Length == 0 ? 0f : TextHeight(hint, 11.5f, textW);
-        float textY = rect.CenterY - (titleH + (hintH == 0f ? 0f : 3f + hintH) + 1f) * .5f;
-        g.DrawIcon(icon, new UiRect(rect.X + 2f, rect.CenterY - 8.5f, 17f, 17f), t.TextSecondary, 1.8f);
-        g.DrawText(title, new UiRect(rect.X + 32f, textY, textW, titleH), t.TextPrimary, 12.5f, 400, UiTextAlign.Leading, UiVertAlign.Top, wrap: true, ellipsis: false);
-        if (hintH > 0)
-            g.DrawText(hint, new UiRect(rect.X + 32f, textY + titleH + 3f, textW, hintH), t.TextSecondary, 11.5f, 400, UiTextAlign.Leading, UiVertAlign.Top, wrap: true, ellipsis: false);
-        UiPrimitives.DrawSwitch(g, t, hit, id, new UiRect(rect.Right - 36f, rect.CenterY - 12f, 34f, 24f), isChecked);
-        if (drawBottomBorder)
-            g.DrawLine(rect.X, rect.Bottom - .5f, rect.Right, rect.Bottom - .5f, t.Border, 1f, roundCaps: false);
-        return rect.Bottom;
-    }
-
     private static void DrawAppChoiceCard(
         D2dTarget g, UiThemePalette t, UiHitMap hit,
         string id, UiRect rect, UiIcon icon, string title, string hint, float titleH, float hintH, bool selected,
@@ -1104,7 +1071,7 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
         {
             if (string.Equals(picked.Key, L10n.CurrentLanguage, StringComparison.OrdinalIgnoreCase)) return;
             actions.Config.Language = picked.Key;
-            if (!SaveConfig()) return;
+            if (!actions.CommitSettings(notify: true)) return;
             L10n.Instance.ApplyImportedLanguage(picked.Key);
             actions.RefreshAll();
             actions.ShowNotice(L10n.T("St.LangApplied"));
@@ -1125,7 +1092,7 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
             if (!string.Equals(actions.Config.DefaultAppMode, "fixed", StringComparison.OrdinalIgnoreCase)) return;
             var app = Array.Find(apps, candidate => candidate.Identity == picked.Key);
             actions.Config.FixedAppName = app?.ProcessName ?? "";
-            SaveConfig();
+            actions.CommitSettings(notify: true);
         });
     }
     private void OnAuthorLabelClicked()
@@ -1138,7 +1105,7 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
             _authorClicks = 0;
             cfg.ExperimentalUnlocked = true;
             cfg.ExperimentalMode = true;
-            if (!SaveConfig()) return;
+            if (!actions.CommitSettings(notify: true)) return;
             actions.ShowNotice(L10n.T("St.EggDone"));
         }
         else
@@ -1189,7 +1156,7 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
             {
                 if (last == null) { actions.ShowNotice(L10n.T("Exp.LangImportFail")); return; }
                 actions.Config.Language = last;
-                if (!SaveConfig()) return;
+                if (!actions.CommitSettings(notify: true)) return;
                 L10n.Instance.ApplyImportedLanguage(last);
                 actions.RefreshAll();
                 string message = paths.Length == 1 && lastCoverage < 80
@@ -1273,15 +1240,7 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
             return;
         try
         {
-            bool started = await actions.Host.Updates.InstallAsync();
-            if (!started || _disposed) return;
-            using var pipe = new NamedPipeClientStream(".", actions.Host.EnvironmentInfo.ControlPipeName,
-                PipeDirection.InOut, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
-            await pipe.ConnectAsync(3000).ConfigureAwait(false);
-            string frame = JsonSerializer.Serialize(new ControlRequest("exit", []), HostJson.Default.ControlRequest);
-            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-            await RuleCommandFrame.WriteFrameAsync(pipe, frame, cts.Token).ConfigureAwait(false);
-            await RuleCommandFrame.ReadFrameAsync(pipe, cts.Token).ConfigureAwait(false);
+            if (await actions.Host.Updates.InstallAsync()) actions.Host.ExitForUpdate();
         }
         catch (Exception ex)
         {
@@ -1302,7 +1261,7 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
             if (actions.Config.AutoStartStore != enabled)
             {
                 actions.Config.AutoStartStore = enabled;
-                SaveConfig();
+                actions.CommitSettings(notify: true);
             }
             actions.Invalidate();
         }
@@ -1332,7 +1291,7 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
                 }
                 bool enabled = state is 2 or 4;
                 actions.Config.AutoStartStore = enabled;
-                SaveConfig();
+                actions.CommitSettings(notify: true);
                 if (enable && !enabled)
                 {
                     string key = state == 1 ? "St.AutoStartDisabledByUser"
@@ -1343,9 +1302,9 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
             }
             else
             {
-                actions.Host.SetPreviewAutoStart(enable);
-                actions.Config.AutoStart = actions.Host.PreviewAutoStart;
-                SaveConfig();
+                actions.Host.SetAutoStart(enable);
+                actions.Config.AutoStart = actions.Host.AutoStartEnabled;
+                actions.CommitSettings(notify: true);
             }
         }
         catch
@@ -1375,10 +1334,10 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
             }
             else
             {
-                actions.Host.SetPreviewAutoStart(false);
+                actions.Host.SetAutoStart(false);
                 actions.Config.AutoStart = false;
             }
-            if (!SaveConfig()) return;
+            if (!actions.CommitSettings(notify: true)) return;
             if (!_disposed) actions.ShowNotice(L10n.T("St.CleanAutoStartDone"));
         }
         catch
@@ -1408,13 +1367,6 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
     {
         try { Process.Start(new ProcessStartInfo(url) { UseShellExecute = true }); }
         catch { }
-    }
-
-    private bool SaveConfig()
-    {
-        if (!actions.CommitSettings()) return false;
-        actions.NotifySettingsChanged();
-        return true;
     }
 
     private List<AudioDeviceInfo> BuildDeviceList(Endpoint[] endpoints, Flow flow, bool includeSystemDefault)
@@ -1459,15 +1411,6 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
         if (full.Contains("head", StringComparison.OrdinalIgnoreCase) || full.Contains("耳机") || full.Contains("耳機") || full.Contains("蓝牙"))
             return UiIcon.Headphones;
         return UiIcon.Speaker;
-    }
-
-    private static UiRect ClipToViewport(UiRect r, UiRect vp)
-    {
-        float l = MathF.Max(r.X, vp.X);
-        float t = MathF.Max(r.Y, vp.Y);
-        float right = MathF.Min(r.Right, vp.Right);
-        float b = MathF.Min(r.Bottom, vp.Bottom);
-        return new UiRect(l, t, MathF.Max(0f, right - l), MathF.Max(0f, b - t));
     }
 
 }

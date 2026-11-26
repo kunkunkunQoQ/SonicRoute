@@ -27,10 +27,7 @@ internal sealed partial class PhoneDevicePageView : IViewPage
     private UiHitMap _hit = new();
     private readonly AirPlayReceiverViewControl _airPlay;
 
-    private readonly Dictionary<string, (byte[] Pixels, int W, int H, int Ver)> _iconCache = new(StringComparer.Ordinal);
-    private readonly Queue<string> _iconOrder = new();
-    private readonly HashSet<string> _iconDecoding = new(StringComparer.Ordinal);
-    private int _iconVer, _iconGeneration;
+    private readonly PhoneAppIconCache _appIcons;
 
     private bool _active;
     private bool _showConnection;
@@ -95,6 +92,7 @@ internal sealed partial class PhoneDevicePageView : IViewPage
     internal PhoneDevicePageView(IViewHostActions actions)
     {
         _actions = actions;
+        _appIcons = new PhoneAppIconCache(actions.Host, 96, actions.Invalidate);
         _pcReceiveFolder = new ReceiveDirectorySettings(Path.Combine(actions.Host.DataDirectory, "android-file-receive-folder.txt"));
         _airPlay = new AirPlayReceiverViewControl(actions, "phonepage.airplay");
     }
@@ -118,7 +116,6 @@ internal sealed partial class PhoneDevicePageView : IViewPage
         CloseCatalog();
         _showConnection = false;
         _airPlayConnectionChoice = false;
-        if (_actions.Host.Phone.Store.Profile.Id != profileId) ClearAppIcons();
         _actions.Host.Phone.Store.SelectProfile(profileId);
         _scroll.Offset = 0f;
         StopQrPairing();
@@ -151,7 +148,7 @@ internal sealed partial class PhoneDevicePageView : IViewPage
         phone.Changed -= OnPhoneChanged;
 
         _airPlay.Detach();
-        ClearAppIcons();
+        _appIcons.Clear();
         StopQrPairing();
         ResetSavedSearch();
         _pairCode = "";
@@ -180,6 +177,7 @@ internal sealed partial class PhoneDevicePageView : IViewPage
     {
         var phone = _actions.Host.Phone;
         var profile = phone.Store.Profile;
+        _appIcons.SetProfile(profile.Id);
         var online = profile.LastDevice is { } last ? phone.Connections.Get(last).Device : null;
         if (!Equals(online, _activeDevice))
         {
@@ -341,7 +339,7 @@ internal sealed partial class PhoneDevicePageView : IViewPage
                 bool smart = phone.Store.IsSmartVolumeEnabled(profile.LastDevice, app.Package);
 
                 var iconRect = new UiRect(rowRect.X, rowRect.CenterY - 16f, 32f, 32f);
-                if (TryGetAppIcon(app, out var ibgra, out int iw, out int ih, out int iver))
+                if (_appIcons.TryGet(app, out var ibgra, out int iw, out int ih, out int iver))
                 {
                     g.DrawBgraBitmap($"phonepage.icon:{app.Package}", ibgra, iw, ih, iconRect, version: iver);
                 }
@@ -1860,60 +1858,6 @@ internal sealed partial class PhoneDevicePageView : IViewPage
                 })) cts.Dispose();
             }
         });
-    }
-
-    private bool TryGetAppIcon(AndroidApp app, out byte[] bgra, out int w, out int h, out int ver)
-    {
-        if (app.IconPng is null || app.IconPng.Length == 0)
-        {
-            bgra = Array.Empty<byte>(); w = h = ver = 0;
-            return false;
-        }
-        if (_iconCache.TryGetValue(app.Package, out var cached))
-        {
-            bgra = cached.Pixels; w = cached.W; h = cached.H; ver = cached.Ver;
-            return bgra.Length != 0;
-        }
-        if (_iconDecoding.Add(app.Package))
-        {
-            int generation = _iconGeneration;
-            byte[] png = app.IconPng;
-            string pkg = app.Package;
-            _ = Task.Run(() =>
-            {
-                SonicRoute.Native.Graphics.WicIconLoader.TryDecodePngToBgra32(png, 48, 48, out byte[] pixels, out int pw, out int ph);
-                for (int i = 0; i < pixels.Length; i += 4)
-                {
-                    byte a = pixels[i + 3];
-                    if (a == 255) continue;
-                    if (a == 0) { pixels[i] = pixels[i + 1] = pixels[i + 2] = 0; continue; }
-                    pixels[i] = (byte)(pixels[i] * a / 255);
-                    pixels[i + 1] = (byte)(pixels[i + 1] * a / 255);
-                    pixels[i + 2] = (byte)(pixels[i + 2] * a / 255);
-                }
-                _actions.Host.TryPost(() =>
-                {
-                    if (!_active || generation != _iconGeneration) return;
-                    _iconDecoding.Remove(pkg);
-                    int nextVer = ++_iconVer;
-                    if (_iconCache.Count >= 96 && _iconOrder.Count > 0)
-                        _iconCache.Remove(_iconOrder.Dequeue());
-                    _iconCache[pkg] = (pixels, pw, ph, nextVer);
-                    _iconOrder.Enqueue(pkg);
-                    if (_active) _actions.Invalidate();
-                });
-            });
-        }
-        bgra = Array.Empty<byte>(); w = h = ver = 0;
-        return false;
-    }
-
-    private void ClearAppIcons()
-    {
-        ++_iconGeneration;
-        _iconDecoding.Clear();
-        _iconCache.Clear();
-        _iconOrder.Clear();
     }
 
     private static void CancelCts(ref CancellationTokenSource? cts)

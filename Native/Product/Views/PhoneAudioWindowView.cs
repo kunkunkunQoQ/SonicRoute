@@ -36,10 +36,7 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
     private readonly InlineEditHost _inlineEdit = new();
     private readonly AirPlayReceiverViewControl _airPlay;
 
-    private readonly Dictionary<string, (byte[] Pixels, int W, int H, int Ver)> _iconCache = new(StringComparer.Ordinal);
-    private readonly Queue<string> _iconOrder = new();
-    private readonly HashSet<string> _iconDecoding = new(StringComparer.Ordinal);
-    private int _iconVer;
+    private readonly PhoneAppIconCache _appIcons;
 
     private readonly List<DropZoneTarget> _dropZones = new();
     private UiRect _dropAreaRect;
@@ -96,6 +93,7 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
     {
         _host = host;
         _config = config;
+        _appIcons = new PhoneAppIconCache(host, 64, Invalidate);
         _onDeactivatedCheck = onDeactivatedCheck;
         _theme = UiThemePalette.Resolve(config);
         TopMost = true;
@@ -197,6 +195,7 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
     {
         var phone = _host.Phone;
         var profile = phone.Store.Profile;
+        _appIcons.SetProfile(profile.Id);
         var online = profile.LastDevice is { } last ? phone.Connections.Get(last).Device : null;
         if (IsVisible && _airPlaySelected) _airPlay.Attach();
         else _airPlay.Detach();
@@ -357,9 +356,10 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
         _inlineEdit.Close(commit: true, viaEnter: false);
         _inlineChanged = null;
         _inlineCommitted = null;
-        CloseCombo();
+        ComboPopupWindow.Close(ref _comboPopup);
         StopMediaWatch();
         ClearArtworkState();
+        _appIcons.Clear();
         _airPlay.Detach();
         DetachCrossDeviceDrag();
         DetachPhone();
@@ -377,9 +377,10 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
         _inlineEdit.Dispose();
         _inlineChanged = null;
         _inlineCommitted = null;
-        CloseCombo();
+        ComboPopupWindow.Close(ref _comboPopup);
         StopMediaWatch();
         ClearArtworkState();
+        _appIcons.Clear();
         _airPlay.Detach();
         DetachCrossDeviceDrag();
         DetachPhone();
@@ -710,7 +711,7 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
         if (hasArtwork)
         {
             g.DrawBgraBitmap("companion.art", artBgra, aw, ah, artRect.Deflate(1f), version: aver);
-            if (mediaApp != null && TryGetAppIcon(mediaApp, out var bBgra, out int bw, out int bh, out int bver))
+            if (mediaApp != null && _appIcons.TryGet(mediaApp, out var bBgra, out int bw, out int bh, out int bver))
             {
                 var badgeBox = new UiRect(artRect.Right - 17f, artRect.Bottom - 17f, 16f, 16f);
                 g.FillRoundedRect(badgeBox, 4f, _theme.WindowBg);
@@ -718,7 +719,7 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
                 g.DrawBgraBitmap($"companion.artbadge:{mediaApp.Package}", bBgra, bw, bh, badgeBox.Deflate(1.5f), version: bver);
             }
         }
-        else if (mediaApp != null && TryGetAppIcon(mediaApp, out var fallbackBgra, out int fw, out int fh, out int fver))
+        else if (mediaApp != null && _appIcons.TryGet(mediaApp, out var fallbackBgra, out int fw, out int fh, out int fver))
         {
             g.DrawBgraBitmap($"companion.articon:{mediaApp.Package}", fallbackBgra, fw, fh, artRect.Deflate(4f), version: fver);
         }
@@ -849,7 +850,7 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
                 {
                     g.DrawIcon(UiIcon.Phone, iconRect, _theme.TextSecondary, 1.7f);
                 }
-                else if (TryGetAppIcon(app, out var ibgra, out int iw, out int ih, out int iver))
+                else if (_appIcons.TryGet(app, out var ibgra, out int iw, out int ih, out int iver))
                 {
                     g.DrawBgraBitmap($"companion.appicon:{app.Package}", ibgra, iw, ih, iconRect, version: iver);
                 }
@@ -995,7 +996,7 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
             ViewNative.GetCursorPos(out var pt);
             if (_dragIcon == null)
             {
-                NativeAppIconService.IconBitmap? icon = app != null && TryGetAppIcon(app, out var pixels, out int w, out int h, out _)
+                NativeAppIconService.IconBitmap? icon = app != null && _appIcons.TryGet(app, out var pixels, out int w, out int h, out _)
                     ? new NativeAppIconService.IconBitmap(pixels, w, h) : null;
                 _hit.ActiveId = null;
                 _dragIcon = new DragIconWindow(icon, app?.Name ?? "AirPlay", _theme.TextPrimary, pt.X, pt.Y,
@@ -1389,21 +1390,12 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
 
     private void ShowCombo(UiRect anchorDip, IReadOnlyList<ComboChoice> choices, string selectedKey, Action<ComboChoice> onSelected)
     {
-        CloseCombo();
+        ComboPopupWindow.Close(ref _comboPopup);
         _comboPopup = ComboPopupWindow.ShowFor(_theme, this, anchorDip, choices, selectedKey, picked =>
         {
             _comboPopup = null;
             onSelected(picked);
         });
-    }
-
-    private void CloseCombo()
-    {
-        if (_comboPopup is { } pop)
-        {
-            _comboPopup = null;
-            if (!pop.IsDisposed) { pop.CloseWindow(); pop.Dispose(); }
-        }
     }
 
     protected override InlineEditHost ActiveEditor => _inlineEdit;
@@ -1413,47 +1405,9 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
         _inlineEdit.Close(commit: true, viaEnter: false);
         _inlineChanged = onChanged;
         _inlineCommitted = onCommitted;
-        var pt = DipToScreenPx(rectDip.X, rectDip.Y);
-        int wPx = Math.Max(20, (int)MathF.Round(rectDip.Width * DpiScale));
-        int hPx = Math.Max(18, (int)MathF.Round(rectDip.Height * DpiScale));
-        _inlineEdit.Open(Handle, tag, text, pt.X, pt.Y, wPx, hPx, 11.5f, Dpi, _theme.SurfaceBg, _theme.TextPrimary, maxLength: maxLength);
+        _inlineEdit.Open(this, tag, text, rectDip, 11.5f, _theme.SurfaceBg, _theme.TextPrimary,
+            maxLength: maxLength, minWidthPx: 20, minHeightPx: 18);
         Invalidate();
-    }
-
-    private bool TryGetAppIcon(AndroidApp app, out byte[] bgra, out int w, out int h, out int ver)
-    {
-        if (app.IconPng is null || app.IconPng.Length == 0)
-        {
-            bgra = Array.Empty<byte>(); w = h = ver = 0;
-            return false;
-        }
-        if (_iconCache.TryGetValue(app.Package, out var cached))
-        {
-            bgra = cached.Pixels; w = cached.W; h = cached.H; ver = cached.Ver;
-            return true;
-        }
-        if (_iconDecoding.Add(app.Package))
-        {
-            byte[] png = app.IconPng;
-            string pkg = app.Package;
-            _ = Task.Run(() =>
-            {
-                if (!SonicRoute.Native.Graphics.WicIconLoader.TryDecodePngToBgra32(png, 48, 48, out byte[] pixels, out int pw, out int ph))
-                    return;
-                Premultiply(pixels);
-                _host.TryPost(() =>
-                {
-                    int nextVer = ++_iconVer;
-                    if (_iconCache.Count >= 64 && _iconOrder.Count > 0)
-                        _iconCache.Remove(_iconOrder.Dequeue());
-                    _iconCache[pkg] = (pixels, pw, ph, nextVer);
-                    _iconOrder.Enqueue(pkg);
-                    if (IsVisible) Invalidate();
-                });
-            });
-        }
-        bgra = Array.Empty<byte>(); w = h = ver = 0;
-        return false;
     }
 
     private bool TryGetArtwork(byte[]? png, out byte[] bgra, out int w, out int h, out int ver)
@@ -1480,9 +1434,8 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
         int gen = Interlocked.Increment(ref _artGen);
         _ = Task.Run(() =>
         {
-            if (!SonicRoute.Native.Graphics.WicIconLoader.TryDecodePngToBgra32(png, 96, 96, out byte[] pixels, out int pw, out int ph))
+            if (!UiBitmap.TryDecodePng(png, 96, out byte[] pixels, out int pw, out int ph))
                 return;
-            Premultiply(pixels);
             _host.TryPost(() =>
             {
                 if (IsVisible && Volatile.Read(ref _artGen) == gen && ReferenceEquals(_lastArtPng, png))
@@ -1506,17 +1459,5 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
         return time.TotalHours >= 1 ? time.ToString(@"h\:mm\:ss") : time.ToString(@"mm\:ss");
     }
 
-    private static void Premultiply(byte[] pixels)
-    {
-        for (int i = 0; i < pixels.Length; i += 4)
-        {
-            byte a = pixels[i + 3];
-            if (a == 255) continue;
-            if (a == 0) { pixels[i] = pixels[i + 1] = pixels[i + 2] = 0; continue; }
-            pixels[i] = (byte)(pixels[i] * a / 255);
-            pixels[i + 1] = (byte)(pixels[i + 1] * a / 255);
-            pixels[i + 2] = (byte)(pixels[i + 2] * a / 255);
-        }
-    }
 }
 #endif

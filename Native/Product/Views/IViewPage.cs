@@ -78,9 +78,13 @@ internal interface IViewPage : IDisposable
 // ConfigService owns the existing atomic file and last committed snapshot.
 internal static class ViewPersistence
 {
-    internal static bool CommitSettings(this IViewHostActions actions)
+    internal static bool CommitSettings(this IViewHostActions actions, bool notify = false)
     {
-        if (SonicRoute.Core.ConfigService.TryCommit(actions.Config)) return true;
+        if (SonicRoute.Core.ConfigService.TryCommit(actions.Config))
+        {
+            if (notify) actions.NotifySettingsChanged();
+            return true;
+        }
         actions.ShowNotice(L10n.T("Tray.SaveFailed"));
         actions.Invalidate();
         return false;
@@ -123,7 +127,7 @@ internal sealed class AliasEditor(IViewHostActions actions) : IDisposable
             if (value == previous) return;
             if (value.Length == 0) names.Remove(key);
             else names[key] = value;
-            if (actions.CommitSettings()) actions.NotifySettingsChanged();
+            actions.CommitSettings(notify: true);
         }
 
         string initial = displayName ?? Names().GetValueOrDefault(key, "");

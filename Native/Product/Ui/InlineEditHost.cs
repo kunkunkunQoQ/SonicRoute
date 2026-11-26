@@ -71,15 +71,11 @@ internal sealed unsafe class InlineEditHost : IDisposable
     public event Action<string, string, bool>? Committed; // tag, text, viaEnter
 
     public void Open(
-        nint ownerHwnd,
+        LayeredWindow owner,
         string tag,
         string initialText,
-        int screenXPx,
-        int screenYPx,
-        int widthPx,
-        int heightPx,
+        UiRect bounds,
         float fontSizeDip,
-        uint dpi,
         UiColor bg,
         UiColor fg,
         bool mono = false,
@@ -88,9 +84,16 @@ internal sealed unsafe class InlineEditHost : IDisposable
         bool readOnlyMultiline = false,
         int maxLength = 0,
         bool acceptFileDrop = false,
-        bool centered = false)
+        bool centered = false,
+        int minWidthPx = 0,
+        int minHeightPx = 0)
     {
         if (_disposed) return;
+        var (screenXPx, screenYPx) = owner.DipToScreenPx(bounds.X, bounds.Y);
+        uint dpi = owner.Dpi;
+        int widthPx = Math.Max(minWidthPx, (int)MathF.Round(bounds.Width * owner.DpiScale));
+        int heightPx = Math.Max(minHeightPx, (int)MathF.Round(bounds.Height * owner.DpiScale));
+        nint ownerHwnd = owner.Handle;
         EnsureClass();
         Close(commit: false, viaEnter: false);
 

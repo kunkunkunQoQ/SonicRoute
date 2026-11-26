@@ -231,7 +231,7 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
         _clicks[id] = onClick;
         if (r.Bottom > vp.Y && r.Y < vp.Bottom)
         {
-            var clipped = ClipToViewport(r, vp);
+            var clipped = UiHitMap.Intersect(r, vp);
             if (!clipped.IsEmpty) hit.Add(id, clipped, cursor, tooltip);
         }
     }
@@ -728,7 +728,7 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
             UiPrimitives.DrawVolumeSlider(g, t, hit, $"step.{index}.vol", slRect, val01, 0f, false, false);
             if (slRect.Bottom > _editorViewport.Y && slRect.Y < _editorViewport.Bottom)
             {
-                var clipped = ClipToViewport(slRect, _editorViewport);
+                var clipped = UiHitMap.Intersect(slRect, _editorViewport);
                 if (!clipped.IsEmpty) hit.Add($"step.{index}.vol", clipped, UiCursorKind.Hand);
             }
 
@@ -1798,15 +1798,6 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
                 ? (UiColor.FromRgb(0x25, 0x46, 0x4A), UiColor.FromRgb(0x3E, 0x6E, 0x70), UiColor.FromRgb(0xB8, 0xEC, 0xE9))
                 : (UiColor.FromRgb(0xE8, 0xF6, 0xF5), UiColor.FromRgb(0xC3, 0xE7, 0xE5), UiColor.FromRgb(0x17, 0x66, 0x64)),
         };
-    }
-
-    private static UiRect ClipToViewport(UiRect r, UiRect vp)
-    {
-        float l = MathF.Max(r.X, vp.X);
-        float t = MathF.Max(r.Y, vp.Y);
-        float right = MathF.Min(r.Right, vp.Right);
-        float b = MathF.Min(r.Bottom, vp.Bottom);
-        return new UiRect(l, t, MathF.Max(0f, right - l), MathF.Max(0f, b - t));
     }
 
 }

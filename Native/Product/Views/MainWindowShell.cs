@@ -269,20 +269,12 @@ internal sealed class MainWindowShell : LayeredWindow, IViewHostActions
         _inlineRectDip = rectDip;
         _inlineFontSize = rectDip.Height >= 34f ? 13f : 12f;
 
-        var screen = DipToScreenPx(rectDip.X, rectDip.Y);
-        int wPx = Math.Max(24, (int)MathF.Round(rectDip.Width * DpiScale));
-        int hPx = Math.Max(20, (int)MathF.Round(rectDip.Height * DpiScale));
-
         _inlineEdit.Open(
-            Handle,
+            this,
             tag,
             initialText,
-            screen.X,
-            screen.Y,
-            wPx,
-            hPx,
+            rectDip,
             _inlineFontSize,
-            Dpi,
             readOnlyMultiline ? _theme.SurfaceAlt : _theme.SurfaceBg,
             _theme.TextPrimary,
             mono,
@@ -291,7 +283,9 @@ internal sealed class MainWindowShell : LayeredWindow, IViewHostActions
             readOnlyMultiline,
             maxLength,
             acceptFileDrop,
-            centered);
+            centered,
+            minWidthPx: 24,
+            minHeightPx: 20);
         Invalidate();
     }
 
@@ -841,8 +835,7 @@ internal sealed class MainWindowShell : LayeredWindow, IViewHostActions
     {
         if (_activeMenu is { IsVisible: true }) _activeMenu.CloseWindow();
         _activeMenu = null;
-        if (_activeCombo is { IsVisible: true }) _activeCombo.CloseWindow();
-        _activeCombo = null;
+        ComboPopupWindow.Close(ref _activeCombo);
     }
 
 

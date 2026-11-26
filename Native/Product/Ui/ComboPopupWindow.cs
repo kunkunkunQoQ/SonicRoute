@@ -50,6 +50,15 @@ internal sealed class ComboPopupWindow : LayeredWindow
         OwnerHandle = owner.Handle;
     }
 
+    internal static void Close(ref ComboPopupWindow? current)
+    {
+        var popup = current;
+        current = null;
+        if (popup == null || popup.IsDisposed) return;
+        popup.CloseWindow();
+        popup.Dispose();
+    }
+
     public static ComboPopupWindow ShowFor(
         UiThemePalette theme,
         LayeredWindow owner,

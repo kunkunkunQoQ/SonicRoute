@@ -78,12 +78,12 @@ internal sealed class ExperimentalPageView(IViewHostActions actions) : IViewPage
         (float PollRow, float HistoryRow, float LimitH, float Left, float Right, float TransferH, float ClearH, float Total) Measure(float width)
         {
             float inner = width - 2f * pad;
-            float poll = SettingsPageView.SwitchHeight(L10n.T("Exp.BackgroundPolling"), L10n.T("Exp.BackgroundPollingHint"), inner);
-            float history = SettingsPageView.SwitchHeight(L10n.T("History.Title"), L10n.T("History.Hint"), inner);
-            float limit = histActive ? SettingsPageView.TextHeight(limitHint, 11.5f, inner - 32f) : 0f;
+            float poll = UiPrimitives.MeasureSettingsSwitchHeight(L10n.T("Exp.BackgroundPolling"), L10n.T("Exp.BackgroundPollingHint"), inner);
+            float history = UiPrimitives.MeasureSettingsSwitchHeight(L10n.T("History.Title"), L10n.T("History.Hint"), inner);
+            float limit = histActive ? UiPrimitives.MeasureWrappedTextHeight(limitHint, 11.5f, inner - 32f) : 0f;
             float left = (inner - 1f) * 2f / 3f - gap, right = inner - left - 2f * gap - 1f;
-            float transfer = SettingsPageView.TextHeight(transferHint, 11.5f, left);
-            float clear = SettingsPageView.TextHeight(clearHint, 11.5f, right);
+            float transfer = UiPrimitives.MeasureWrappedTextHeight(transferHint, 11.5f, left);
+            float clear = UiPrimitives.MeasureWrappedTextHeight(clearHint, 11.5f, right);
             float options = histActive ? 96f + limit : 0f;
             float total = 36f + 3f * (2f * pad + 14f) + poll + history + options + 26f + MathF.Max(transfer, clear) + 10f + 34f;
             return (poll, history, limit, left, right, transfer, clear, total);
@@ -105,7 +105,7 @@ internal sealed class ExperimentalPageView(IViewHostActions actions) : IViewPage
             _clicks[id] = onClick;
             if (r.Bottom > viewport.Y && r.Y < viewport.Bottom)
             {
-                var clipped = ClipToViewport(r, viewport);
+                var clipped = UiHitMap.Intersect(r, viewport);
                 if (!clipped.IsEmpty) hit.Add(id, clipped, cursor, tip);
             }
         }
@@ -121,12 +121,12 @@ internal sealed class ExperimentalPageView(IViewHostActions actions) : IViewPage
         float pollRow = layout.PollRow;
         float pollH = pad + pollRow + pad;
         UiPrimitives.DrawCard(g, t, new UiRect(x, y, w, pollH));
-        SettingsPageView.DrawSettingsSwitchWithHint(g, t, hit, "exp.polling", new UiRect(x + pad, y + pad, innerW, pollRow),
+        UiPrimitives.DrawSettingsSwitchWithHint(g, t, hit, "exp.polling", new UiRect(x + pad, y + pad, innerW, pollRow),
             UiIcon.Options, L10n.T("Exp.BackgroundPolling"), L10n.T("Exp.BackgroundPollingHint"),
             cfg.BackgroundPollingFallbackEnabled, true, () =>
             {
                 cfg.BackgroundPollingFallbackEnabled = !cfg.BackgroundPollingFallbackEnabled;
-                SaveConfig();
+                actions.CommitSettings(notify: true);
             }, Register);
         y += pollH + 14f;
 
@@ -135,7 +135,7 @@ internal sealed class ExperimentalPageView(IViewHostActions actions) : IViewPage
         float histH = pad + historyRow + (histActive ? 96f + limitHintH : 0f) + pad;
         UiPrimitives.DrawCard(g, t, new UiRect(x, y, w, histH));
         float hy = y + pad;
-        SettingsPageView.DrawSettingsSwitchWithHint(g, t, hit, "exp.history", new UiRect(x + pad, hy, innerW, historyRow),
+        UiPrimitives.DrawSettingsSwitchWithHint(g, t, hit, "exp.history", new UiRect(x + pad, hy, innerW, historyRow),
             UiIcon.Options, L10n.T("History.Title"), L10n.T("History.Hint"),
             cfg.ExecutionHistoryEnabled, true, () =>
             {
@@ -392,21 +392,5 @@ internal sealed class ExperimentalPageView(IViewHostActions actions) : IViewPage
     public bool OnKeyDown(int vk, bool ctrl, bool shift, bool alt) => false;
 
     public void Dispose() => _disposed = true;
-
-    private bool SaveConfig()
-    {
-        if (!actions.CommitSettings()) return false;
-        actions.NotifySettingsChanged();
-        return true;
-    }
-
-    private static UiRect ClipToViewport(UiRect r, UiRect vp)
-    {
-        float l = MathF.Max(r.X, vp.X);
-        float t = MathF.Max(r.Y, vp.Y);
-        float right = MathF.Min(r.Right, vp.Right);
-        float b = MathF.Min(r.Bottom, vp.Bottom);
-        return new UiRect(l, t, MathF.Max(0f, right - l), MathF.Max(0f, b - t));
-    }
 
 }
