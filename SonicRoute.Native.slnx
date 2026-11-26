@@ -1,0 +1,7 @@
+<Solution>
+  <Project Path="Native/Product/Product.csproj" />
+  <Project Path="Native/Audio/Audio.csproj" />
+  <Project Path="SonicRoute.AndroidAudio/SonicRoute.AndroidAudio.csproj" />
+  <Project Path="SonicRoute.Core/SonicRoute.Core.csproj" />
+  <Project Path="StoreInterop/StoreInterop.csproj" />
+</Solution>

@@ -1,22 +1,28 @@
-# SonicRoute 1.36 原生后台候选
+# SonicRoute 1.37 Native AOT
 
-Full 和 Lite 共用本项目。Windows 使用单个 WinExe、一个 STA 消息循环和隐藏的顶层窗口。桌面 UI、手机和 AirPlay 的完整产品入口继续由后续阶段接入。本阶段的托盘、配置、规则、音频和更新交接都运行在产品 EXE 内。
+Full 和 Lite 共用本项目。Full 包含 Android 和 AirPlay，Lite 提供电脑音频功能。桌面窗口、托盘、配置、规则、音频和更新交接均由本项目运行。使用仓库根目录的 `SonicRoute.Native.slnx` 开发。
 
 ## 编译与启动
 
-在 worktree 根使用 .NET 10 SDK、Windows SDK 和对应的 MSVC 工具。使用以下命令分别构建四个候选。ARM64 也可以向脚本传入阶段 1 已校验的 -ToolCache。两个版本使用独立的中间目录。
+在主工作区根目录使用 .NET 10 SDK、Windows SDK 和对应架构的 MSVC 工具构建。默认将候选 EXE 写到 `../outputs/native-product/candidate/<版型>-<架构>/`，版型和架构分别使用独立的中间目录。自定义目录用 `-OutputRoot`。ARM64 可通过 `-ToolCache` 指定匹配的 MSVC 缓存。
 
 ~~~powershell
-./Native/Build-Product.ps1 -Edition Full -Architecture x64 -VsRoot 'C:/Program Files/Microsoft Visual Studio/2022/Community' -OutputRoot E:/scratch/sr-build
-$exe = 'E:/scratch/sr-build/candidate/Full-x64/SonicRoute.exe'
-$env:SONICROUTE_CANDIDATE_ROOT = 'E:/scratch/sr-profiles'
-$env:SONICROUTE_CANDIDATE_ID = 'development'
+& ./Native/Build-Product.ps1 -Edition Full -Architecture x64
+& ./Native/Build-Product.ps1 -Edition Lite -Architecture x64
+$exe = (Resolve-Path '../outputs/native-product/candidate/Full-x64/SonicRoute.exe').Path
+$env:SONICROUTE_CANDIDATE_ROOT = (Resolve-Path '../outputs/native-product').Path
+$env:SONICROUTE_CANDIDATE_ID = 'native-137-dev'
+$env:SONICROUTE_DISABLE_DEFAULT_HOTKEYS = '1'
 Start-Process -FilePath $exe -WindowStyle Hidden
 & $exe --control status | Out-String
 & $exe --control devices render | Out-String
 & $exe --run-rule '已保存的规则名称或 ID' | Out-String
 & $exe --control exit | Out-String
 ~~~
+
+VS Code 提供 Full 与 Lite 的 x64 构建任务，默认任务是 Full。需要带版本名的便携单文件时使用 `packaging/Build-Edition.ps1`，默认输出到 `../outputs/native-product/editions`。该脚本也支持已有的本地程序绑定，日常候选构建可直接使用上面的 Native 脚本。
+
+完整便携候选用 `packaging/Updates/Build-PortableRelease.ps1 -OutputDirectory <新目录>` 构建。Full/Lite 使用本项目，Legacy 使用既有 net48 工程，版本文件名和更新清单共用现有发布工具。商店候选见 [Store 构建说明](../../packaging/Store/README.md)。
 
 默认数据在本用户的 SonicRoute.NativeCandidate 子目录。候选把 profile、版型、渠道和绝对根路径映射为互斥量、管道及激活窗口的隔离名称。在全新开发配置中，内置全局键和托盘滚轮初始关闭，避免与并行安装争抢输入。已有配置按实际绑定加载。命令测试使用单独的开发根，此外部接口和原有的规则管道独立。候选更新只接受位于本 profile 的 install 目录的目标。
 
@@ -27,4 +33,4 @@ Start-Process -FilePath $exe -WindowStyle Hidden
 - 读取命令包括 status、apps [offset]、devices render|capture、default <flow> <role>、volume <flow> <设备ID、default或PID>、route <PID> <flow>、outputs-get <PID>、mirror-status <PID>、output-state 及 automation-status。输入输出分别使用 capture 和 render。
 - 绝对音量或静音写入使用 volume <flow> <target> level <0..100> 或 mute <true|false>。拖动产生的每应用音量写入使用 volume-queue <PID> <百分比>，volume-flush 等待已提交写入。route <PID> <flow> <设备ID或default> 切换应用路由。outputs-set <PID> <首选> [选中的各个ID] 表达显式多输出。
 - 设置 SONICROUTE_CANDIDATE_METRICS=1 后，活动镜像记录固定容量的处理样本，退出后写 profile/last-exit.json。测量方法与范围见 [性能工具](../Measurements/README.md)。测试程序只作为客户端、事件发生源或读数方。
-- 阶段 1 的 HostProbe、AudioProbe、FullProbe、GraphicsProbe 保留独立入口。旧 WPF Full/Lite 和 net48 保留作对照。发布流水线继续使用旧工程，最终替换须经过后续界面和发行验收。
+- HostProbe、AudioProbe、FullProbe 和 GraphicsProbe 继续使用各自的项目入口。WPF 1.36 比较基准由本地 `v1.36` 标签固定，提交为 `3d9f9e1083b228f666e30d97e3c8edfce5e6654a`。

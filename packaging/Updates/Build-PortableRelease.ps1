@@ -1,5 +1,5 @@
 [CmdletBinding()]
-param([Parameter(Mandatory=$true)][string]$OutputDirectory,[string]$DotnetPath)
+param([Parameter(Mandatory=$true)][string]$OutputDirectory,[string]$DotnetPath,[string]$VsRoot,[string]$ToolCache)
 $ErrorActionPreference='Stop'
 . "$PSScriptRoot/ReleaseLayout.ps1"
 $root=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
@@ -16,19 +16,19 @@ Push-Location -LiteralPath $root
 try {
     $env:DOTNET_ROOT=Split-Path -Parent $dotnet
     $assets=Join-Path $output 'assets';New-Item -ItemType Directory -Path $assets -Force|Out-Null
-    & $dotnet build "$root/SonicRoute.sln" -c Release --nologo
+    & $dotnet build "$root/SonicRoute.Native.slnx" -c Release "-p:ArtifactsPath=$output/solution" --nologo
     if($LASTEXITCODE -ne 0){throw 'Solution Release build failed.'}
     foreach($variant in $matrix){
         if($variant.Edition -in @('Lite','Full')){
             $destination=Join-Path $output "$($variant.Edition.ToLowerInvariant())-$($variant.Framework)-$($variant.Architecture)"
             Write-Host "Publishing $($variant.Asset) ($($variant.Framework), win-$($variant.Architecture))..."
-            & $dotnet publish "$root/SonicRoute/SonicRoute.csproj" -c Release -f $variant.Framework -r "win-$($variant.Architecture)" "-p:SonicRouteEdition=$($variant.Edition)" "-p:PublishProfile=win-$($variant.Architecture)" -o $destination --nologo
-            if($LASTEXITCODE -ne 0){throw "Publish failed: $($variant.Asset)"}
+            & "$root/Native/Build-Product.ps1" -Edition $variant.Edition -Architecture $variant.Architecture `
+                -OutputRoot $output -PublishDirectory $destination -Dotnet $dotnet -VsRoot $VsRoot -ToolCache $ToolCache | Out-Null
             if (Test-Path -LiteralPath (Join-Path $destination 'AndroidRuntime')) { throw 'Single-EXE publish contains obsolete loose phone components.' }
             Copy-Item -LiteralPath (Join-Path $destination 'SonicRoute.exe') -Destination (Join-Path $assets $variant.Asset)
         } else {
             $destination=Join-Path $output 'legacy-x64'
-            & $dotnet build "$root/SonicRoute.Legacy/SonicRoute.Legacy.csproj" -c Release -o $destination --nologo
+            & $dotnet build "$root/SonicRoute.Legacy/SonicRoute.Legacy.csproj" -c Release "-p:ArtifactsPath=$output/legacy-build" -o $destination --nologo
             if($LASTEXITCODE -ne 0){throw 'Legacy build failed.'}
             Copy-Item -LiteralPath "$root/LICENSE" -Destination (Join-Path $destination 'LICENSE')
             $legacyFiles=@(Get-LegacyReleaseFiles|ForEach-Object{Join-Path $destination $_})

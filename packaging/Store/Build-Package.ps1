@@ -11,8 +11,10 @@ param(
     [string]$DisplayName
 )
 $ErrorActionPreference='Stop'
+$workspace=Split-Path -Parent ([IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..')))
+$nativeOutput=Join-Path $workspace 'outputs/native-product'
 if(-not $PublishDirectory){
-    $PublishDirectory=Join-Path $PSScriptRoot ("../../dist/publish/$Edition/win-x64")
+    $PublishDirectory=Join-Path $nativeOutput "candidate/$Edition-x64"
 }
 if(-not $ManifestPath){
     $manifestFile=if($Edition -eq 'Lite'){'AppxManifest.Lite.xml'}else{'AppxManifest.xml'}
@@ -31,7 +33,7 @@ $version=[Version]::Parse($PackageVersion)
 if(-not $OutputDirectory){
     $directoryVersion=$version.ToString($(if($version.Build -gt 0){3}else{2}))
     $editionDirSuffix=if($Edition -eq 'Lite'){'-Lite'}else{''}
-    $OutputDirectory=Join-Path $PSScriptRoot ('../../dist/msix/v'+$directoryVersion+$editionDirSuffix)
+    $OutputDirectory=Join-Path $nativeOutput ('store/v'+$directoryVersion+$editionDirSuffix)
 }
 if($version.Major -gt 65535 -or $version.Minor -gt 65535 -or $version.Build -gt 65535){throw 'Package version component exceeds 65535.'}
 $publish=[IO.Path]::GetFullPath($PublishDirectory)

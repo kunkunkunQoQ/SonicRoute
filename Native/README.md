@@ -1,6 +1,8 @@
 # SonicRoute 阶段 1 验证目标
 
-本目录属于基于 `3d9f9e1` 的隔离 worktree，开发验证使用 .NET 10 SDK、Windows SDK 与对应架构的 MSVC linker/CRT。Native AOT 编译器、运行时包统一为 10.0.15。桌面程序、WPF 对照夹具和 Native AOT 探针有独立入口。本阶段的 EXE 仅用于验证。
+1.37 的开发和 Full/Lite 构建从 [产品入口](Product/README.md) 开始。以下命令用于独立探针和基准验证。
+
+阶段 1 以 `3d9f9e1` 为基准。探针使用 .NET 10 SDK、Windows SDK 与对应架构的 MSVC linker/CRT，Native AOT 编译器和运行时包统一为 10.0.15。桌面程序、WPF 对照夹具和 Native AOT 探针分别使用各自的入口。
 
 | 入口 | 验证内容与资源归属 |
 |---|---|

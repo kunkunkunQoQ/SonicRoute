@@ -1,0 +1,23 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "SonicRoute Native AOT Full x64",
+      "type": "process",
+      "command": "powershell.exe",
+      "args": ["-NoLogo", "-File", "${workspaceFolder}/Native/Build-Product.ps1", "-Edition", "Full", "-Architecture", "x64"],
+      "options": { "cwd": "${workspaceFolder}" },
+      "group": { "kind": "build", "isDefault": true },
+      "problemMatcher": []
+    },
+    {
+      "label": "SonicRoute Native AOT Lite x64",
+      "type": "process",
+      "command": "powershell.exe",
+      "args": ["-NoLogo", "-File", "${workspaceFolder}/Native/Build-Product.ps1", "-Edition", "Lite", "-Architecture", "x64"],
+      "options": { "cwd": "${workspaceFolder}" },
+      "group": "build",
+      "problemMatcher": []
+    }
+  ]
+}

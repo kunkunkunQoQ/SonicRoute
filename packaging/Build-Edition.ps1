@@ -1,11 +1,12 @@
 param([ValidateSet('Full','Lite')][string]$Edition = 'Full',
       [ValidateSet('x64','arm64')][string]$Architecture = 'x64', [string]$DotnetPath,
-      [string]$OutputRoot, [switch]$NoReadyToRun, [string]$LocalBindingDirectory)
+      [string]$OutputRoot, [switch]$NoReadyToRun, [string]$LocalBindingDirectory,
+      [string]$VsRoot, [string]$ToolCache)
 $ErrorActionPreference = 'Stop'
 $repo = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 $lab = Split-Path -Parent $repo
-if (!$OutputRoot) { $OutputRoot = Join-Path $lab 'outputs\editions' }
-$OutputRoot = [IO.Path]::GetFullPath($OutputRoot)
+if (!$OutputRoot) { $OutputRoot = Join-Path $lab 'outputs/native-product/editions' }
+$OutputRoot = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($OutputRoot)
 if (!$OutputRoot.StartsWith($lab + '\',[StringComparison]::OrdinalIgnoreCase)) { throw 'Edition artifacts must stay inside the Lab.' }
 function Assert-EditionPath([string]$Path) {
     for ($cursor=[IO.Path]::GetFullPath($Path); $cursor; $cursor=Split-Path -Parent $cursor) {
@@ -51,19 +52,15 @@ $previousTmp = $env:TMP
 $env:TEMP = $env:TMP = Join-Path $OutputRoot ('.tmp\' + $Edition + '-' + $Architecture)
 Assert-EditionPath $env:TEMP
 New-Item -ItemType Directory -Path $env:TEMP -Force | Out-Null
-$stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
-$log = Join-Path $OutputRoot ('build-' + $Edition + '-' + $Architecture + '-' + $stamp + '.log')
-$arguments = @('publish',(Join-Path $repo 'SonicRoute\SonicRoute.csproj'),'-c','Release','-f','net10.0-windows','-r',('win-'+$Architecture),
-    ('-p:SonicRouteEdition='+$Edition),('-p:PublishProfile=win-'+$Architecture),'-p:UseSharedCompilation=false','-o',$publishDirectory)
-if ($NoReadyToRun) { $arguments += '-p:PublishReadyToRun=false' }
+$log = Join-Path $OutputRoot "build/$Edition-$Architecture/publish.log"
+# -NoReadyToRun remains accepted for callers of the former managed build.
 try {
-    & $dotnet @arguments *> $log
-    $buildExit = $LASTEXITCODE
+    & (Join-Path $repo 'Native/Build-Product.ps1') -Edition $Edition -Architecture $Architecture -Dotnet $dotnet `
+        -OutputRoot $OutputRoot -PublishDirectory $publishDirectory -VsRoot $VsRoot -ToolCache $ToolCache | Out-Null
 } finally {
     $env:TEMP = $previousTemp
     $env:TMP = $previousTmp
 }
-if ($buildExit -ne 0) { Get-Content -LiteralPath $log -Tail 18; throw ('Edition build failed: ' + $log) }
 $temporaryAsset = Join-Path $OutputRoot ($variant.Asset + '.' + [guid]::NewGuid().ToString('N') + '.tmp')
 if ($Edition -eq 'Lite' -and (Test-Path -LiteralPath (Join-Path $publishDirectory 'AndroidRuntime'))) { throw 'Lite output contains phone runtime files.' }
 # Only the single executable is distributed; legacy loose files in a reused Full build
@@ -81,7 +78,7 @@ if ($boundAsset) {
 $receipt = [ordered]@{Created=(Get-Date -Format o);Edition=$Edition;Framework='net10.0-windows';Architecture=$Architecture;
     Version=$version;DisplayName=$(if($Edition -eq 'Full'){'SonicRoute'}else{'SonicRoute Lite'});Asset=$asset;
     Bytes=(Get-Item -LiteralPath $asset).Length;SHA256=(Get-FileHash -LiteralPath $asset).Hash;Files=$files;PublishDirectory=$destination;
-    BuildLog=$log;ReadyToRun=![bool]$NoReadyToRun;Launched=$false;DeviceAccess=$false}
+    BuildLog=$log;NativeAot=$true;ReadyToRun=$false;Launched=$false;DeviceAccess=$false}
 $receipt | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath (Join-Path $OutputRoot ($Edition+'-'+$Architecture+'-receipt.json')) -Encoding utf8
 if ($binding -and !$boundAsset) { Install-LocalEdition $binding $asset $receipt.SHA256 $version }
 if ($boundPublish) {

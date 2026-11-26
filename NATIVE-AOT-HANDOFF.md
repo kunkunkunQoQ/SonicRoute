@@ -1,5 +1,7 @@
 # SonicRoute 1.36 Native AOT 交接
 
+以下为早期预览的历史检查点。1.37 的当前工作区及构建入口见 [Native AOT 产品说明](Native/Product/README.md)。
+
 ## 接手位置
 
 - 隔离工作树 `E:\kunkun\SonarSwitch\outputs\native-aot-phase1-20261125\source`
