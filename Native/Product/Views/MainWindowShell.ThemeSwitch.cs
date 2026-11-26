@@ -87,7 +87,7 @@ internal sealed partial class MainWindowShell
             float iconX = showLabel ? cell.X + 4f : cell.CenterX - 6.5f;
             g.DrawIcon(mode.Icon, new UiRect(iconX, cell.CenterY - 6.5f, 13f, 13f), color, 1.6f);
             if (showLabel)
-                g.DrawText(label, cell.Deflate(20f, 0f, 2f, 0f), color, 11f, i == selected ? 600 : 400,
+                g.DrawText(i == 0 ? L10n.T("Th.SystemShort") : label, cell.Deflate(20f, 0f, 2f, 0f), color, 11f, i == selected ? 600 : 400,
                     UiTextAlign.Center, UiVertAlign.Center);
         }
         return track.Y;

@@ -321,7 +321,8 @@ internal sealed partial class ApplicationHost
                         switchingSince = 0;
                         osdAnimation?.Dispose();
                         osdAnimation = null;
-                        HideOsdWithIdleRelease();
+                        if (micOsd) ShowOsd(micOsdTitle, micOsdText, persistent: true, muted: micOsdMuted);
+                        else HideOsdWithIdleRelease();
                     }
                     break;
 
