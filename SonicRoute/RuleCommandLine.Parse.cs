@@ -7,6 +7,16 @@ namespace SonicRoute
 {
     internal static partial class RuleCommandLine
     {
+        internal static string BuildShortCommand(string id)
+        {
+            string selector = Guid.TryParse(id, out var guid) ? "\"" + guid.ToString("N") + "\"" : "'" + id.Replace("'", "''") + "'";
+#if NET48
+            return "sr --legacy " + selector;
+#else
+            return "sr " + selector;
+#endif
+        }
+
         internal enum Mode { None, Run, Help, Invalid }
 
         internal static Mode Parse(string[] args, out string selector)

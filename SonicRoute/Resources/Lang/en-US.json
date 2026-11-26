@@ -1,4 +1,6 @@
 {
+  "Window.ExpandNavigation": "Expand navigation",
+  "Window.CollapseNavigation": "Collapse navigation",
   "Window.DragToMove": "Drag to move the window",
   "Window.Minimize": "Minimize",
   "Window.Maximize": "Maximize",

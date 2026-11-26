@@ -280,7 +280,7 @@ internal sealed class UiScrollState
 /// <summary>
 /// High-fidelity WPF-matching UI primitives (Cards, Buttons, ToggleSwitch, Sliders, Inputs, ComboBoxes).
 /// </summary>
-internal enum UiSliderStyle { Standard, PanelRow, MediaSeek }
+internal enum UiSliderStyle { Standard, PanelRow }
 
 internal static class UiPrimitives
 {
@@ -454,7 +454,7 @@ internal static class UiPrimitives
         }
 
         float thumbX = barX + fillW;
-        float rad = style == UiSliderStyle.MediaSeek ? 5f : 7f;
+        float rad = 7f;
         UiColor thumbCol = muted ? t.AccentInverse : t.Accent;
         if (style == UiSliderStyle.Standard)
         {
@@ -485,7 +485,6 @@ internal static class UiPrimitives
     private static float SliderEndInset(UiSliderStyle style) => style switch
     {
         UiSliderStyle.Standard => 14f,
-        UiSliderStyle.MediaSeek => 5f,
         _ => 7f
     };
 
@@ -517,7 +516,7 @@ internal static class UiPrimitives
     public static void DrawTextBox(
         D2dTarget g, UiThemePalette t, UiHitMap hit, string id, UiRect rect, string value, string placeholder = "",
         bool focused = false, bool mono = false, float fontSize = 13f, bool search = false, bool readOnlyMultiline = false,
-        bool enabled = true)
+        bool enabled = true, bool centered = false)
     {
         if (enabled) hit.Add(id, rect, UiCursorKind.IBeam);
         bool hot = enabled && hit.IsHover(id);
@@ -536,7 +535,7 @@ internal static class UiPrimitives
         {
             var ink = empty ? t.TextSecondary : t.TextPrimary;
             g.DrawText(shown, textBox, enabled ? ink : ink.WithAlphaFraction(0.5f),
-                fontSize, 400, UiTextAlign.Leading, readOnlyMultiline ? UiVertAlign.Top : UiVertAlign.Center,
+                fontSize, 400, centered ? UiTextAlign.Center : UiTextAlign.Leading, readOnlyMultiline ? UiVertAlign.Top : UiVertAlign.Center,
                 wrap: readOnlyMultiline, ellipsis: !readOnlyMultiline,
                 fontFamily: mono ? UiMetrics.MonoFontFamily : UiMetrics.FontFamily);
         }

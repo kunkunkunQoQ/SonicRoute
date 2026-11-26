@@ -213,9 +213,18 @@ internal sealed partial class ApplicationHost
     internal void PreviewOsd() => _feedback.Publish(FeedbackKind.Osd, "📍", L10n.T("Exp.OsdPreview"));
     internal void PublishOsd(string title, string text, int? volume = null, bool? muted = null, bool? success = null) =>
         _feedback.Publish(FeedbackKind.Osd, title, text, volume, muted, success);
+    internal bool IsOsdAdjusting => osdView?.IsAdjusting == true;
+    internal bool IsPanelAdjusting => panelView?.IsAdjusting == true;
+    internal void NotifyAdjustmentChanged() => mainView?.Invalidate();
+    internal void CancelOsdAdjust() => osdView?.CancelAdjust();
+    internal void CancelPanelAdjust()
+    {
+        if (panelView?.IsAdjusting == true) panelView.CancelAdjustMode();
+    }
+
     internal void BeginOsdAdjust()
     {
-        osdView ??= new OsdWindow(_config);
+        osdView ??= new OsdWindow(_config, NotifyAdjustmentChanged);
         osdDeadline?.Dispose();
         osdAnimation?.Dispose();
         osdIdleRelease?.Dispose();
@@ -348,7 +357,7 @@ internal sealed partial class ApplicationHost
 
     private void ShowOsd(string title, string text, bool persistent = false, bool? muted = null, int? volume = null)
     {
-        if (osdView == null || osdView.IsDisposed) osdView = new OsdWindow(_config);
+        if (osdView == null || osdView.IsDisposed) osdView = new OsdWindow(_config, NotifyAdjustmentChanged);
         osdDeadline?.Dispose();
         osdAnimation?.Dispose();
         osdIdleRelease?.Dispose();

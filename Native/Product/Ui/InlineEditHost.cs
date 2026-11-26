@@ -87,7 +87,8 @@ internal sealed unsafe class InlineEditHost : IDisposable
         bool selectAll = false,
         bool readOnlyMultiline = false,
         int maxLength = 0,
-        bool acceptFileDrop = false)
+        bool acceptFileDrop = false,
+        bool centered = false)
     {
         if (_disposed) return;
         EnsureClass();
@@ -118,7 +119,7 @@ internal sealed unsafe class InlineEditHost : IDisposable
             throw new Win32Exception(Marshal.GetLastWin32Error());
         Hosts[_hostHwnd] = this;
 
-        uint editStyle = WsChild | WsVisible | EsLeft | (readOnlyMultiline ? 0x00200844u /* WS_VSCROLL | ES_READONLY | ES_AUTOVSCROLL | ES_MULTILINE */ : EsAutoHScroll) | (password ? EsPassword : 0u);
+        uint editStyle = WsChild | WsVisible | (centered ? 1u /* ES_CENTER */ : EsLeft) | (readOnlyMultiline ? 0x00200844u /* WS_VSCROLL | ES_READONLY | ES_AUTOVSCROLL | ES_MULTILINE */ : EsAutoHScroll) | (password ? EsPassword : 0u);
         int editH = Math.Max(16, (int)MathF.Round(fontSizeDip * 1.45f * (dpi / 96f)));
         int editY = 0;
         _suppressChange = true;

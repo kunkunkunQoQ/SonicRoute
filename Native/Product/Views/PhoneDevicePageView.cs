@@ -30,12 +30,14 @@ internal sealed partial class PhoneDevicePageView : IViewPage
     private readonly Dictionary<string, (byte[] Pixels, int W, int H, int Ver)> _iconCache = new(StringComparer.Ordinal);
     private readonly Queue<string> _iconOrder = new();
     private readonly HashSet<string> _iconDecoding = new(StringComparer.Ordinal);
-    private int _iconVer;
+    private int _iconVer, _iconGeneration;
 
     private bool _active;
     private bool _showConnection;
     private bool _airPlayConnectionChoice;
     private bool _busy;
+    private CancellationTokenSource? _operation;
+    private Task _qrTask = Task.CompletedTask;
     private string? _statusMessage;
     private bool _statusError;
 
@@ -57,17 +59,12 @@ internal sealed partial class PhoneDevicePageView : IViewPage
 
     // Connected view state
     private AndroidDevice? _activeDevice;
-    private AndroidMediaSessionClient? _mediaClient;
-    private AndroidMediaState? _mediaState;
-    private CancellationTokenSource? _mediaCts;
     private CancellationTokenSource? _catalogCts;
     private IReadOnlyList<AndroidApp> _catalogApps = Array.Empty<AndroidApp>();
     private string _appSearch = "";
 
     // Inline edit & slider drag state
     private UiRect _renameRect;
-    private bool _draggingVolume;
-    private UiRect _volumeSliderRect;
 
     // File transfer & remote browser state
     private string _remoteFolder = AndroidFileTransfer.Downloads;
@@ -80,7 +77,6 @@ internal sealed partial class PhoneDevicePageView : IViewPage
     private string? _remoteError;
     private CancellationTokenSource? _remoteListCts;
     private UiRect _fileBrowserListRect;
-    private UiRect _fileDropRect;
 
     // Streaming codec/fps/bitrate settings state
     private AndroidStreamSettings _streamSettings = new();
@@ -105,6 +101,7 @@ internal sealed partial class PhoneDevicePageView : IViewPage
 
     internal void ShowConnectionPage()
     {
+        CancelViewOperation();
         _actions.CloseInlineEdit(commit: false);
         CloseCatalog();
         _showConnection = true;
@@ -116,10 +113,12 @@ internal sealed partial class PhoneDevicePageView : IViewPage
 
     internal void ShowProfile(string profileId)
     {
+        CancelViewOperation();
         _actions.CloseInlineEdit(commit: false);
         CloseCatalog();
         _showConnection = false;
         _airPlayConnectionChoice = false;
+        if (_actions.Host.Phone.Store.Profile.Id != profileId) ClearAppIcons();
         _actions.Host.Phone.Store.SelectProfile(profileId);
         _scroll.Offset = 0f;
         StopQrPairing();
@@ -134,16 +133,10 @@ internal sealed partial class PhoneDevicePageView : IViewPage
         phone.Changed += OnPhoneChanged;
 
         phone.StartTracking();
-        _airPlay.Attach();
-
-        if (!_hevcLoadStarted)
-        {
-            _hevcLoadStarted = true;
-            _ = LoadWindowsHevcAsync();
-        }
 
         UpdateQrPairing();
-        _ = phone.RefreshAsync(restore: true);
+        if (phone.Discovery.CurrentDevices == null && (!IsConnectionPage || !_airPlayConnectionChoice))
+            _ = phone.RefreshAsync();
         RefreshData();
     }
 
@@ -151,32 +144,33 @@ internal sealed partial class PhoneDevicePageView : IViewPage
     {
         if (!_active) return;
         _active = false;
+        CancelViewOperation();
         _actions.CloseInlineEdit(commit: false);
         OnCaptureLost();
         var phone = _actions.Host.Phone;
         phone.Changed -= OnPhoneChanged;
 
         _airPlay.Detach();
+        ClearAppIcons();
         StopQrPairing();
         ResetSavedSearch();
-        StopMediaWatch();
+        _pairCode = "";
         CancelEncoderRead();
-        CancelRemoteList();
+        CloseAndroidPicker();
         CloseCatalog();
     }
 
     public void OnCaptureLost()
     {
-        bool changed = _draggingVolume || _fileScroll.Dragging || _scroll.Dragging;
-        _draggingVolume = false;
+        bool changed = _fileScroll.Dragging || _scroll.Dragging;
         _fileScroll.EndDrag();
         _scroll.EndDrag();
         if (changed) _actions.Invalidate();
     }
 
-    public void OnFilesDropped(string[] paths)
+    public void OnFilesDropped(string[] paths, string? targetId)
     {
-        if (!_active || IsConnectionPage || _activeDevice is not { } online || paths.Length == 0) return;
+        if (targetId != "phone.sendfile" || !_active || _showCatalog || _showFileBrowser || IsConnectionPage || _activeDevice is not { } online || paths.Length == 0) return;
         var phone = _actions.Host.Phone;
         var profile = phone.Store.Profile;
         EnqueueOrStartFiles(online, profile.Id, paths, profile.ReceiveFolder, pullFrom: null);
@@ -189,6 +183,8 @@ internal sealed partial class PhoneDevicePageView : IViewPage
         var online = profile.LastDevice is { } last ? phone.Connections.Get(last).Device : null;
         if (!Equals(online, _activeDevice))
         {
+            CancelEncoderRead();
+            _streamDeviceKey = null;
             _activeDevice = online;
             _showFileBrowser = false;
             _remoteFiles = Array.Empty<AndroidStorageFile>();
@@ -196,13 +192,17 @@ internal sealed partial class PhoneDevicePageView : IViewPage
             _remoteError = null;
             _catalogApps = Array.Empty<AndroidApp>();
             CancelRemoteList();
-            RestartMediaWatch(online);
             CloseCatalog();
         }
         var cached = phone.Discovery.CurrentDevices ?? [];
         _restorableUsb = IsConnectionPage ? cached.Where(device => !device.IsWifi && device.State == "device" &&
             phone.Connections.Resolve(device) == null && !AndroidConnectionManager.IsAmbiguous(device, cached)).ToArray() : [];
-        RefreshStreamingSettings(online);
+        RefreshStreamingSettings(IsConnectionPage ? null : online ?? profile.LastDevice);
+        if (!_hevcLoadStarted && _active && !IsConnectionPage)
+        {
+            _hevcLoadStarted = true;
+            _ = LoadWindowsHevcAsync();
+        }
         UpdateQrPairing();
         _actions.Invalidate();
     }
@@ -226,6 +226,15 @@ internal sealed partial class PhoneDevicePageView : IViewPage
     {
         _hit = hit;
         _visibleDeviceRect = contentRect;
+        string? status = IsConnectionPage && _airPlayConnectionChoice ? null : _statusMessage;
+        if (!string.IsNullOrEmpty(status))
+        {
+            float usable = MathF.Max(1f, contentRect.Width - 8f);
+            float height = PhoneTextHeight(status, usable);
+            var footer = new UiRect(contentRect.X + 4f, contentRect.Bottom - 8f - height, usable, height);
+            g.DrawText(status, footer, _statusError ? t.Fail : t.TextSecondary, 12f, wrap: true);
+            contentRect = new UiRect(contentRect.X, contentRect.Y, contentRect.Width, MathF.Max(1f, contentRect.Height - height - 8f));
+        }
         if (_showCatalog)
         {
             RenderCatalog(g, t, contentRect);
@@ -233,19 +242,22 @@ internal sealed partial class PhoneDevicePageView : IViewPage
         }
         _scroll.ViewportHeight = contentRect.Height;
 
-        float viewW = MathF.Max(200f, contentRect.Width - UiMetrics.ScrollBarWidth - 6f);
+        float viewW = MathF.Max(1f, contentRect.Width - 6f - (_scroll.MaxOffset > 0.5f ? UiMetrics.ScrollBarWidth : 0f));
         float startY = contentRect.Y - _scroll.Offset;
 
         g.PushClip(contentRect);
         _hit.PushClip(contentRect);
         float endY = IsConnectionPage
-            ? RenderConnectionView(g, t, contentRect.X, startY, viewW)
-            : RenderConnectedView(g, t, contentRect.X, startY, viewW);
+            ? RenderConnectionView(g, t, contentRect.X + 2f, startY, viewW)
+            : RenderConnectedView(g, t, contentRect.X + 2f, startY, viewW);
         _hit.PopClip();
         g.PopClip();
 
+        bool hadScroll = _scroll.MaxOffset > 0.5f;
+        float oldOffset = _scroll.Offset;
         _scroll.ContentHeight = MathF.Max(0f, endY - startY);
         _scroll.Clamp();
+        if (hadScroll != (_scroll.MaxOffset > 0.5f) || oldOffset != _scroll.Offset) _actions.Invalidate();
         _scroll.Draw(g, t, _hit, "phone.scroll", contentRect);
     }
 
@@ -253,160 +265,71 @@ internal sealed partial class PhoneDevicePageView : IViewPage
     {
         var phone = _actions.Host.Phone;
         var profile = phone.Store.Profile;
-        var profilesWithDevices = phone.Store.Profiles.Where(p => p.LastDevice != null).ToArray();
         var online = _activeDevice;
 
-        // Top profile switcher bar + Add Device button
-        float barX = x;
-        foreach (var p in profilesWithDevices)
-        {
-            string label = phone.Store.GetProfileDisplayName(p);
-            float bw = Math.Clamp(D2dSharedContext.Instance.MeasureText(label, UiMetrics.FontFamily, 12f, 600, 180f, 30f, false).Width + 24f, 70f, 180f);
-            if (barX + bw > x + w - 110f) break;
-            UiPrimitives.DrawSecondaryButton(g, t, _hit, $"phone.prof:{p.Id}", new UiRect(barX, y, bw, 30f), label,
-                fontSize: 12f, active: p.Id == profile.Id);
-            barX += bw + 6f;
-        }
-        UiPrimitives.DrawAccentButton(g, t, _hit, "phone.add", new UiRect(x + w - 108f, y, 108f, 30f), L10n.T("Phone.AddDeviceButton"), fontSize: 11.5f);
-        y += 40f;
-
-        if (!string.IsNullOrEmpty(_statusMessage))
-        {
-            var statusSize = D2dSharedContext.Instance.MeasureText(_statusMessage, UiMetrics.FontFamily, 12f, 400, w - 8f, 96f, wrap: true);
-            float msgH = MathF.Max(20f, statusSize.Height + 2f);
-            g.DrawText(_statusMessage, new UiRect(x + 4f, y, w - 8f, msgH), _statusError ? t.Fail : t.TextSecondary,
-                12f, 400, UiTextAlign.Leading, UiVertAlign.Center, wrap: true, ellipsis: false);
-            y += msgH + 4f;
-        }
-
-        // Card 1: Device Header Card
-        var devCard = new UiRect(x, y, w, 76f);
+        var detail = profile.LastDevice;
+        var devCard = new UiRect(x, y, w, 74f);
         UiPrimitives.DrawCard(g, t, devCard, 12f);
-
-        var phoneIconBox = new UiRect(devCard.X + 12f, devCard.CenterY - 24f, 38f, 48f);
+        var phoneIconBox = new UiRect(x + 13f, y + 13f, 38f, 48f);
         g.FillRoundedRect(phoneIconBox, 10f, t.Overlay);
-        g.DrawIcon(UiIcon.Phone, new UiRect(phoneIconBox.CenterX - 11f, phoneIconBox.CenterY - 15f, 22f, 30f),
-            online != null ? t.Accent : t.TextSecondary, 1.6f);
+        g.DrawIcon(UiIcon.Phone, new UiRect(phoneIconBox.CenterX - 11f, phoneIconBox.CenterY - 16f, 22f, 32f), t.TextSecondary, 1.5f);
 
-        // Action buttons on right
-        float btnRight = devCard.Right - 12f;
-        float btnY = devCard.CenterY - 15f;
-        var removeRect = new UiRect(btnRight - 72f, btnY, 72f, 30f);
-        UiPrimitives.DrawSecondaryButton(g, t, _hit, "phone.remove", removeRect, L10n.T("Phone.DeleteDevice"), enabled: !_busy && profile.LastDevice != null, fontSize: 11f, danger: true);
-        btnRight = removeRect.X - 6f;
-
-        if (online != null)
+        float right = devCard.Right - 13f;
+        float maxCommandWidth = MathF.Max(29f, (w - 150f) / 4f);
+        void DrawCommand(string id, string labelKey, bool enabled)
         {
-            if (online.IsWifi)
-            {
-                var unpairRect = new UiRect(btnRight - 72f, btnY, 72f, 30f);
-                UiPrimitives.DrawSecondaryButton(g, t, _hit, "phone.unpair", unpairRect, L10n.T("Phone.Unpair"), enabled: !_busy, fontSize: 11f);
-                btnRight = unpairRect.X - 6f;
-            }
-            var discRect = new UiRect(btnRight - 76f, btnY, 76f, 30f);
-            UiPrimitives.DrawSecondaryButton(g, t, _hit, "phone.disconnect", discRect,
-                online.IsWifi ? L10n.T("Phone.Disconnect") : L10n.T("Phone.StopReceiving"), enabled: !_busy, fontSize: 11f);
-            btnRight = discRect.X - 6f;
+            string label = L10n.T(labelKey);
+            float width = MathF.Min(maxCommandWidth, PhoneTextWidth(label, 11f) + 18f);
+            right -= width;
+            UiPrimitives.DrawSecondaryButton(g, t, _hit, id, new UiRect(right, devCard.CenterY - 15f, width, 30f),
+                label, enabled: enabled && !_busy, fontSize: 11f, tooltip: label);
+            right -= 4f;
         }
+        DrawCommand("phone.remove", "Phone.DeleteDevice", detail != null);
+        DrawCommand("phone.unpair", "Phone.Unpair", detail != null);
+        DrawCommand("phone.disconnect", online is { IsWifi: false } ? "Phone.StopReceiving" : "Phone.Disconnect", online != null);
+        DrawCommand("phone.reconnect", "Phone.Reconnect", detail != null);
+
+        string name = phone.Store.GetProfileDisplayName(profile);
+        bool editing = _actions.ActiveInlineEditTag == "phone.rename.box";
+        float nameX = x + 61f, available = MathF.Max(1f, right - nameX - 4f);
+        float nameWidth = MathF.Min(MathF.Max(1f, available - 32f), editing ? available : PhoneTextWidth(name, 16f, 600));
+        _renameRect = new UiRect(nameX, y + 15f, nameWidth, 26f);
+        if (editing)
+            UiPrimitives.DrawTextBox(g, t, _hit, "phone.rename.box", _renameRect, name, focused: true, fontSize: 16f);
         else
-        {
-            var recRect = new UiRect(btnRight - 76f, btnY, 76f, 30f);
-            UiPrimitives.DrawSecondaryButton(g, t, _hit, "phone.reconnect", recRect, L10n.T("Phone.Reconnect"), enabled: !_busy && profile.LastDevice != null, fontSize: 11f);
-            btnRight = recRect.X - 6f;
-        }
-
-        float nameX = phoneIconBox.Right + 12f;
-        float nameMaxW = MathF.Max(60f, btnRight - nameX - 36f);
-        string devName = phone.Store.GetProfileDisplayName(profile);
-        _renameRect = new UiRect(nameX, devCard.Y + 14f, nameMaxW, 24f);
-        if (_actions.ActiveInlineEditTag != "phone.rename")
-        {
-            g.DrawText(devName, _renameRect, t.TextPrimary, 16f, 600, UiTextAlign.Leading, UiVertAlign.Center);
-        }
-        else
-        {
-            UiPrimitives.DrawTextBox(g, t, _hit, "phone.rename.box", _renameRect, devName, focused: true, fontSize: 15f);
-        }
-        UiPrimitives.DrawGhostIconButton(g, t, _hit, "phone.rename", new UiRect(_renameRect.Right + 4f, devCard.Y + 13f, 26f, 26f), UiIcon.Edit, 14f,
-            tooltip: L10n.T("Phone.RenamePhoneAutomation"));
-
-        string statusLine = online != null
-            ? $"{(online.IsWifi ? L10n.T("Phone.WifiConnected") : L10n.T("Phone.UsbConnected"))} · {online.Serial}"
-            : $"{L10n.T("Phone.Disconnected")} · {profile.LastDevice?.Serial ?? ""}";
-        g.DrawText(statusLine, new UiRect(nameX, devCard.Y + 42f, MathF.Max(60f, btnRight - nameX - 8f), 18f),
-            online != null ? t.Success : t.TextSecondary, 11.5f, 400, UiTextAlign.Leading, UiVertAlign.Center);
-
+            g.DrawText(name, _renameRect, t.TextPrimary, 16f, 600, UiTextAlign.Leading, UiVertAlign.Center);
+        UiPrimitives.DrawSecondaryButton(g, t, _hit, "phone.rename", new UiRect(_renameRect.Right + 6f, _renameRect.Y, 26f, 26f),
+            "", icon: UiIcon.Edit, tooltip: L10n.T("Phone.RenamePhoneAutomation"));
+        string connection = online == null ? L10n.T("Phone.Disconnected")
+            : $"{name} · {(online.IsWifi ? "Wi-Fi" : "USB")} · {L10n.T("Phone.ConnectedStatus")}";
+        g.DrawText(connection, new UiRect(nameX, _renameRect.Bottom + 2f, available, 18f), t.TextSecondary, 11f);
         y = devCard.Bottom + 10f;
 
-        // Card 2: Audio & Media Card
-        var wholeSource = online == null ? null : phone.Sources.Sources.FirstOrDefault(s => s.App.IsDeviceAudio && AndroidDeviceIdentity.Matches(s.Device, online));
-        float audioCardH = wholeSource != null ? 136f : 96f;
-        var audioCard = new UiRect(x, y, w, audioCardH);
-        UiPrimitives.DrawCard(g, t, audioCard, 12f);
-
-        float ax = audioCard.X + 12f;
-        float aw = audioCard.Width - 24f;
-        float ay = audioCard.Y + 12f;
-
-        bool recActive = wholeSource != null;
-        var recBtnRect = new UiRect(ax, ay, 148f, 32f);
-        if (recActive)
-            UiPrimitives.DrawSecondaryButton(g, t, _hit, "phone.receive", recBtnRect, L10n.T("Phone.StopReceiving"), enabled: online != null, fontSize: 12f, radius: 7f, icon: UiIcon.Speaker, active: true);
-        else
-            UiPrimitives.DrawAccentButton(g, t, _hit, "phone.receive", recBtnRect, L10n.T("Phone.AndroidReceiveToPc"), enabled: online != null, fontSize: 12f, radius: 7f, icon: UiIcon.Speaker);
-
-        var bothBtnRect = new UiRect(recBtnRect.Right + 8f, ay, 150f, 32f);
-        UiPrimitives.DrawSecondaryButton(g, t, _hit, "phone.receiveboth", bothBtnRect, L10n.T("Phone.DropBothPlayTitle"),
-            enabled: online != null, fontSize: 11.5f, active: wholeSource?.KeepPhoneAudio == true);
-
-        float mBtnW = 32f;
-        float mx = audioCard.Right - 12f - mBtnW * 3f - 8f;
-        UiPrimitives.DrawSecondaryButton(g, t, _hit, "phone.mediaprev", new UiRect(mx, ay, mBtnW, 32f), "", enabled: _mediaState?.CanPrevious == true, icon: UiIcon.PreviousTrack);
-        UiPrimitives.DrawSecondaryButton(g, t, _hit, "phone.mediaplay", new UiRect(mx + mBtnW + 4f, ay, mBtnW, 32f), "", enabled: _mediaState?.CanToggle == true, icon: _mediaState?.Playing == true ? UiIcon.Pause : UiIcon.Play);
-        UiPrimitives.DrawSecondaryButton(g, t, _hit, "phone.medianext", new UiRect(mx + (mBtnW + 4f) * 2f, ay, mBtnW, 32f), "", enabled: _mediaState?.CanNext == true, icon: UiIcon.NextTrack);
-
-        string nowPlaying = _mediaState is { HasSession: true } ms
-            ? $"{(ms.Title.Length > 0 ? ms.Title : L10n.T("Phone.MediaDefaultTitle"))}{(ms.Artist.Length > 0 ? " · " + ms.Artist : "")}"
-            : L10n.T("Phone.MediaSubtitleIdle");
-        g.DrawText(nowPlaying, new UiRect(ax, ay + 40f, aw, 20f), t.TextSecondary, 11.5f, 400, UiTextAlign.Leading, UiVertAlign.Center);
-
-        if (wholeSource != null)
-        {
-            var st = wholeSource.Session.State;
-            float vy = ay + 68f;
-            var vmute = new UiRect(ax, vy, 54f, 28f);
-            UiPrimitives.DrawSecondaryButton(g, t, _hit, "phone.audiomute", vmute, "", icon: st.Muted ? UiIcon.VolumeMutedSlash : UiIcon.Speaker, active: st.Muted);
-            var vpct = new UiRect(ax + aw - 44f, vy, 44f, 28f);
-            g.DrawText($"{st.Volume}%", vpct, t.TextPrimary, 12.5f, 600, UiTextAlign.Trailing, UiVertAlign.Center);
-            var vslider = new UiRect(vmute.Right + 8f, vy, MathF.Max(40f, vpct.X - 8f - (vmute.Right + 8f)), 28f);
-            UiPrimitives.DrawVolumeSlider(g, t, _hit, "phone.audiovol", vslider, st.Volume / 100f, 0f, st.Muted, false);
-        }
-
-        y = audioCard.Bottom + 10f;
-
         // Card 3: Streaming Codec / FPS / Bitrate Card (matching WPF PhoneDevicePage.Streaming.cs)
-        y = RenderStreamingCard(g, t, x, y, w, online != null);
+        y = RenderStreamingCard(g, t, x, y, w, detail != null);
 
         // Card 4: App Library Card
         var apps = profile.RetainedApps;
-        float libHeaderH = 70f;
-        float libRowH = 48f;
-        float libBodyH = apps.Count == 0 ? 40f : apps.Count * libRowH;
-        var libCard = new UiRect(x, y, w, libHeaderH + libBodyH + 12f);
+        string pinHint = L10n.T("Phone.PinDesc");
+        float pinHintH = PhoneTextHeight(pinHint, w - 34f);
+        float libHeaderH = 10f + 24f + 6f + pinHintH + 10f;
+        const float libRowH = 44f;
+        float libBodyH = apps.Count == 0 ? 42f : apps.Count * libRowH;
+        var libCard = new UiRect(x, y, w, libHeaderH + libBodyH + 10f);
         UiPrimitives.DrawCard(g, t, libCard, 12f);
-
         float lx = libCard.X + 12f;
         float lw = libCard.Width - 24f;
         float ly = libCard.Y + 12f;
 
-        g.DrawText(L10n.T("Phone.QuickPanelAppsTitle"), new UiRect(lx, ly, lw - 100f, 24f), t.TextPrimary, 15f, 600, UiTextAlign.Leading, UiVertAlign.Center);
-        g.DrawText(string.Format(L10n.T("Phone.RetainedCountFormat"), apps.Count), new UiRect(libCard.Right - 124f, ly, 112f, 24f), t.TextSecondary, 11f, 400, UiTextAlign.Trailing);
-        g.DrawText(L10n.T("Phone.PinDesc"), new UiRect(lx, ly + 28f, lw, 32f), t.TextSecondary, 11.5f, wrap: true);
-        ly += 58f;
+        g.DrawText(L10n.T("Phone.QuickPanelAppsTitle"), new UiRect(lx + 4f, ly, lw - 100f, 24f), t.TextPrimary, 17f, 600, UiTextAlign.Leading, UiVertAlign.Center);
+        g.DrawText(string.Format(L10n.T("Phone.RetainedCountFormat"), apps.Count), new UiRect(libCard.Right - 128f, ly, 112f, 24f), t.TextSecondary, 12f, 400, UiTextAlign.Trailing);
+        g.DrawText(pinHint, new UiRect(lx + 4f, ly + 30f, lw - 8f, pinHintH), t.TextSecondary, 12f, wrap: true);
+        ly = libCard.Y + libHeaderH;
 
         if (apps.Count == 0)
         {
-            g.DrawText(L10n.T("Phone.RetainedEmptyHint"), new UiRect(lx, ly, lw, 32f), t.TextSecondary, 12f, 400, UiTextAlign.Center, UiVertAlign.Center);
+            g.DrawText(L10n.T("Phone.RetainedEmptyHint"), new UiRect(lx, ly, lw, 32f), t.TextSecondary, 12f, 400, UiTextAlign.Leading, UiVertAlign.Center);
         }
         else
         {
@@ -415,9 +338,7 @@ internal sealed partial class PhoneDevicePageView : IViewPage
                 var app = apps[i];
                 var rowRect = new UiRect(lx, ly + i * libRowH, lw, libRowH);
                 if (rowRect.Bottom < _visibleDeviceRect.Y || rowRect.Y >= _visibleDeviceRect.Bottom) continue;
-                const bool retained = true;
                 bool smart = phone.Store.IsSmartVolumeEnabled(profile.LastDevice, app.Package);
-                bool hasDisplayAudio = online != null && phone.Sources.Sources.Any(s => s.App.Package == app.Package && AndroidDeviceIdentity.Matches(s.Device, online));
 
                 var iconRect = new UiRect(rowRect.X, rowRect.CenterY - 16f, 32f, 32f);
                 if (TryGetAppIcon(app, out var ibgra, out int iw, out int ih, out int iver))
@@ -426,31 +347,24 @@ internal sealed partial class PhoneDevicePageView : IViewPage
                 }
                 else
                 {
-                    g.FillRoundedRect(iconRect, 8f, t.Overlay);
-                    g.DrawText(string.IsNullOrEmpty(app.Name) ? "♪" : app.Name[..1], iconRect, t.Accent, 14f, 600, UiTextAlign.Center, UiVertAlign.Center);
+                    g.DrawText(string.IsNullOrEmpty(app.Name) ? "♪" : StringInfo.GetNextTextElement(app.Name), iconRect, t.TextPrimary, 18f, 400, UiTextAlign.Center, UiVertAlign.Center);
                 }
 
                 var swRect = new UiRect(rowRect.Right - 36f, rowRect.CenterY - 12f, 34f, 24f);
                 UiPrimitives.DrawSwitch(g, t, _hit, $"phone.smart:{app.Package}", swRect, smart);
 
-                var pinRect = new UiRect(swRect.X - 34f, rowRect.CenterY - 14f, 28f, 28f);
-                UiPrimitives.DrawGhostIconButton(g, t, _hit, $"phone.pin:{app.Package}", pinRect, UiIcon.Pin, 14f,
-                    iconColor: retained ? t.Accent : t.TextSecondary, active: retained,
-                    tooltip: retained ? L10n.T("Phone.RemoveFromQuickPanel") : L10n.T("Phone.AddToQuickPanel"));
-
-                var dispRect = new UiRect(pinRect.X - 34f, rowRect.CenterY - 14f, 28f, 28f);
-                UiPrimitives.DrawGhostIconButton(g, t, _hit, $"phone.launch:{app.Package}", dispRect, UiIcon.Monitor, 14f,
-                    enabled: online != null, active: hasDisplayAudio, tooltip: L10n.T("Phone.DisplayRestoreScreen"));
+                var pinRect = new UiRect(swRect.X - 36f, rowRect.CenterY - 14f, 28f, 28f);
+                DrawAppPin(g, t, pinRect, app, retained: true);
 
                 float tx = iconRect.Right + 10f;
-                float tw = MathF.Max(20f, dispRect.X - 8f - tx);
+                float tw = MathF.Max(20f, pinRect.X - 8f - tx);
                 g.DrawText(app.Name, new UiRect(tx, rowRect.Y + 5f, tw, 18f), t.TextPrimary, 12.5f, 600, UiTextAlign.Leading, UiVertAlign.Center);
-                g.DrawText(app.Package, new UiRect(tx, rowRect.Y + 24f, tw, 15f), t.TextSecondary, 10.5f, 400, UiTextAlign.Leading, UiVertAlign.Center);
+                g.DrawText(PhoneAppPresentation.Description(app), new UiRect(tx, rowRect.Y + 24f, tw, 15f), t.TextSecondary, 10f, 400, UiTextAlign.Leading, UiVertAlign.Center);
             }
         }
 
-        var addRect = new UiRect(x, libCard.Bottom, w, 38f);
-        UiPrimitives.DrawSecondaryButton(g, t, _hit, "phone.addapps", addRect, L10n.T("Phone.AddQuickPanelAppButton"), enabled: online != null);
+        var addRect = new UiRect(x, libCard.Bottom + 10f, w, 38f);
+        DrawOverlayAction(g, t, "phone.addapps", addRect, L10n.T("Phone.AddQuickPanelAppButton"), enabled: online != null && !_busy);
         y = addRect.Bottom + 12f;
 
         // Card 5: File Transfer Card
@@ -459,39 +373,33 @@ internal sealed partial class PhoneDevicePageView : IViewPage
         // Card 6: Clipboard Sync Card
         var clipCard = new UiRect(x, y, w, 64f);
         UiPrimitives.DrawCard(g, t, clipCard, 12f);
-        bool clipEnabled = online != null ? phone.Clipboard.IsEnabled(online) : phone.Clipboard.Enabled;
-        string clipDesc = online != null
-            ? (clipEnabled ? phone.Clipboard.StatusFor(online) : L10n.T("Phone.ClipboardDefaultHint"))
-            : L10n.T("Phone.ClipboardWaitingPhone");
+        bool clipEnabled = phone.Clipboard.IsEnabled(detail);
+        string clipDesc = phone.Clipboard.StatusFor(detail);
         g.DrawText(L10n.T("Phone.ClipboardSyncTitle"), new UiRect(clipCard.X + 12f, clipCard.Y + 10f, clipCard.Width - 70f, 20f),
             t.TextPrimary, 13.5f, 600, UiTextAlign.Leading, UiVertAlign.Center);
         g.DrawText(clipDesc, new UiRect(clipCard.X + 12f, clipCard.Y + 32f, clipCard.Width - 70f, 20f),
             t.TextSecondary, 11.5f, 400, UiTextAlign.Leading, UiVertAlign.Center);
         UiPrimitives.DrawSwitch(g, t, _hit, "phone.clipboard", new UiRect(clipCard.Right - 48f, clipCard.CenterY - 12f, 36f, 24f),
-            clipEnabled, enabled: online != null);
+            clipEnabled, enabled: detail != null);
 
         return clipCard.Bottom + 12f;
     }
 
     private float RenderStreamingCard(D2dTarget g, UiThemePalette t, float x, float y, float w, bool enabled)
     {
-        float cardH = 104f;
+        const float cardH = 88f;
         var card = new UiRect(x, y, w, cardH);
         UiPrimitives.DrawCard(g, t, card, 12f);
 
         float cx = card.X + 12f;
         float cw = card.Width - 24f;
-        float cy = card.Y + 10f;
-
-        g.DrawText(L10n.T("Phone.StreamApplyHint"), new UiRect(cx, cy, cw, 16f), t.TextSecondary, 11f, 400, UiTextAlign.Leading, UiVertAlign.Center);
-        cy += 22f;
-
-        float labelW = 46f;
-        float gap = 6f;
-        float gridW = MathF.Max(120f, cw - labelW - gap);
-        float colW = (gridW - gap * 3f) / 4f;
-        float col0 = cx + labelW + gap;
-        float rowH = 28f;
+        float cy = card.Y + 13f;
+        float labelW = MathF.Max(PhoneTextWidth(L10n.T("Phone.StreamAudioLabel"), 11f), PhoneTextWidth(L10n.T("Phone.StreamVideoLabel"), 11f)) + 8f;
+        const float gap = 8f;
+        float lastW = MathF.Min(70f, cw * 0.18f), bitrateW = MathF.Min(78f, cw * 0.2f);
+        float colW = MathF.Max(1f, (cw - labelW - bitrateW - lastW - 3 * gap) / 2f);
+        float col0 = cx + labelW, bitrateX = col0 + (colW + gap) * 2f, lastX = bitrateX + bitrateW + gap;
+        const float rowH = 28f;
 
         bool opusMode = _streamSettings.AudioDecoder != AndroidStreamSettings.RawPcmDecoder;
         string audioEncLabel = GetEncoderSelectedLabel(_streamSettings.AudioEncoder, _streamEncoders?.Audio);
@@ -502,9 +410,9 @@ internal sealed partial class PhoneDevicePageView : IViewPage
         g.DrawText(L10n.T("Phone.StreamAudioLabel"), new UiRect(cx, cy, labelW, rowH), t.TextPrimary, 12f, 600, UiTextAlign.Leading, UiVertAlign.Center);
         UiPrimitives.DrawComboBox(g, t, _hit, "phone.stream.audioenc", new UiRect(col0, cy, colW, rowH), audioEncLabel, fontSize: 11f, enabled: enabled && opusMode);
         UiPrimitives.DrawComboBox(g, t, _hit, "phone.stream.audiodec", new UiRect(col0 + (colW + gap), cy, colW, rowH), audioDecLabel, fontSize: 11f, enabled: enabled);
-        UiPrimitives.DrawComboBox(g, t, _hit, "phone.stream.audiobr", new UiRect(col0 + (colW + gap) * 2f, cy, colW, rowH), audioBrLabel, fontSize: 11f, enabled: enabled && opusMode);
-        UiPrimitives.DrawComboBox(g, t, _hit, "phone.stream.audiolat", new UiRect(col0 + (colW + gap) * 3f, cy, colW, rowH), audioLatLabel, fontSize: 11f, enabled: enabled);
-        cy += rowH + 8f;
+        UiPrimitives.DrawComboBox(g, t, _hit, "phone.stream.audiobr", new UiRect(bitrateX, cy, bitrateW, rowH), audioBrLabel, fontSize: 11f, enabled: enabled && opusMode);
+        UiPrimitives.DrawComboBox(g, t, _hit, "phone.stream.audiolat", new UiRect(lastX, cy, lastW, rowH), audioLatLabel, fontSize: 11f, enabled: enabled);
+        cy += rowH + 6f;
 
         string? selectedVideoEnc = UseHevc ? _streamSettings.HevcEncoder : _streamSettings.VideoEncoder;
         var videoEncList = UseHevc ? _streamEncoders?.Hevc : _streamEncoders?.Video;
@@ -516,8 +424,8 @@ internal sealed partial class PhoneDevicePageView : IViewPage
         g.DrawText(L10n.T("Phone.StreamVideoLabel"), new UiRect(cx, cy, labelW, rowH), t.TextPrimary, 12f, 600, UiTextAlign.Leading, UiVertAlign.Center);
         UiPrimitives.DrawComboBox(g, t, _hit, "phone.stream.videoenc", new UiRect(col0, cy, colW, rowH), videoEncLabel, fontSize: 11f, enabled: enabled);
         UiPrimitives.DrawComboBox(g, t, _hit, "phone.stream.videodec", new UiRect(col0 + (colW + gap), cy, colW, rowH), videoDecLabel, fontSize: 11f, enabled: enabled);
-        UiPrimitives.DrawComboBox(g, t, _hit, "phone.stream.videobr", new UiRect(col0 + (colW + gap) * 2f, cy, colW, rowH), videoBrLabel, fontSize: 11f, enabled: enabled);
-        UiPrimitives.DrawComboBox(g, t, _hit, "phone.stream.videofps", new UiRect(col0 + (colW + gap) * 3f, cy, colW, rowH), videoFpsLabel, fontSize: 11f, enabled: enabled);
+        UiPrimitives.DrawComboBox(g, t, _hit, "phone.stream.videobr", new UiRect(bitrateX, cy, bitrateW, rowH), videoBrLabel, fontSize: 11f, enabled: enabled);
+        UiPrimitives.DrawComboBox(g, t, _hit, "phone.stream.videofps", new UiRect(lastX, cy, lastW, rowH), videoFpsLabel, fontSize: 11f, enabled: enabled);
 
         return card.Bottom + 10f;
     }
@@ -534,13 +442,12 @@ internal sealed partial class PhoneDevicePageView : IViewPage
     {
         var transfer = phone.Transfers.Get(profile.Id);
         int queuedCount = phone.QueuedTransferCount(profile.Id);
-        var entries = _choosingPhoneFolder
-            ? _remoteFiles.Where(f => f.Directory).ToArray()
-            : _remoteFiles.ToArray();
+        var entries = _remoteFiles;
 
         if (_showFileBrowser)
         {
-            float listViewH = 196f;
+            const float rowH = 40f;
+            float listViewH = Math.Clamp(entries.Count * rowH, 84f, 260f) + 6f;
             float browserCardH = 104f + listViewH;
             var fileCard = new UiRect(x, y, w, browserCardH);
             UiPrimitives.DrawCard(g, t, fileCard, 12f);
@@ -564,9 +471,8 @@ internal sealed partial class PhoneDevicePageView : IViewPage
             g.DrawRoundedRect(listBox, 8f, t.Border, 1f);
 
             var inner = listBox.Deflate(4f);
-            const float rowH = 28f;
             _fileScroll.ViewportHeight = inner.Height;
-            _fileScroll.ContentHeight = entries.Length * rowH;
+            _fileScroll.ContentHeight = entries.Count * rowH;
             _fileScroll.Clamp();
 
             if (_remoteLoading)
@@ -577,7 +483,7 @@ internal sealed partial class PhoneDevicePageView : IViewPage
             {
                 g.DrawText(_remoteError, inner, t.Fail, 11.5f, 400, UiTextAlign.Center, UiVertAlign.Center, wrap: true);
             }
-            else if (entries.Length == 0)
+            else if (entries.Count == 0)
             {
                 g.DrawText(L10n.T(_choosingPhoneFolder ? "Phone.AndroidNoSubfolders" : "Phone.AndroidEmptyFolder"),
                     inner, t.TextSecondary, 11.5f, 400, UiTextAlign.Center, UiVertAlign.Center);
@@ -587,7 +493,7 @@ internal sealed partial class PhoneDevicePageView : IViewPage
                 float rowW = _fileScroll.MaxOffset > 0.5f ? inner.Width - UiMetrics.ScrollBarWidth - 2f : inner.Width;
                 g.PushClip(inner);
                 _hit.PushClip(inner);
-                for (int i = 0; i < entries.Length; i++)
+                for (int i = 0; i < entries.Count; i++)
                 {
                     float ry = inner.Y + i * rowH - _fileScroll.Offset;
                     if (ry + rowH < inner.Y || ry > inner.Bottom) continue;
@@ -600,10 +506,13 @@ internal sealed partial class PhoneDevicePageView : IViewPage
                     if (selected) g.FillRoundedRect(rowRect, 6f, t.NavSelected);
                     else if (_hit.IsHover(fid)) g.FillRoundedRect(rowRect, 6f, t.NavHover);
 
-                    float textLeft = rowRect.X + 8f;
+                    var icon = new UiRect(rowRect.X + 11f, rowRect.CenterY - 8f, 16f, 16f);
+                    if (f.Directory) g.DrawIcon(UiIcon.Folder, icon, t.Overlay, filled: true);
+                    g.DrawIcon(f.Directory ? UiIcon.Folder : UiIcon.File, icon, f.Directory ? t.TextPrimary : t.TextSecondary, 1.5f);
+                    float textLeft = icon.Right + 10f;
                     if (!f.Directory)
                     {
-                        var cbBox = new UiRect(rowRect.X + 8f, rowRect.CenterY - 7.5f, 15f, 15f);
+                        var cbBox = new UiRect(rowRect.Right - 26f, rowRect.CenterY - 7.5f, 15f, 15f);
                         if (selected)
                         {
                             g.FillRoundedRect(cbBox, 4f, t.Accent);
@@ -615,15 +524,15 @@ internal sealed partial class PhoneDevicePageView : IViewPage
                             g.FillRoundedRect(cbBox, 4f, t.SurfaceBg);
                             g.DrawRoundedRect(cbBox, 4f, t.Border, 1f);
                         }
-                        textLeft = cbBox.Right + 8f;
                     }
+                    else g.DrawIcon(UiIcon.ChevronRight, new UiRect(rowRect.Right - 24f, rowRect.CenterY - 7f, 14f, 14f), t.TextSecondary);
 
-                    float rightReserved = f.Directory ? 8f : 76f;
-                    g.DrawText((f.Directory ? "▸ " : "") + f.Label,
+                    float rightReserved = f.Directory ? 35f : 102f;
+                    g.DrawText(f.Label,
                         new UiRect(textLeft, rowRect.Y, MathF.Max(20f, rowRect.Right - rightReserved - textLeft), rowRect.Height),
-                        t.TextPrimary, 12f, f.Directory ? 600 : 400, UiTextAlign.Leading, UiVertAlign.Center);
+                        t.TextPrimary, 13f, 400, UiTextAlign.Leading, UiVertAlign.Center);
                     if (!f.Directory)
-                        g.DrawText(f.SizeText, new UiRect(rowRect.Right - 72f, rowRect.Y, 64f, rowRect.Height),
+                        g.DrawText(f.SizeText, new UiRect(rowRect.Right - 99f, rowRect.Y, 64f, rowRect.Height),
                             t.TextSecondary, 11f, 400, UiTextAlign.Trailing, UiVertAlign.Center);
                 }
                 _hit.PopClip();
@@ -635,7 +544,7 @@ internal sealed partial class PhoneDevicePageView : IViewPage
             int selCount = _selectedRemoteFiles.Count;
             string actionBase = L10n.T(_choosingPhoneFolder ? "Phone.AndroidUseFolder" : "Phone.AndroidReceiveToPc");
             string actionText = !_choosingPhoneFolder && selCount > 0 ? $"{actionBase} ({selCount})" : actionBase;
-            bool actionEnabled = !_remoteLoading && online != null && (_choosingPhoneFolder || selCount > 0);
+            bool actionEnabled = !_remoteLoading && _remoteError == null && online != null && (_choosingPhoneFolder || selCount > 0);
             UiPrimitives.DrawAccentButton(g, t, _hit, "phone.rfileact", new UiRect(fileCard.Right - 180f, fy, 168f, 30f),
                 actionText, enabled: actionEnabled, fontSize: 11.5f);
 
@@ -644,7 +553,7 @@ internal sealed partial class PhoneDevicePageView : IViewPage
 
         _fileBrowserListRect = default;
         bool hasStatus = transfer != null || queuedCount > 0;
-        float fileCardH = 196f + (hasStatus ? 30f : 0f);
+        float fileCardH = 232f + (hasStatus ? 30f : 0f);
         var card = new UiRect(x, y, w, fileCardH);
         UiPrimitives.DrawCard(g, t, card, 12f);
 
@@ -652,37 +561,28 @@ internal sealed partial class PhoneDevicePageView : IViewPage
         float cw = card.Width - 24f;
         float y0 = card.Y + 12f;
 
-        g.DrawText(L10n.T("Phone.Files"), new UiRect(x0, y0, cw - 160f, 28f), t.TextPrimary, 14f, 600, UiTextAlign.Leading, UiVertAlign.Center);
-        UiPrimitives.DrawSecondaryButton(g, t, _hit, "phone.browsefiles", new UiRect(card.Right - 164f, y0, 152f, 28f),
-            L10n.T("Phone.AndroidBrowseFiles"), enabled: online != null, fontSize: 11.5f);
+        string browse = L10n.T("Phone.AndroidBrowseFiles");
+        float browseW = MathF.Min(cw * 0.48f, PhoneTextWidth(browse, 12f) + 42f);
+        g.DrawText(L10n.T("Phone.Files"), new UiRect(x0, y0, cw - browseW - 6f, 30f), t.TextPrimary, 14f, 600, UiTextAlign.Leading, UiVertAlign.Center);
+        UiPrimitives.DrawSecondaryButton(g, t, _hit, "phone.browsefiles", new UiRect(x0 + cw - browseW, y0, browseW, 30f),
+            browse, enabled: online != null, fontSize: 12f, icon: UiIcon.Download);
         y0 += 36f;
 
-        _fileDropRect = new UiRect(x0, y0, cw, 64f);
+        var dropRect = new UiRect(x0, y0 + 4f, cw, 104f);
         bool dropEnabled = online != null;
-        if (dropEnabled) _hit.Add("phone.sendfile", _fileDropRect, UiCursorKind.Hand, L10n.T("Phone.FileSend"));
+        if (dropEnabled) _hit.Add("phone.sendfile", dropRect, UiCursorKind.Hand, L10n.T("Phone.FileSend"));
         bool dropHot = dropEnabled && _hit.IsHover("phone.sendfile");
-        g.FillRoundedRect(_fileDropRect, 9f, dropEnabled ? (dropHot ? t.NavHover : t.Overlay) : t.WindowBg);
-        g.DrawRoundedRect(_fileDropRect, 9f, dropHot ? t.Accent : t.Border, 1f);
+        g.FillRoundedRect(dropRect, 8f, dropEnabled ? (dropHot ? t.NavHover : t.Overlay) : t.WindowBg);
+        if (dropHot) g.DrawRoundedRect(dropRect, 8f, t.Accent, 1f);
         string dropText = online != null ? L10n.T("Phone.FileDropHint") : L10n.T("Phone.FileOfflineHint");
-        g.DrawText(dropText, _fileDropRect.Deflate(10f, 6f), dropEnabled ? t.TextPrimary : t.TextSecondary,
-            12f, 500, UiTextAlign.Center, UiVertAlign.Center, wrap: true);
-        y0 = _fileDropRect.Bottom + 10f;
-
-        // Android receive folder (pushed files destination on phone)
-        string androidDirLabel = AndroidFolderLabel(profile.ReceiveFolder);
-        g.DrawText($"{L10n.T("Phone.AndroidReceiveFolder")}: {androidDirLabel}", new UiRect(x0, y0, cw - 92f, 22f),
-            t.TextSecondary, 11f, 400, UiTextAlign.Leading, UiVertAlign.Center);
-        UiPrimitives.DrawSecondaryButton(g, t, _hit, "phone.remotefolder", new UiRect(card.Right - 98f, y0 - 1f, 86f, 24f),
-            L10n.T("Phone.FileChangeFolder"), enabled: online != null, fontSize: 10.5f);
-        y0 += 26f;
-
-        // PC receive folder (pulled files destination on PC)
-        string pcDir = _pcReceiveFolder.GetReceiveDirectory();
-        g.DrawText($"{L10n.T("Phone.FileReceiveFolder")}: {pcDir}", new UiRect(x0, y0, cw - 92f, 22f),
-            t.TextSecondary, 11f, 400, UiTextAlign.Leading, UiVertAlign.Center);
-        UiPrimitives.DrawSecondaryButton(g, t, _hit, "phone.localfolder", new UiRect(card.Right - 98f, y0 - 1f, 86f, 24f),
-            L10n.T("Phone.FileChangeFolder"), fontSize: 10.5f);
-        y0 += 28f;
+        var dropInk = dropEnabled ? t.TextPrimary : t.TextSecondary;
+        float hintHeight = PhoneTextHeight(dropText, cw - 24f);
+        float iconTop = dropRect.CenterY - (24f + 8f + hintHeight) / 2f;
+        g.DrawText("\uE898", new UiRect(x0, iconTop, cw, 24f), dropInk, 22f, 400, UiTextAlign.Center, UiVertAlign.Center,
+            fontFamily: "Segoe MDL2 Assets");
+        g.DrawText(dropText, new UiRect(x0 + 12f, iconTop + 32f, cw - 24f, hintHeight), dropInk,
+            12f, 400, UiTextAlign.Center, UiVertAlign.Center, wrap: true);
+        y0 = dropRect.Bottom + 10f;
 
         if (hasStatus)
         {
@@ -697,131 +597,31 @@ internal sealed partial class PhoneDevicePageView : IViewPage
             }
         }
 
+        if (hasStatus) y0 += 30f;
+        void DrawFolder(string label, string location, string id, bool enabled)
+        {
+            string change = L10n.T("Phone.FileChangeFolder");
+            float actionW = MathF.Min(cw * 0.34f, PhoneTextWidth(change, 11f) + 18f);
+            float labelW = MathF.Min(cw * 0.38f, PhoneTextWidth(label, 11f));
+            g.DrawText(label, new UiRect(x0, y0, labelW, 24f), t.TextSecondary, 11f, 400, UiTextAlign.Leading, UiVertAlign.Center);
+            float pathX = x0 + labelW + 9f;
+            g.DrawText(location, new UiRect(pathX, y0, MathF.Max(1f, x0 + cw - actionW - pathX - 6f), 24f), t.TextPrimary, 11f, 400, UiTextAlign.Leading, UiVertAlign.Center);
+            var action = new UiRect(x0 + cw - actionW, y0, actionW, 24f);
+            if (enabled)
+            {
+                _hit.Add(id, action, UiCursorKind.Hand);
+                if (_hit.IsHover(id)) g.FillRoundedRect(action, 7f, t.NavHover);
+            }
+            g.DrawText(change, action, enabled ? t.TextPrimary : t.TextSecondary.WithAlphaFraction(0.55f), 11f, 400, UiTextAlign.Center, UiVertAlign.Center);
+        }
+        DrawFolder(L10n.T("Phone.AndroidReceiveFolder"), AndroidFolderLabel(profile.ReceiveFolder), "phone.remotefolder", online != null);
+        y0 += 31f;
+        DrawFolder(L10n.T("Phone.FileReceiveFolder"), _pcReceiveFolder.GetReceiveDirectory(), "phone.localfolder", true);
         return card.Bottom + 10f;
-    }
-
-    private float RenderConnectionView(D2dTarget g, UiThemePalette t, float x, float y, float w)
-    {
-        var phone = _actions.Host.Phone;
-        if (phone.Store.Profile.LastDevice != null)
-        {
-            UiPrimitives.DrawSecondaryButton(g, t, _hit, "phone.back", new UiRect(x, y, 110f, 30f), L10n.T("Phone.DoneButton"), fontSize: 12f);
-            y += 38f;
-        }
-
-        // Connection kind selector: Android vs AirPlay
-        UiPrimitives.DrawRadioButton(g, t, _hit, "phone.connchoice.android", new UiRect(x, y, 110f, 26f), !_airPlayConnectionChoice, "Android", fontSize: 12.5f);
-        UiPrimitives.DrawRadioButton(g, t, _hit, "phone.connchoice.airplay", new UiRect(x + 116f, y, 110f, 26f), _airPlayConnectionChoice, "AirPlay", fontSize: 12.5f);
-        y += 32f;
-
-        if (_airPlayConnectionChoice)
-        {
-            float airInnerW = w - 24f;
-            float airH = _airPlay.MeasureHeight(airInnerW, showHeaderStatus: true);
-            var airCard = new UiRect(x, y, w, airH + 24f);
-            UiPrimitives.DrawCard(g, t, airCard, 12f);
-            _airPlay.Render(g, t, _hit, airCard.Deflate(12f), showHeaderStatus: true);
-            return airCard.Bottom + 12f;
-        }
-
-        if (!string.IsNullOrEmpty(_statusMessage))
-        {
-            var statusSize = D2dSharedContext.Instance.MeasureText(_statusMessage, UiMetrics.FontFamily, 12f, 400, w - 8f, 96f, wrap: true);
-            float msgH = MathF.Max(20f, statusSize.Height + 2f);
-            g.DrawText(_statusMessage, new UiRect(x + 4f, y, w - 8f, msgH), _statusError ? t.Fail : t.TextSecondary,
-                12f, 400, UiTextAlign.Leading, UiVertAlign.Center, wrap: true, ellipsis: false);
-            y += msgH + 4f;
-        }
-
-        // Card 1: QR Pairing + Pairing Code side-by-side
-        var pairCard = new UiRect(x, y, w, 260f);
-        UiPrimitives.DrawCard(g, t, pairCard, 12f);
-
-        float colW = (pairCard.Width - 36f) * 0.5f;
-        float qx = pairCard.X + 12f;
-        float qy = pairCard.Y + 12f;
-        g.DrawText(L10n.T("Phone.QrPairTitle"), new UiRect(qx, qy, colW, 20f), t.TextPrimary, 14f, 600, UiTextAlign.Leading, UiVertAlign.Center);
-        g.DrawText(L10n.T("Phone.QrPairSteps"), new UiRect(qx, qy + 22f, colW, 18f), t.TextSecondary, 11f, 400, UiTextAlign.Leading, UiVertAlign.Center);
-
-        var qrBox = new UiRect(qx + (colW - 154f) * 0.5f, qy + 48f, 154f, 154f);
-        _hit.Add("phone.qrrefresh", qrBox, UiCursorKind.Hand, L10n.T("Phone.QrRefreshHint"));
-        g.FillRoundedRect(qrBox, 8f, UiColor.White);
-        if (_qrBgra != null && _qrSizePx > 0)
-        {
-            g.DrawBgraBitmap("phone.qr", _qrBgra, _qrSizePx, _qrSizePx, qrBox.Deflate(6f), version: _qrVersion);
-        }
-        else
-        {
-            g.DrawText(L10n.T("Phone.ProcessingStatus"), qrBox, UiColor.FromRgb(0x68, 0x70, 0x80), 12f, 400, UiTextAlign.Center, UiVertAlign.Center);
-        }
-        string qrHint = L10n.T(_qrRetry ? "Phone.QrRetryHint" : "Phone.QrRefreshHint");
-        g.DrawText(qrHint, new UiRect(qx, qrBox.Bottom + 6f, colW, 24f), t.TextSecondary, 10.5f, 400, UiTextAlign.Center, UiVertAlign.Center, wrap: true);
-
-        // Right column: Pair with code
-        float cx = qx + colW + 16f;
-        g.DrawText(L10n.T("Phone.CodePairTitle"), new UiRect(cx, qy, colW, 20f), t.TextPrimary, 14f, 600, UiTextAlign.Leading, UiVertAlign.Center);
-        g.DrawText(L10n.T("Phone.CodePairSteps"), new UiRect(cx, qy + 22f, colW, 18f), t.TextSecondary, 11f, 400, UiTextAlign.Leading, UiVertAlign.Center);
-
-        g.DrawText(L10n.T("Phone.PairingAddressLabel"), new UiRect(cx, qy + 48f, colW, 18f), t.TextSecondary, 11.5f, 400, UiTextAlign.Leading, UiVertAlign.Center);
-        UiPrimitives.DrawTextBox(g, t, _hit, "phone.pairaddr", new UiRect(cx, qy + 68f, colW, 30f), _pairAddress, "192.168.1.100:37099",
-            focused: _actions.ActiveInlineEditTag == "phone.pairaddr", mono: true, fontSize: 12f, enabled: !_busy);
-
-        g.DrawText(L10n.T("Phone.PairingCodeLabel"), new UiRect(cx, qy + 106f, colW, 18f), t.TextSecondary, 11.5f, 400, UiTextAlign.Leading, UiVertAlign.Center);
-        UiPrimitives.DrawTextBox(g, t, _hit, "phone.paircode", new UiRect(cx, qy + 126f, colW, 32f), _pairCode, "123456",
-            focused: _actions.ActiveInlineEditTag == "phone.paircode", mono: true, fontSize: 15f, enabled: !_busy);
-
-        UiPrimitives.DrawAccentButton(g, t, _hit, "phone.pairbtn", new UiRect(cx, qy + 170f, colW, 32f), L10n.T("Phone.PairAndConnect"),
-            enabled: !_busy && _pairAddress.Length > 0 && _pairCode.Length > 0, fontSize: 12f);
-
-        y = pairCard.Bottom + 10f;
-
-        // Card 2: Direct Connect + USB Refresh
-        var directCard = new UiRect(x, y, w, 140f + 32f * _restorableUsb.Length + (_savedSearchStatus == null ? 0f : 34f));
-        UiPrimitives.DrawCard(g, t, directCard, 12f);
-        float dx = directCard.X + 12f;
-        float dw = directCard.Width - 24f;
-        float dy = directCard.Y + 12f;
-
-        g.DrawText(L10n.T("Phone.DirectConnectTitle"), new UiRect(dx, dy, dw, 20f), t.TextPrimary, 13.5f, 600, UiTextAlign.Leading, UiVertAlign.Center);
-        g.DrawText(L10n.T("Phone.DirectConnectDesc"), new UiRect(dx, dy + 22f, dw, 20f), t.TextSecondary, 11.5f, 400, UiTextAlign.Leading, UiVertAlign.Center);
-
-        var connBox = new UiRect(dx, dy + 48f, MathF.Max(100f, dw - 196f), 32f);
-        if (_savedChoice == null)
-            UiPrimitives.DrawTextBox(g, t, _hit, "phone.connaddr", connBox, _connectAddress, "192.168.1.100:5555",
-                focused: _actions.ActiveInlineEditTag == "phone.connaddr", mono: true, fontSize: 12f, enabled: !_busy);
-        else
-            UiPrimitives.DrawComboBox(g, t, _hit, "phone.saved", connBox, SavedLabel(_savedChoice), enabled: !_busy);
-        UiPrimitives.DrawAccentButton(g, t, _hit, "phone.connbtn", new UiRect(connBox.Right + 8f, dy + 48f, 88f, 32f), L10n.T("Phone.ConnectShort"),
-            enabled: !_busy && (_savedChoice != null || _connectAddress.Length > 0), fontSize: 12f);
-        UiPrimitives.DrawSecondaryButton(g, t, _hit, "phone.searchsaved", new UiRect(connBox.Right + 104f, dy + 48f, 92f, 32f),
-            L10n.T("Phone.SearchSavedDevices"), enabled: !_busy && !_manualSearch, fontSize: 12f, icon: UiIcon.Search);
-        UiPrimitives.DrawSecondaryButton(g, t, _hit, "phone.usbrefresh", new UiRect(dx, dy + 88f, 120f, 28f),
-            L10n.T("History.Refresh"), enabled: !_busy, fontSize: 12f, icon: UiIcon.Refresh);
-        float usbY = dy + 120f;
-        foreach (var device in _restorableUsb)
-        {
-            UiPrimitives.DrawSecondaryButton(g, t, _hit, "phone.restoreusb:" + AndroidDeviceIdentity.Key(device),
-                new UiRect(dx, usbY, dw, 28f), string.Format(L10n.T("Phone.RestoreUsbDevice"), device.Name), enabled: !_busy);
-            usbY += 32f;
-        }
-        if (_savedSearchStatus != null)
-            g.DrawText(L10n.T(_savedSearchStatus), new UiRect(dx, usbY, dw, 34f), t.TextSecondary, 11f, wrap: true);
-
-        return directCard.Bottom + 12f;
     }
 
     public bool OnPointerMove(float x, float y, bool leftDown)
     {
-        if (leftDown && _draggingVolume && _activeDevice != null)
-        {
-            var whole = _actions.Host.Phone.Sources.Sources.FirstOrDefault(s => s.App.IsDeviceAudio && AndroidDeviceIdentity.Matches(s.Device, _activeDevice));
-            if (whole != null)
-            {
-                whole.Session.SetVolume(UiPrimitives.SliderValueFromX(_volumeSliderRect, x));
-                _actions.Invalidate();
-                return true;
-            }
-        }
         if (leftDown && _fileScroll.DragMove(y)) { _actions.Invalidate(); return true; }
         if (leftDown && _scroll.DragMove(y)) { _actions.Invalidate(); return true; }
         bool changed = _hit.UpdateHover(x, y);
@@ -853,18 +653,6 @@ internal sealed partial class PhoneDevicePageView : IViewPage
             return true;
         }
         var hit = _hit.HitTest(e.X, e.Y);
-        if (targetId == "phone.audiovol" && hit is { } h && _activeDevice != null)
-        {
-            var whole = _actions.Host.Phone.Sources.Sources.FirstOrDefault(s => s.App.IsDeviceAudio && AndroidDeviceIdentity.Matches(s.Device, _activeDevice));
-            if (whole != null)
-            {
-                _draggingVolume = true;
-                _volumeSliderRect = h.Bounds;
-                whole.Session.SetVolume(UiPrimitives.SliderValueFromX(h.Bounds, e.X));
-                _actions.Invalidate();
-                return true;
-            }
-        }
         _actions.Invalidate();
         return hit != null;
     }
@@ -872,12 +660,6 @@ internal sealed partial class PhoneDevicePageView : IViewPage
     public bool OnPointerUp(UiPointerEventArgs e, string? clickId)
     {
         if (e.Button != UiMouseButton.Left) return false;
-        if (_draggingVolume)
-        {
-            _draggingVolume = false;
-            _actions.Invalidate();
-            return true;
-        }
         if (_fileScroll.Dragging)
         {
             _fileScroll.EndDrag();
@@ -924,8 +706,6 @@ internal sealed partial class PhoneDevicePageView : IViewPage
             return true;
         }
 
-        if (id == "phone.add") { ShowConnectionPage(); return true; }
-        if (id == "phone.back") { _actions.CloseInlineEdit(commit: false); _showConnection = false; StopQrPairing(); RefreshData(); return true; }
         if (id == "phone.qrrefresh")
         {
             if (CanShowQr)
@@ -936,7 +716,6 @@ internal sealed partial class PhoneDevicePageView : IViewPage
             }
             return true;
         }
-        if (id.StartsWith("phone.prof:", StringComparison.Ordinal)) { ShowProfile(id[11..]); return true; }
 
         if (id == "phone.rename" || id == "phone.rename.box")
         {
@@ -945,7 +724,7 @@ internal sealed partial class PhoneDevicePageView : IViewPage
             {
                 if (phone.Store.Profile.Id == profile.Id) phone.Store.Rename(text);
             }
-            _actions.StartInlineEdit("phone.rename", boxRect, phone.Store.GetProfileDisplayName(profile), Rename, (text, _) =>
+            _actions.StartInlineEdit("phone.rename.box", boxRect, phone.Store.GetProfileDisplayName(profile), Rename, (text, _) =>
             {
                 Rename(text);
                 _actions.Invalidate();
@@ -963,7 +742,7 @@ internal sealed partial class PhoneDevicePageView : IViewPage
             {
                 _pairAddress = t.Trim();
                 _actions.Invalidate();
-            }, mono: true);
+            });
             return true;
         }
         if (id == "phone.paircode")
@@ -977,11 +756,7 @@ internal sealed partial class PhoneDevicePageView : IViewPage
         }
         if (id == "phone.connaddr")
         {
-            _actions.StartInlineEdit("phone.connaddr", hit.Value.Bounds, _connectAddress, t => _connectAddress = t, (t, _) =>
-            {
-                _connectAddress = t.Trim();
-                _actions.Invalidate();
-            }, mono: true);
+            OpenConnectAddress(hit.Value.Bounds);
             return true;
         }
 
@@ -990,7 +765,7 @@ internal sealed partial class PhoneDevicePageView : IViewPage
             _actions.CloseInlineEdit(commit: true);
             string address = _pairAddress.Trim(), code = _pairCode.Trim();
             _pairCode = "";
-            RunBusy(ct => phone.PairAsync(address, code, ct), "Phone.ConnectedStatus");
+            RunBusy(ct => phone.PairAsync(address, code, ct), "Phone.ConnectedStatus", openDevice: true);
             return true;
         }
         if (id == "phone.searchsaved") { SearchSaved(manual: true); return true; }
@@ -1000,8 +775,16 @@ internal sealed partial class PhoneDevicePageView : IViewPage
             choices.Add(new("", L10n.T("Phone.ManualConnectAddress")));
             _actions.ShowCombo(hit.Value.Bounds, choices, _savedChoice?.Address ?? "", pick =>
             {
+                if (!_active || !IsConnectionPage || _airPlayConnectionChoice || _busy) return;
                 _savedChoice = _savedConnections.FirstOrDefault(saved => saved.Address == pick.Key);
                 _actions.Invalidate();
+                if (pick.Key.Length == 0)
+                {
+                    var box = hit.Value.Bounds;
+                    _actions.OwnerWindow.RenderNow();
+                    _hit.FocusPointer(box.CenterX, box.CenterY);
+                    OpenConnectAddress(box);
+                }
             });
             return true;
         }
@@ -1010,19 +793,19 @@ internal sealed partial class PhoneDevicePageView : IViewPage
             _actions.CloseInlineEdit(commit: true);
             var saved = _savedChoice;
             string address = _connectAddress.Trim();
-            RunBusy(ct => phone.DiscoverAndConnectAsync(address, ct, saved), "Phone.ConnectedStatus");
+            RunBusy(ct => phone.DiscoverAndConnectAsync(address, ct, saved), "Phone.ConnectedStatus", openDevice: true,
+                failed: error =>
+                {
+                    if (saved != null && error is IOException or System.Net.Sockets.SocketException)
+                        _savedChoice = null;
+                });
             return true;
         }
         const string restoreUsb = "phone.restoreusb:";
         if (id.StartsWith(restoreUsb, StringComparison.Ordinal))
         {
             var chosen = _restorableUsb.FirstOrDefault(d => AndroidDeviceIdentity.Key(d) == id[restoreUsb.Length..]);
-            if (chosen != null) RunBusy(ct => phone.RestoreUsbAsync(chosen, ct), "Phone.ConnectedStatus");
-            return true;
-        }
-        if (id == "phone.usbrefresh")
-        {
-            RunBusy(_ => phone.RefreshAsync(restore: true));
+            if (chosen != null) RunBusy(ct => phone.RestoreUsbAsync(chosen, ct), "Phone.ConnectedStatus", openDevice: true);
             return true;
         }
         if (id == "phone.reconnect" && profile.LastDevice != null)
@@ -1035,52 +818,28 @@ internal sealed partial class PhoneDevicePageView : IViewPage
             RunBusy(_ => phone.DisconnectAsync(online, unpair: false), online.IsWifi ? "Phone.StatusWifiDisconnectedSaved" : "Phone.StatusUsbStoppedUnplug");
             return true;
         }
-        if (id == "phone.unpair" && online != null)
+        if (id == "phone.unpair" && profile.LastDevice != null)
         {
-            if (NativeDialogs.Confirm(_actions.OwnerWindow.Handle, L10n.T("Phone.DefaultName"), L10n.T("Phone.Unpair")))
-            {
+            if (online == null)
+                SetStatus(PhonePreview.TranslateError(AndroidError.WithCode(new IOException(), AndroidErrorCode.UnpairPhoneOffline)), true);
+            else
                 RunBusy(_ => phone.DisconnectAsync(online, unpair: true), "Phone.StatusUnpairRequested");
-            }
             return true;
         }
         if (id == "phone.remove" && profile.LastDevice != null)
         {
-            if (NativeDialogs.Confirm(_actions.OwnerWindow.Handle, L10n.T("Phone.DefaultName"), L10n.T("Phone.DeleteDevice")))
-            {
-                phone.ClearQueuedTransfers(profile.Id);
-                RunBusy(_ => phone.RemovePhoneAsync(profile.Id), "Phone.StatusRemovedKeepAuth");
-            }
+            RunBusy(_ => phone.RemovePhoneAsync(profile.Id), "Phone.StatusRemovedKeepAuth");
             return true;
         }
-        if (id == "phone.receive" && online != null)
-        {
-            var whole = phone.Sources.Sources.FirstOrDefault(s => s.App.IsDeviceAudio && AndroidDeviceIdentity.Matches(s.Device, online));
-            if (whole != null) _ = phone.Sources.RemoveAsync(whole.Id);
-            else _ = phone.Sources.AddAsync(online, AndroidApp.DeviceAudio, keepPhoneAudio: false);
-            return true;
-        }
-        if (id == "phone.receiveboth" && online != null)
-        {
-            _ = phone.Sources.AddAsync(online, AndroidApp.DeviceAudio, keepPhoneAudio: true);
-            return true;
-        }
-        if (id == "phone.audiomute" && online != null)
-        {
-            var whole = phone.Sources.Sources.FirstOrDefault(s => s.App.IsDeviceAudio && AndroidDeviceIdentity.Matches(s.Device, online));
-            if (whole != null) { whole.Session.SetMute(!whole.Session.State.Muted); _actions.Invalidate(); }
-            return true;
-        }
-        if (id == "phone.mediaprev" && _mediaClient != null) { _ = _mediaClient.SendAsync("previous", phone.Lifetime); return true; }
-        if (id == "phone.mediaplay" && _mediaClient != null) { _ = _mediaClient.SendAsync("toggle", phone.Lifetime); return true; }
-        if (id == "phone.medianext" && _mediaClient != null) { _ = _mediaClient.SendAsync("next", phone.Lifetime); return true; }
         if (id == "phone.addapps" && online != null)
         {
             _showCatalog = true;
+            _focusCatalogSearch = true;
             _detailOffset = _scroll.Offset;
             _scroll.Offset = 0f;
             _appSearch = "";
             FilterCatalog();
-            LoadCatalog(online);
+            LoadCatalog(online, refresh: false);
             _actions.Invalidate();
             return true;
         }
@@ -1091,9 +850,9 @@ internal sealed partial class PhoneDevicePageView : IViewPage
             return true;
         }
 
-        if (id.StartsWith("phone.stream.", StringComparison.Ordinal) && online != null)
+        if (id.StartsWith("phone.stream.", StringComparison.Ordinal) && (online ?? profile.LastDevice) is { } settingsDevice)
         {
-            return HandleStreamComboClick(id, hit.Value.Bounds, online);
+            return HandleStreamComboClick(id, hit.Value.Bounds, settingsDevice);
         }
 
         if (id.StartsWith("phone.pin:", StringComparison.Ordinal))
@@ -1115,17 +874,6 @@ internal sealed partial class PhoneDevicePageView : IViewPage
             phone.Store.SetSmartVolume(pkg, !smart);
             phone.Sources.SyncSmartVolume((d, p) => phone.Store.IsSmartVolumeEnabled(d, p));
             _actions.Invalidate();
-            return true;
-        }
-        if (id.StartsWith("phone.launch:", StringComparison.Ordinal) && online != null)
-        {
-            string pkg = id[13..];
-            var app = profile.RetainedApps.Concat(_catalogApps).FirstOrDefault(a => a.Package == pkg);
-            if (app != null)
-            {
-                ViewNative.GetCursorPos(out var pt);
-                _ = phone.OpenDisplayAsync(online, app, pt.X, pt.Y);
-            }
             return true;
         }
         if (id == "phone.sendfile" && online != null)
@@ -1208,16 +956,20 @@ internal sealed partial class PhoneDevicePageView : IViewPage
             phone.Transfers.Cancel(profile.Id);
             return true;
         }
-        if ((id == "phone.clipboard" || id == "phone.clipboard:sw") && online != null)
+        if ((id == "phone.clipboard" || id == "phone.clipboard:sw") && profile.LastDevice is { } clipDevice)
         {
-            bool next = !phone.Clipboard.IsEnabled(online);
-            phone.Clipboard.SetEnabled(online, next);
+            bool next = !phone.Clipboard.IsEnabled(clipDevice);
+            phone.Clipboard.SetEnabled(clipDevice, next);
             _actions.Invalidate();
             return true;
         }
 
         return false;
     }
+
+    private void OpenConnectAddress(UiRect box) =>
+        _actions.StartInlineEdit("phone.connaddr", box, _connectAddress, value => _connectAddress = value,
+            (value, _) => { _connectAddress = value.Trim(); _actions.Invalidate(); });
 
     public bool OnMouseWheel(float x, float y, float delta, bool horizontal)
     {
@@ -1230,6 +982,18 @@ internal sealed partial class PhoneDevicePageView : IViewPage
         }
         _scroll.OnWheel(delta);
         _actions.Invalidate();
+        return true;
+    }
+
+    public bool OnFocusedKey(string id, int vk)
+    {
+        if (!_showFileBrowser || vk != 0x0D || _remoteLoading || _activeDevice is not { } device) return false;
+        string prefix = "phone.rfile:" + _remoteFolder + "/";
+        if (!id.StartsWith(prefix, StringComparison.Ordinal)) return false;
+        var file = _remoteFiles.FirstOrDefault(entry => entry.Name == id[prefix.Length..]);
+        if (file == null) return false;
+        if (file.Directory) LoadRemoteFolder(device, _remoteFolder.TrimEnd('/') + "/" + file.Name);
+        else if (_selectedRemoteFiles.Count > 0) ActOnAndroidPicker(device, _actions.Host.Phone.Store.Profile.Id);
         return true;
     }
 
@@ -1290,6 +1054,7 @@ internal sealed partial class PhoneDevicePageView : IViewPage
     {
         CancelRemoteList();
         _showFileBrowser = false;
+        _remoteFiles = [];
         _remoteLoading = false;
         _remoteError = null;
         _selectedRemoteFiles.Clear();
@@ -1308,7 +1073,7 @@ internal sealed partial class PhoneDevicePageView : IViewPage
 
     private void ActOnAndroidPicker(AndroidDevice online, string profileId)
     {
-        if (_remoteLoading) return;
+        if (_remoteLoading || _remoteError != null || !_actions.Host.Phone.Connections.IsCurrent(online)) return;
         if (_choosingPhoneFolder)
         {
             _actions.Host.Phone.Store.SetReceiveFolder(profileId, _remoteFolder);
@@ -1355,7 +1120,7 @@ internal sealed partial class PhoneDevicePageView : IViewPage
     private void RefreshStreamingSettings(AndroidDevice? device)
     {
         string? key = device == null ? null : AndroidDeviceIdentity.Key(device);
-        if (key == _streamDeviceKey && (device == null || _encoderCts != null || _streamEncoders != null || _encoderFailed))
+        if (key == _streamDeviceKey && (device == null || _activeDevice == null || _encoderCts != null || _streamEncoders != null || _encoderFailed))
         {
             return;
         }
@@ -1367,7 +1132,7 @@ internal sealed partial class PhoneDevicePageView : IViewPage
         var phone = _actions.Host.Phone;
         _streamSettings = device == null ? new() : phone.Settings.GetStreaming(device);
 
-        if (_active && !IsConnectionPage && device != null)
+        if (_active && !IsConnectionPage && _activeDevice != null && device != null)
         {
             var cts = CancellationTokenSource.CreateLinkedTokenSource(phone.Lifetime, phone.Connections.OperationToken(device));
             _encoderCts = cts;
@@ -1551,13 +1316,20 @@ internal sealed partial class PhoneDevicePageView : IViewPage
 
     private void SaveStreaming(AndroidDevice online, AndroidStreamSettings next)
     {
-        _streamSettings = next.Normalize();
-        _actions.Host.Phone.Settings.RememberStreaming(online, _streamSettings);
+        if (!_active || IsConnectionPage || _actions.Host.Phone.Store.Profile.LastDevice is not { } current ||
+            !AndroidDeviceIdentity.MatchesSavedDevice(current, online)) return;
+        try
+        {
+            _actions.Host.Phone.Settings.RememberStreaming(online, next.Normalize());
+            _streamSettings = _actions.Host.Phone.Settings.GetStreaming(online);
+        }
+        catch (Exception error) { SetStatus(PhonePreview.TranslateError(error), true); }
         _actions.Invalidate();
     }
 
     private void RetryEncodersIfNeeded(AndroidDevice online, bool forceRetry = false)
     {
+        if (_activeDevice == null || !_actions.Host.Phone.Connections.IsCurrent(online)) return;
         if (forceRetry) _encoderFailed = false;
         if (_streamEncoders == null && _encoderCts == null && !_encoderFailed && _streamDeviceKey is { } key)
         {
@@ -1679,40 +1451,83 @@ internal sealed partial class PhoneDevicePageView : IViewPage
 
     // --- Busy & QR Pairing ---
 
-    private void RunBusy(Func<CancellationToken, Task> op, string? successKey = null)
+    internal void RefreshFromUser()
     {
-        if (_busy) return;
+        if (!_active || _busy || (IsConnectionPage && _airPlayConnectionChoice)) return;
+        if (_showCatalog && _activeDevice is { } catalogDevice)
+        {
+            LoadCatalog(catalogDevice, refresh: true);
+            return;
+        }
+        var phone = _actions.Host.Phone;
+        if (IsConnectionPage)
+            RunBusy(ct => phone.RefreshAsync().WaitAsync(ct));
+        else
+        {
+            if (_activeDevice is { } online)
+            {
+                CancelEncoderRead();
+                phone.Adb.InvalidateEncoders(online);
+                _streamDeviceKey = null;
+            }
+            RunBusy(ct => phone.RefreshSelectedDeviceAsync(ct));
+        }
+    }
+
+    private void CancelViewOperation()
+    {
+        var previous = _operation;
+        _operation = null;
+        _busy = false;
+        previous?.Cancel();
+        _statusMessage = null;
+    }
+
+    private void RunBusy(Func<CancellationToken, Task> op, string? successKey = null, bool openDevice = false, Action<Exception>? failed = null)
+    {
+        if (_busy || !_active) return;
         _busy = true;
+        var cts = CancellationTokenSource.CreateLinkedTokenSource(_actions.Host.Phone.Lifetime);
+        cts.CancelAfter(TimeSpan.FromSeconds(25));
+        _operation = cts;
+        CancelCts(ref _searchSaved);
+        _manualSearch = false;
+        _savedSearchStatus = null;
+        var pendingQr = _qrTask;
         UpdateQrPairing();
         SetStatus(L10n.T("Phone.ProcessingStatus"), false);
         _ = Task.Run(async () =>
         {
+            Exception? failure = null;
             try
             {
-                using var cts = CancellationTokenSource.CreateLinkedTokenSource(_actions.Host.Phone.Lifetime);
-                cts.CancelAfter(TimeSpan.FromSeconds(25));
+                await pendingQr.WaitAsync(cts.Token).ConfigureAwait(false);
+                cts.Token.ThrowIfCancellationRequested();
                 await op(cts.Token).ConfigureAwait(false);
-                _actions.Host.TryPost(() =>
-                {
-                    _busy = false;
-                    if (!_active) return;
-                    _showConnection = _actions.Host.Phone.Store.Profile.LastDevice == null;
-                    if (successKey != null) SetStatus(L10n.T(successKey), false);
-                    else SetStatus("", false);
-                    RefreshData();
-                });
             }
-            catch (Exception ex)
+            catch (Exception error) { failure = error; }
+            if (!_actions.Host.TryPost(() =>
             {
-                _actions.Host.TryPost(() =>
+                try
                 {
+                    if (!ReferenceEquals(_operation, cts)) return;
+                    _operation = null;
                     _busy = false;
                     if (!_active) return;
-                    SetStatus(PhonePreview.TranslateError(ex), true);
-                    UpdateQrPairing();
-                    _actions.Invalidate();
-                });
-            }
+                    if (failure != null)
+                    {
+                        failed?.Invoke(failure);
+                        SetStatus(failure is OperationCanceledException ? L10n.T("Phone.StatusCancelled") : PhonePreview.TranslateError(failure), true);
+                    }
+                    else
+                    {
+                        if (openDevice) _showConnection = false;
+                        SetStatus(successKey == null ? "" : L10n.T(successKey), false);
+                    }
+                    RefreshData();
+                }
+                finally { cts.Dispose(); }
+            })) cts.Dispose();
         });
     }
 
@@ -1782,6 +1597,8 @@ internal sealed partial class PhoneDevicePageView : IViewPage
 
     private void UpdateQrPairing()
     {
+        if (_active && IsConnectionPage && _airPlayConnectionChoice) _airPlay.Attach();
+        else _airPlay.Detach();
         if (!_active || !IsConnectionPage || _airPlayConnectionChoice) ResetSavedSearch();
         else SearchSaved(manual: false);
         if (!CanShowQr)
@@ -1793,7 +1610,7 @@ internal sealed partial class PhoneDevicePageView : IViewPage
 
         var cts = CancellationTokenSource.CreateLinkedTokenSource(_actions.Host.Phone.Lifetime);
         _qrCts = cts;
-        _ = WatchQrPairingAsync(cts);
+        _qrTask = WatchQrPairingAsync(cts);
     }
 
     private void StopQrPairing()
@@ -1887,7 +1704,7 @@ internal sealed partial class PhoneDevicePageView : IViewPage
                         _qrCts = null;
                         _qrBgra = null;
                         CloseCatalog();
-        _showConnection = false;
+                        _showConnection = false;
                         SetStatus(L10n.T("Phone.ConnectedStatus"), false);
                         RefreshData();
                     });
@@ -1945,76 +1762,48 @@ internal sealed partial class PhoneDevicePageView : IViewPage
         }
     }
 
-    // --- Media, Catalog, Remote Files, App Icons ---
-
-    private void RestartMediaWatch(AndroidDevice? device)
-    {
-        StopMediaWatch();
-        if (device == null || !_active) return;
-
-        var cts = CancellationTokenSource.CreateLinkedTokenSource(_actions.Host.Phone.Lifetime);
-        _mediaCts = cts;
-        var client = new AndroidMediaSessionClient(_actions.Host.Phone.Adb);
-        _mediaClient = client;
-
-        _ = Task.Run(async () =>
-        {
-            try
-            {
-                await client.WatchAsync(device, state =>
-                {
-                    _actions.Host.TryPost(() =>
-                    {
-                        if (!ReferenceEquals(_mediaCts, cts)) return;
-                        _mediaState = state;
-                        if (_active) _actions.Invalidate();
-                    });
-                }, cts.Token).ConfigureAwait(false);
-            }
-            catch (OperationCanceledException) when (cts.IsCancellationRequested) { }
-            catch { }
-        });
-    }
-
-    private void StopMediaWatch()
-    {
-        CancelCts(ref _mediaCts);
-        _mediaClient = null;
-        _mediaState = null;
-    }
-
-    private void LoadCatalog(AndroidDevice device)
+    private void LoadCatalog(AndroidDevice device, bool refresh)
     {
         CancelCts(ref _catalogCts);
         var phone = _actions.Host.Phone;
-        var cts = CancellationTokenSource.CreateLinkedTokenSource(phone.Lifetime);
+        var cache = _catalogCache ??= new AndroidAppCatalogCache(Path.Combine(_actions.Host.DataDirectory, "phone-app-catalog.json"),
+            (target, token) => phone.Adb.AppsAsync(target, token));
+        var cts = CancellationTokenSource.CreateLinkedTokenSource(phone.Lifetime, phone.Connections.OperationToken(device));
         cts.CancelAfter(TimeSpan.FromSeconds(18));
+        var token = cts.Token;
         _catalogCts = cts;
         _catalogLoading = true;
+        SetStatus(L10n.T("Phone.ProcessingStatus"), false);
 
         _ = Task.Run(async () =>
         {
+            IReadOnlyList<AndroidApp> apps = [];
+            Exception? failure = null;
             try
             {
-                var apps = await phone.Adb.AppsAsync(device, cts.Token).ConfigureAwait(false);
-                _actions.Host.TryPost(() =>
-                {
-                    if (!ReferenceEquals(_catalogCts, cts)) return;
-                    _catalogApps = apps;
-                    _catalogLoading = false;
-                    FilterCatalog();
-                    if (_active) _actions.Invalidate();
-                });
+                apps = await cache.GetAsync(device, refresh, token).ConfigureAwait(false);
+                token.ThrowIfCancellationRequested();
+                if (phone.Connections.IsCurrent(device)) phone.Store.UpdateMetadata(device, apps);
             }
-            catch
+            catch (Exception error) { failure = error; }
+            if (!_actions.Host.TryPost(() =>
             {
-                _actions.Host.TryPost(() =>
+                if (!ReferenceEquals(_catalogCts, cts)) return;
+                _catalogCts = null;
+                cts.Dispose();
+                _catalogLoading = false;
+                if (!_active || !_showCatalog) return;
+                if (failure != null)
                 {
-                    if (!ReferenceEquals(_catalogCts, cts)) return;
-                    _catalogLoading = false;
-                    _actions.Invalidate();
-                });
-            }
+                    SetStatus(failure is OperationCanceledException ? L10n.T("Phone.StatusCancelled") : PhonePreview.TranslateError(failure), true);
+                    return;
+                }
+                if (!AndroidDeviceIdentity.SameTransport(_activeDevice, device) || !phone.Connections.IsCurrent(device)) { RefreshData(); return; }
+                _catalogFetched = true;
+                _catalogApps = apps;
+                FilterCatalog();
+                SetStatus("", false);
+            })) cts.Dispose();
         });
     }
 
@@ -2022,10 +1811,12 @@ internal sealed partial class PhoneDevicePageView : IViewPage
     {
         CancelRemoteList();
         var phone = _actions.Host.Phone;
-        var cts = CancellationTokenSource.CreateLinkedTokenSource(phone.Lifetime, phone.Connections.OperationToken(device));
+        var deviceToken = phone.Connections.OperationToken(device);
+        var cts = CancellationTokenSource.CreateLinkedTokenSource(phone.Lifetime, deviceToken);
         cts.CancelAfter(TimeSpan.FromSeconds(15));
         _remoteListCts = cts;
         _remoteFolder = folder;
+        _remoteFiles = [];
         _remoteLoading = true;
         _remoteError = null;
         _selectedRemoteFiles.Clear();
@@ -2037,33 +1828,36 @@ internal sealed partial class PhoneDevicePageView : IViewPage
             try
             {
                 var list = await new AndroidFileTransfer(phone.Adb, device.CommandTarget).ListAsync(folder, cts.Token).ConfigureAwait(false);
+                cts.Token.ThrowIfCancellationRequested();
                 _actions.Host.TryPost(() =>
                 {
                     if (!ReferenceEquals(_remoteListCts, cts) || !Equals(_activeDevice, device)) return;
-                    _remoteFiles = list;
-                    _remoteLoading = false;
+                    _remoteFiles = _choosingPhoneFolder ? list.Where(entry => entry.Directory).ToArray() : list;
                     _remoteError = null;
-                    if (_active) _actions.Invalidate();
                 });
             }
-            catch (OperationCanceledException) when (cts.IsCancellationRequested) { }
-            catch (Exception ex)
+            catch (Exception error)
             {
                 _actions.Host.TryPost(() =>
                 {
                     if (!ReferenceEquals(_remoteListCts, cts)) return;
-                    _remoteLoading = false;
-                    _remoteError = PhonePreview.TranslateError(ex);
-                    _actions.Invalidate();
+                    _remoteError = error is OperationCanceledException
+                        ? L10n.T(deviceToken.IsCancellationRequested || phone.Lifetime.IsCancellationRequested ? "Phone.StatusCancelled" : "Phone.LatencyTimeout")
+                        : PhonePreview.TranslateError(error);
                 });
             }
             finally
             {
-                _actions.Host.TryPost(() =>
+                if (!_actions.Host.TryPost(() =>
                 {
-                    if (ReferenceEquals(_remoteListCts, cts)) _remoteListCts = null;
+                    if (ReferenceEquals(_remoteListCts, cts))
+                    {
+                        _remoteListCts = null;
+                        _remoteLoading = false;
+                        if (_active) _actions.Invalidate();
+                    }
                     cts.Dispose();
-                });
+                })) cts.Dispose();
             }
         });
     }
@@ -2078,16 +1872,16 @@ internal sealed partial class PhoneDevicePageView : IViewPage
         if (_iconCache.TryGetValue(app.Package, out var cached))
         {
             bgra = cached.Pixels; w = cached.W; h = cached.H; ver = cached.Ver;
-            return true;
+            return bgra.Length != 0;
         }
         if (_iconDecoding.Add(app.Package))
         {
+            int generation = _iconGeneration;
             byte[] png = app.IconPng;
             string pkg = app.Package;
             _ = Task.Run(() =>
             {
-                if (!SonicRoute.Native.Graphics.WicIconLoader.TryDecodePngToBgra32(png, 48, 48, out byte[] pixels, out int pw, out int ph))
-                    return;
+                SonicRoute.Native.Graphics.WicIconLoader.TryDecodePngToBgra32(png, 48, 48, out byte[] pixels, out int pw, out int ph);
                 for (int i = 0; i < pixels.Length; i += 4)
                 {
                     byte a = pixels[i + 3];
@@ -2099,6 +1893,8 @@ internal sealed partial class PhoneDevicePageView : IViewPage
                 }
                 _actions.Host.TryPost(() =>
                 {
+                    if (!_active || generation != _iconGeneration) return;
+                    _iconDecoding.Remove(pkg);
                     int nextVer = ++_iconVer;
                     if (_iconCache.Count >= 96 && _iconOrder.Count > 0)
                         _iconCache.Remove(_iconOrder.Dequeue());
@@ -2110,6 +1906,14 @@ internal sealed partial class PhoneDevicePageView : IViewPage
         }
         bgra = Array.Empty<byte>(); w = h = ver = 0;
         return false;
+    }
+
+    private void ClearAppIcons()
+    {
+        ++_iconGeneration;
+        _iconDecoding.Clear();
+        _iconCache.Clear();
+        _iconOrder.Clear();
     }
 
     private static void CancelCts(ref CancellationTokenSource? cts)

@@ -15,13 +15,6 @@ internal sealed class ThemePageView : IViewPage
         ("dark", "St.ThemeDark", UiIcon.Moon),
     ];
 
-    private static readonly string[] OsdGridCodes =
-    [
-        "TL", "TC", "TR",
-        "ML", "C",  "MR",
-        "BL", "BC", "BR",
-    ];
-
     private readonly IViewHostActions _actions;
     private readonly UiScrollState _scroll = new();
     private readonly Dictionary<string, Action> _clicks = new(StringComparer.Ordinal);
@@ -35,14 +28,9 @@ internal sealed class ThemePageView : IViewPage
     private UiRect _panelHeightSliderRect;
 
     private UiRect _hexBoxRect;
-    private UiRect _osdOffsetXRect;
-    private UiRect _osdOffsetYRect;
-    private UiRect _panelCustomXRect;
-    private UiRect _panelCustomYRect;
-
     private string? _draggingSlider;
     private double _initialSliderValue;
-    private bool _osdMoreExpanded = true;
+    private bool _osdMoreExpanded;
     private ColorPickerWindow? _pickerWindow;
 
     internal ThemePageView(IViewHostActions actions)
@@ -79,8 +67,8 @@ internal sealed class ThemePageView : IViewPage
 
         float card1H = 308f;
         float card2H = 148f;
-        float card3H = 412f + (_osdMoreExpanded ? 164f : 0f);
-        float card4H = 360f;
+        float card3H = 266f + (_osdMoreExpanded ? 164f : 0f);
+        float card4H = 308f;
         float totalH = 33f + hintH + 20f + card1H + 14f + card2H + 14f + card3H + 14f + card4H + 16f;
 
         _scroll.ViewportHeight = contentRect.Height;
@@ -245,22 +233,21 @@ internal sealed class ThemePageView : IViewPage
     {
         float y = inner.Y;
 
-        string adjLabel = L10n.T("Exp.OsdAdjust");
-        string prevLabel = L10n.T("Exp.OsdPreview");
+        string adjLabel = L10n.T(_actions.Host.IsOsdAdjusting ? "Exp.OsdAdjustCancel" : "Exp.OsdAdjust");
         string rstLabel = L10n.T("Exp.OsdReset");
         float adjW = MathF.Max(92f, D2dSharedContext.Instance.MeasureText(adjLabel, UiMetrics.FontFamily, 12f, 400, 160f, 36f, false).Width + 32f);
-        float prevW = MathF.Max(72f, D2dSharedContext.Instance.MeasureText(prevLabel, UiMetrics.FontFamily, 12f, 400, 120f, 36f, false).Width + 30f);
         float rstW = MathF.Max(108f, D2dSharedContext.Instance.MeasureText(rstLabel, UiMetrics.FontFamily, 12f, 400, 180f, 36f, false).Width + 32f);
 
         var rstBtn = new UiRect(inner.Right - rstW, y + 2f, rstW, 36f);
-        var prevBtn = new UiRect(rstBtn.X - 8f - prevW, y + 2f, prevW, 36f);
-        var adjBtn = new UiRect(prevBtn.X - 8f - adjW, y + 2f, adjW, 36f);
+        var adjBtn = new UiRect(rstBtn.X - 8f - adjW, y + 2f, adjW, 36f);
 
         UiPrimitives.DrawSecondaryButton(g, t, hit, "th.osd.adjust", adjBtn, adjLabel, fontSize: 12f, icon: UiIcon.Position, tooltip: L10n.T("Exp.OsdAdjustHint"));
-        UiPrimitives.DrawSecondaryButton(g, t, hit, "th.osd.preview", prevBtn, prevLabel, fontSize: 12f, icon: UiIcon.Play);
         UiPrimitives.DrawSecondaryButton(g, t, hit, "th.osd.reset", rstBtn, rstLabel, fontSize: 12f, icon: UiIcon.Reset, tooltip: L10n.T("Exp.OsdResetHint"));
-        _clicks["th.osd.adjust"] = () => _actions.Host.BeginOsdAdjust();
-        _clicks["th.osd.preview"] = () => _actions.Host.PreviewOsd();
+        _clicks["th.osd.adjust"] = () =>
+        {
+            if (_actions.Host.IsOsdAdjusting) _actions.Host.CancelOsdAdjust();
+            else _actions.Host.BeginOsdAdjust();
+        };
         _clicks["th.osd.reset"] = ResetOsdSettings;
 
         DrawThemeCardHeader(g, t, new UiRect(inner.X, y, MathF.Max(100f, adjBtn.X - inner.X - 10f), 42f),
@@ -285,58 +272,6 @@ internal sealed class ThemePageView : IViewPage
             () => { cfg.MicMuteOsdDefaultInputPersistent = !cfg.MicMuteOsdDefaultInputPersistent; SaveAndNotifySettings(); });
         y += 36f;
 
-        g.DrawLine(inner.X, y, inner.Right, y, t.Border, 1f, roundCaps: false);
-        y += 12f;
-
-        g.DrawText(L10n.T("Exp.Osd"), new UiRect(inner.X, y, inner.Width, 20f), t.TextPrimary, 13.5f, 600);
-        y += 26f;
-
-        float gridCell = 26f;
-        float gridGap = 4f;
-        for (int row = 0; row < 3; row++)
-        {
-            for (int col = 0; col < 3; col++)
-            {
-                string code = OsdGridCodes[row * 3 + col];
-                var cell = new UiRect(inner.X + col * (gridCell + gridGap), y + row * (gridCell + gridGap), gridCell, gridCell);
-                bool active = string.Equals(cfg.OsdPosition, code, StringComparison.OrdinalIgnoreCase);
-                string gid = "th.osd.pos." + code;
-                UiPrimitives.DrawSecondaryButton(g, t, hit, gid, cell, "", fontSize: 10f, radius: 5f, active: active, tooltip: code);
-                g.FillEllipse(cell.CenterX, cell.CenterY, 3f, 3f, active ? t.Accent : t.TextSecondary);
-                var codeCopy = code;
-                _clicks[gid] = () =>
-                {
-                    cfg.OsdPosition = codeCopy;
-                    if (!SaveAndNotifySettings()) return;
-                    _actions.Host.PreviewOsd();
-                };
-            }
-        }
-
-        float offLeft = inner.X + 3 * (gridCell + gridGap) + 20f;
-        g.DrawText(L10n.T("Exp.Osd.X") + " (px)", new UiRect(offLeft, y + 4f, 80f, 16f), t.TextSecondary, 11.5f, 400);
-        _osdOffsetXRect = new UiRect(offLeft, y + 24f, 82f, 30f);
-        UiPrimitives.DrawTextBox(g, t, hit, "th.osd.ox", _osdOffsetXRect, cfg.OsdOffsetX.ToString(CultureInfo.InvariantCulture), "0", _actions.ActiveInlineEditTag == "th.osd.ox", mono: true);
-        _clicks["th.osd.ox"] = () =>
-        {
-            _actions.StartInlineEdit("th.osd.ox", _osdOffsetXRect, cfg.OsdOffsetX.ToString(CultureInfo.InvariantCulture), null, (val, _) =>
-            {
-                if (int.TryParse(val.Trim(), out int ox)) { cfg.OsdOffsetX = Math.Clamp(ox, -2000, 2000); SaveAndNotifySettings(); }
-            }, mono: true);
-        };
-
-        g.DrawText(L10n.T("Exp.Osd.Y") + " (px)", new UiRect(offLeft + 96f, y + 4f, 80f, 16f), t.TextSecondary, 11.5f, 400);
-        _osdOffsetYRect = new UiRect(offLeft + 96f, y + 24f, 82f, 30f);
-        UiPrimitives.DrawTextBox(g, t, hit, "th.osd.oy", _osdOffsetYRect, cfg.OsdOffsetY.ToString(CultureInfo.InvariantCulture), "0", _actions.ActiveInlineEditTag == "th.osd.oy", mono: true);
-        _clicks["th.osd.oy"] = () =>
-        {
-            _actions.StartInlineEdit("th.osd.oy", _osdOffsetYRect, cfg.OsdOffsetY.ToString(CultureInfo.InvariantCulture), null, (val, _) =>
-            {
-                if (int.TryParse(val.Trim(), out int oy)) { cfg.OsdOffsetY = Math.Clamp(oy, -2000, 2000); SaveAndNotifySettings(); }
-            }, mono: true);
-        };
-
-        y += 3 * (gridCell + gridGap) + 12f;
         g.DrawLine(inner.X, y, inner.Right, y, t.Border, 1f, roundCaps: false);
         y += 12f;
 
@@ -370,7 +305,7 @@ internal sealed class ThemePageView : IViewPage
     {
         float y = inner.Y;
 
-        string adjLabel = L10n.T("Exp.PanelPosAdjust");
+        string adjLabel = L10n.T(_actions.Host.IsPanelAdjusting ? "Exp.PanelPosAdjustCancel" : "Exp.PanelPosAdjust");
         string rstLabel = L10n.T("Exp.PanelPosReset");
         float adjW = MathF.Max(88f, D2dSharedContext.Instance.MeasureText(adjLabel, UiMetrics.FontFamily, 12f, 400, 150f, 36f, false).Width + 32f);
         float rstW = MathF.Max(92f, D2dSharedContext.Instance.MeasureText(rstLabel, UiMetrics.FontFamily, 12f, 400, 150f, 36f, false).Width + 32f);
@@ -379,9 +314,14 @@ internal sealed class ThemePageView : IViewPage
 
         UiPrimitives.DrawSecondaryButton(g, t, hit, "th.panel.adjust", adjBtn, adjLabel, fontSize: 12f, icon: UiIcon.Position);
         UiPrimitives.DrawSecondaryButton(g, t, hit, "th.panel.reset", rstBtn, rstLabel, fontSize: 12f, icon: UiIcon.Reset);
-        _clicks["th.panel.adjust"] = () => _actions.Host.BeginQuickPanelAdjust();
+        _clicks["th.panel.adjust"] = () =>
+        {
+            if (_actions.Host.IsPanelAdjusting) _actions.Host.CancelPanelAdjust();
+            else _actions.Host.BeginQuickPanelAdjust();
+        };
         _clicks["th.panel.reset"] = () =>
         {
+            _actions.Host.CancelPanelAdjust();
             cfg.QuickPanelPosMode = "default";
             cfg.QuickPanelCustomX = -1;
             cfg.QuickPanelCustomY = -1;
@@ -396,33 +336,10 @@ internal sealed class ThemePageView : IViewPage
         g.DrawLine(inner.X, y, inner.Right, y, t.Border, 1f, roundCaps: false);
         y += 12f;
 
-        bool isCustomPos = string.Equals(cfg.QuickPanelPosMode, "custom", StringComparison.OrdinalIgnoreCase);
-        var defBtn = new UiRect(inner.X, y, 108f, 30f);
-        var cusBtn = new UiRect(defBtn.Right + 8f, y, 108f, 30f);
-        UiPrimitives.DrawSecondaryButton(g, t, hit, "th.panel.posDef", defBtn, L10n.T("Dev.SystemDefault"), fontSize: 12f, active: !isCustomPos);
-        UiPrimitives.DrawSecondaryButton(g, t, hit, "th.panel.posCus", cusBtn, L10n.T("Exp.Osd.Custom"), fontSize: 12f, active: isCustomPos);
-        _clicks["th.panel.posDef"] = () => { cfg.QuickPanelPosMode = "default"; SaveAndNotifySettings(); };
-        _clicks["th.panel.posCus"] = () => { cfg.QuickPanelPosMode = "custom"; SaveAndNotifySettings(); };
-
-        _panelCustomXRect = new UiRect(cusBtn.Right + 16f, y, 72f, 30f);
-        _panelCustomYRect = new UiRect(_panelCustomXRect.Right + 8f, y, 72f, 30f);
-        UiPrimitives.DrawTextBox(g, t, hit, "th.panel.cx", _panelCustomXRect, cfg.QuickPanelCustomX.ToString(CultureInfo.InvariantCulture), "X", _actions.ActiveInlineEditTag == "th.panel.cx", mono: true);
-        UiPrimitives.DrawTextBox(g, t, hit, "th.panel.cy", _panelCustomYRect, cfg.QuickPanelCustomY.ToString(CultureInfo.InvariantCulture), "Y", _actions.ActiveInlineEditTag == "th.panel.cy", mono: true);
-        _clicks["th.panel.cx"] = () =>
-        {
-            _actions.StartInlineEdit("th.panel.cx", _panelCustomXRect, cfg.QuickPanelCustomX.ToString(CultureInfo.InvariantCulture), null, (val, _) =>
-            {
-                if (int.TryParse(val.Trim(), out int px)) { cfg.QuickPanelPosMode = "custom"; cfg.QuickPanelCustomX = px; SaveAndNotifySettings(); }
-            }, mono: true);
-        };
-        _clicks["th.panel.cy"] = () =>
-        {
-            _actions.StartInlineEdit("th.panel.cy", _panelCustomYRect, cfg.QuickPanelCustomY.ToString(CultureInfo.InvariantCulture), null, (val, _) =>
-            {
-                if (int.TryParse(val.Trim(), out int py)) { cfg.QuickPanelPosMode = "custom"; cfg.QuickPanelCustomY = py; SaveAndNotifySettings(); }
-            }, mono: true);
-        };
-        y += 42f;
+        string positionHint = L10n.T("Exp.PanelPosHint2");
+        float hintHeight = D2dSharedContext.Instance.MeasureText(positionHint, UiMetrics.FontFamily, 11.5f, 400, inner.Width, 100f, true).Height;
+        g.DrawText(positionHint, new UiRect(inner.X, y, inner.Width, hintHeight), t.TextSecondary, 11.5f, 400, UiTextAlign.Leading, UiVertAlign.Top, wrap: true);
+        y += hintHeight + 12f;
 
         int pHeight = Math.Clamp(cfg.QuickPanelHeight, 350, 850);
         _panelHeightSliderRect = DrawLabeledSlider(g, t, hit, "th.panel.h", new UiRect(inner.X, y, inner.Width, 38f),
@@ -451,11 +368,6 @@ internal sealed class ThemePageView : IViewPage
                 L10n.T("Theme.PanelOutputName"), L10n.T("Theme.PanelOutputNameHint"), cfg.QuickPanelShowOutputName,
                 () => { cfg.QuickPanelShowOutputName = !cfg.QuickPanelShowOutputName; SaveAndNotifySettings(); });
         }
-        y += 44f;
-
-        DrawToggleRow(g, t, hit, "th.panel.allOutVol", new UiRect(inner.X, y, inner.Width, 30f),
-            L10n.T("Qp.ExpandOutputVolumes"), null, cfg.QuickPanelShowAllOutputVolumes,
-            () => { cfg.QuickPanelShowAllOutputVolumes = !cfg.QuickPanelShowAllOutputVolumes; SaveAndNotifySettings(); });
     }
 
     private static void DrawSectionBadgeHeader(D2dTarget g, UiThemePalette t, UiRect rect, UiIcon icon, string title, string hint)
@@ -733,6 +645,7 @@ internal sealed class ThemePageView : IViewPage
     private void ResetOsdSettings()
     {
         var cfg = _actions.Config;
+        _actions.Host.CancelOsdAdjust();
         cfg.OsdPosition = "TR";
         cfg.OsdOffsetX = 0;
         cfg.OsdOffsetY = 0;

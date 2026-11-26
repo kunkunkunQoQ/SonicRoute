@@ -1,4 +1,6 @@
 {
+  "Window.ExpandNavigation": "展開導覽列",
+  "Window.CollapseNavigation": "摺疊導覽列",
   "Window.DragToMove": "拖曳以移動視窗",
   "Window.Minimize": "最小化",
   "Window.Maximize": "最大化",

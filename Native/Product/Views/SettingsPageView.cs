@@ -38,12 +38,9 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
     private readonly Dictionary<string, string> _languageEdits = new(StringComparer.OrdinalIgnoreCase);
     private bool _autoStartMoreExpanded;
     private bool _autoStartBusy;
-    private bool _configImportBusy;
+    private bool _languageFilesBusy;
     private int _autoStartSyncVersion;
-    private bool _draggingVolumeStep;
-    private int _initialVolumeStep;
     private bool _scrollToUpdates;
-    private UiRect _volumeStepSliderRect;
     private UiRect _contentRect;
     private int _authorClicks;
     private string _updateNotes = "";
@@ -86,20 +83,11 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
     public void OnCaptureLost()
     {
         _scroll.EndDrag();
-        FinishVolumeStepDrag();
     }
 
-    public void OnFilesDropped(string[] paths)
+    public void OnFilesDropped(string[] paths, string? targetId)
     {
-        if (paths == null || paths.Length == 0 || _configImportBusy) return;
-        string? jsonPath = paths.FirstOrDefault(p =>
-            !string.IsNullOrWhiteSpace(p) &&
-            p.EndsWith(".json", StringComparison.OrdinalIgnoreCase) &&
-            File.Exists(p));
-        if (jsonPath != null)
-        {
-            ImportConfigFromPath(jsonPath);
-        }
+        if (targetId == "st.lang.import") ImportLanguages(paths);
     }
 
     public void RefreshData()
@@ -174,9 +162,8 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
         y = RenderAudioBehaviorCard(g, t, hit, viewport, x, y, w, cfg, RegisterClick) + 14f;
         y = RenderLanguageCard(g, t, hit, viewport, x, y, w, RegisterClick) + 14f;
         float updatesOffset = y - startY;
-        y = RenderAboutCard(g, t, hit, viewport, x, y, w, cfg, RegisterClick) + 14f;
-        y = RenderMaintenanceCard(g, t, hit, viewport, x, y, w, RegisterClick);
-        y += 16f;
+        y = RenderUpdatesCard(g, t, hit, viewport, x, y, w, cfg, RegisterClick) + 14f;
+        y = RenderAboutCard(g, t, hit, x, y, w, RegisterClick);
 
         hit.PopClip();
         g.PopClip();
@@ -197,7 +184,7 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
         float x, float y, float w,
         Action<string, UiRect, Action, UiCursorKind, string?> register)
     {
-        float pad = 16f;
+        float pad = 19f;
         float innerW = w - pad * 2f;
         var langs = L10n.SupportedLanguages;
         if (!ReferenceEquals(_languageChoices, langs))
@@ -215,26 +202,27 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
         float langMoreH = _langMoreExpanded ? 46f : 0f;
 
         float customH = _customLanguages.Length == 0 ? 0f : 30f + 36f * _customLanguages.Length;
-        float cardH = pad + 28f + 12f + 40f + langMoreH + customH + pad;
+        float cardH = pad + 24f + 36f + langMoreH + customH + pad;
         var card = new UiRect(x, y, w, cardH);
         UiPrimitives.DrawCard(g, t, card);
 
         float cy = y + pad;
-        UiPrimitives.DrawSettingsSectionHeader(g, t, new UiRect(x + pad, cy, innerW, 28f), UiIcon.Message, L10n.T("St.Language"));
-        cy += 38f;
+        UiPrimitives.DrawSettingsSectionHeader(g, t, new UiRect(x + pad, cy, innerW, 20f), UiIcon.Message, L10n.T("St.Language"));
+        cy += 24f;
 
         // Language ComboBox + MoreOptions button
-        float comboW = MathF.Min(240f, innerW - 130f);
-        var comboRect = new UiRect(x + pad, cy, comboW, 34f);
+        float comboW = MathF.Min(200f, innerW - 100f);
+        var comboRect = new UiRect(x + pad, cy, comboW, 36f);
         UiPrimitives.DrawComboBox(g, t, hit, "st.lang.combo", comboRect, curLangLabel);
         register("st.lang.combo", comboRect, () => OpenLanguageCombo(comboRect), UiCursorKind.Hand, L10n.T("St.Language"));
 
-        var langMoreRect = new UiRect(comboRect.Right + 12f, cy + 3f, 110f, 28f);
+        float moreTextW = D2dSharedContext.Instance.MeasureText(L10n.T("Exp.MoreOptions"), UiMetrics.FontFamily, 11.5f, 400, innerW, 24f, false).Width + 1f;
+        var langMoreRect = new UiRect(comboRect.Right + 12f, cy + 5f, moreTextW + 18f, 26f);
         register("st.lang.more", langMoreRect, () => { _langMoreExpanded = !_langMoreExpanded; actions.Invalidate(); }, UiCursorKind.Hand, null);
         bool langMoreHot = hit.IsHover("st.lang.more");
-        g.DrawText(L10n.T("Exp.MoreOptions"), new UiRect(langMoreRect.X, langMoreRect.Y, 84f, langMoreRect.Height),
-            langMoreHot ? t.AccentHover : t.Accent, 12f, 400, UiTextAlign.Leading, UiVertAlign.Center);
-        g.DrawIcon(UiIcon.ChevronDown, new UiRect(langMoreRect.X + 86f, langMoreRect.CenterY - 5f, 10f, 10f),
+        g.DrawText(L10n.T("Exp.MoreOptions"), new UiRect(langMoreRect.X, langMoreRect.Y, moreTextW, langMoreRect.Height),
+            langMoreHot ? t.AccentHover : t.Accent, 11.5f, 400, UiTextAlign.Leading, UiVertAlign.Center);
+        g.DrawIcon(UiIcon.ChevronDown, new UiRect(langMoreRect.X + moreTextW + 5f, langMoreRect.CenterY - 5f, 10f, 10f),
             t.Accent, 1.8f, _langMoreExpanded ? 180f : 0f);
         cy += 42f;
 
@@ -242,16 +230,16 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
         {
             float btnX = x + pad;
             float btnW = MathF.Min(138f, (innerW - 24f) / 4f);
-            DrawToolbarAction(g, t, hit, "st.lang.export", new UiRect(btnX, cy, btnW, 32f), L10n.T("Exp.ExportLang"), ExportLanguages, register);
+            DrawToolbarAction(g, t, hit, "st.lang.export", new UiRect(btnX, cy, btnW, 32f), L10n.T("Exp.ExportLang"), ExportLanguages, register, !_languageFilesBusy);
             btnX += btnW + 8f;
-            DrawToolbarAction(g, t, hit, "st.lang.import", new UiRect(btnX, cy, btnW, 32f), L10n.T("Exp.ImportLang"), ImportLanguage, register);
+            DrawToolbarAction(g, t, hit, "st.lang.import", new UiRect(btnX, cy, btnW, 32f), L10n.T("Exp.ImportLang"), ImportLanguage, register, !_languageFilesBusy);
             btnX += btnW + 8f;
             DrawToolbarAction(g, t, hit, "st.lang.dir", new UiRect(btnX, cy, btnW, 32f), L10n.T("Exp.OpenLangDir"), () =>
             {
                 if (!L10n.OpenExternalLangDir()) actions.ShowNotice(L10n.T("Exp.LangOpenFail"));
-            }, register);
+            }, register, !_languageFilesBusy);
             btnX += btnW + 8f;
-            DrawToolbarAction(g, t, hit, "st.lang.restore", new UiRect(btnX, cy, btnW, 32f), L10n.T("Exp.RestoreLang"), RestoreLanguages, register);
+            DrawToolbarAction(g, t, hit, "st.lang.restore", new UiRect(btnX, cy, btnW, 32f), L10n.T("Exp.RestoreLang"), RestoreLanguages, register, !_languageFilesBusy);
             cy += 46f;
         }
 
@@ -361,23 +349,33 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
         float x, float y, float w, AppConfig cfg,
         Action<string, UiRect, Action, UiCursorKind, string?> register)
     {
-        float pad = 16f;
+        const float pad = 19f;
         float innerW = w - pad * 2f;
-        int switchCount = 8 + (cfg.ExperimentalMic ? 1 : 0) + (cfg.ExperimentalUnlocked ? 1 : 0);
-        float volRowH = 58f;
-        float rowH = 54f;
+        float Row(string title, string hint) => SwitchHeight(L10n.T(title), L10n.T(hint), innerW);
+        float startMinH = Row("St.StartMinimized", "Settings.StartMinimizedHint");
+        float autoStartH = Row("St.AutoStart", "Settings.AutoStartHint");
+        float startPanelH = Row("St.StartPanel", "Settings.StartPanelHint");
+        float trayH = Row("St.TrayWheelEverywhere", "St.TrayWheelEverywhereHint");
+        float micH = Row("St.ExperimentalMic", "St.ExperimentalMicHint");
+        float micPanelH = cfg.ExperimentalMic ? SwitchHeight(L10n.T("Exp.MicPanel"), "", innerW - 32f) + 6f : 0f;
+        float systemH = Row("St.PanelChangeSystemDefault", "St.PanelChangeSystemDefaultHint");
+        float retainedH = Row("St.PanelOutputVolumesRetainedOnly", "St.PanelOutputVolumesRetainedOnlyHint");
+        float collapseH = Row("Exp.Collapse", "Exp.CollapseHint");
+        float experimentalH = cfg.ExperimentalUnlocked ? Row("St.ExperimentalMode", "St.ExperimentalModeHint") : 0f;
+        float volRowH = MathF.Max(30f, TextHeight(L10n.T("St.VolumeStep"), 12.5f, innerW - 112f)
+            + TextHeight(L10n.T("St.VolumeStepHint"), 11.5f, innerW - 112f)) + 20f;
         bool packaged = actions.Host.EnvironmentInfo.IsPackaged;
-        float startupH = 54f * 3f + (packaged ? 0f : 28f + (_autoStartMoreExpanded ? 40f : 0f));
-        float cardH = pad + 28f + 8f + startupH + volRowH + switchCount * rowH + pad;
+        float startupH = startMinH + autoStartH + startPanelH + (packaged ? 0f : 26f + (_autoStartMoreExpanded ? 40f : 0f));
+        float cardH = pad * 2f + 24f + startupH + volRowH + trayH + micH + micPanelH + systemH + retainedH + collapseH + experimentalH;
         var card = new UiRect(x, y, w, cardH);
         UiPrimitives.DrawCard(g, t, card);
 
         float cy = y + pad;
         UiPrimitives.DrawSettingsSectionHeader(g, t, new UiRect(x + pad, cy, innerW, 28f), UiIcon.Settings, L10n.T("St.Misc"));
-        cy += 36f;
+        cy += 24f;
 
         // Start minimized
-        cy = DrawSettingsSwitchWithHint(g, t, hit, "st.startmin", new UiRect(x + pad, cy, innerW, 54f),
+        cy = DrawSettingsSwitchWithHint(g, t, hit, "st.startmin", new UiRect(x + pad, cy, innerW, startMinH),
             UiIcon.Monitor, L10n.T("St.StartMinimized"), L10n.T("Settings.StartMinimizedHint"), cfg.StartMinimized, true, () =>
             {
                 cfg.StartMinimized = !cfg.StartMinimized;
@@ -386,8 +384,8 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
 
         // Auto-start switch (MSIX Store StartupTask vs portable HKCU Run)
         bool autoStart = packaged ? cfg.AutoStartStore : actions.Host.PreviewAutoStart;
-        cy = DrawSettingsSwitchWithHint(g, t, hit, "st.autostart", new UiRect(x + pad, cy, innerW, 54f),
-            UiIcon.Power, L10n.T("St.AutoStart"), L10n.T("Settings.AutoStartHint"), autoStart, packaged, () =>
+        cy = DrawSettingsSwitchWithHint(g, t, hit, "st.autostart", new UiRect(x + pad, cy, innerW, autoStartH),
+            UiIcon.Power, L10n.T("St.AutoStart"), L10n.T("Settings.AutoStartHint"), autoStart, true, () =>
             {
                 if (_autoStartBusy) return;
                 ToggleAutoStart(!autoStart);
@@ -395,13 +393,14 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
 
         if (!packaged)
         {
-            var autoMoreRect = new UiRect(x + pad + 32f, cy + 2f, 118f, 24f);
+            float moreTextW = D2dSharedContext.Instance.MeasureText(L10n.T("Exp.MoreOptions"), UiMetrics.FontFamily, 11.5f, 400, innerW, 24f, false).Width + 1f;
+            var autoMoreRect = new UiRect(x + pad + 32f, cy + 2f, moreTextW + 18f, 22f);
             register("st.autostart.more", autoMoreRect, () => { _autoStartMoreExpanded = !_autoStartMoreExpanded; actions.Invalidate(); }, UiCursorKind.Hand, null);
-            g.DrawText(L10n.T("Exp.MoreOptions"), new UiRect(autoMoreRect.X, autoMoreRect.Y, 92f, autoMoreRect.Height),
+            g.DrawText(L10n.T("Exp.MoreOptions"), new UiRect(autoMoreRect.X, autoMoreRect.Y, moreTextW, autoMoreRect.Height),
                 hit.IsHover("st.autostart.more") ? t.AccentHover : t.Accent, 11.5f, 400, UiTextAlign.Leading, UiVertAlign.Center);
-            g.DrawIcon(UiIcon.ChevronDown, new UiRect(autoMoreRect.X + 94f, autoMoreRect.CenterY - 4.5f, 9f, 9f),
+            g.DrawIcon(UiIcon.ChevronDown, new UiRect(autoMoreRect.X + moreTextW + 5f, autoMoreRect.CenterY - 4.5f, 9f, 9f),
                 t.Accent, 1.8f, _autoStartMoreExpanded ? 180f : 0f);
-            cy += 28f;
+            cy += 26f;
 
             if (_autoStartMoreExpanded)
             {
@@ -412,38 +411,27 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
                     register("st.autostart.clean", cleanRect, CleanAutoStart, UiCursorKind.Hand, L10n.T("St.CleanAutoStart"));
                 cy += 40f;
             }
-            g.DrawLine(x + pad + 2f, cy - 1f, x + pad + innerW - 2f, cy - 1f, t.Border, 1f, roundCaps: false);
         }
 
         // Start panel on start
-        cy = DrawSettingsSwitchWithHint(g, t, hit, "st.startpanel", new UiRect(x + pad, cy, innerW, 54f),
-            UiIcon.Application, L10n.T("St.StartPanel"), L10n.T("Settings.StartPanelHint"), cfg.StartPanelOnStart, false, () =>
+        cy = DrawSettingsSwitchWithHint(g, t, hit, "st.startpanel", new UiRect(x + pad, cy, innerW, startPanelH),
+            UiIcon.Application, L10n.T("St.StartPanel"), L10n.T("Settings.StartPanelHint"), cfg.StartPanelOnStart, true, () =>
             {
                 cfg.StartPanelOnStart = !cfg.StartPanelOnStart;
                 SaveConfig();
             }, register);
 
-        // Volume Step row (slider + numeric box)
+        // WPF VolumeStepBox commits on Enter or normal focus loss.
         var volRect = new UiRect(x + pad, cy, innerW, volRowH);
         g.DrawIcon(UiIcon.Speaker, new UiRect(volRect.X + 2f, volRect.CenterY - 8.5f, 17f, 17f), t.TextSecondary, 1.8f);
-        float textW = MathF.Max(120f, innerW - 32f - 230f);
-        g.DrawText(L10n.T("St.VolumeStep"), new UiRect(volRect.X + 32f, volRect.Y + 6f, textW, 20f), t.TextPrimary, 12.5f, 400, UiTextAlign.Leading, UiVertAlign.Center);
-        g.DrawText(L10n.T("St.VolumeStepHint"), new UiRect(volRect.X + 32f, volRect.Y + 26f, textW, 26f), t.TextSecondary, 11f, 400, UiTextAlign.Leading, UiVertAlign.Top, wrap: true, ellipsis: true);
+        float textW = MathF.Max(1f, innerW - 112f);
+        g.DrawText(L10n.T("St.VolumeStep"), new UiRect(volRect.X + 32f, volRect.Y + 10f, textW, 20f), t.TextPrimary, 12.5f, 400, UiTextAlign.Leading, UiVertAlign.Center);
+        g.DrawText(L10n.T("St.VolumeStepHint"), new UiRect(volRect.X + 32f, volRect.Y + 29f, textW, volRowH - 35f), t.TextSecondary, 11.5f, 400, UiTextAlign.Leading, UiVertAlign.Top, wrap: true, ellipsis: false);
 
         int clampedStep = Math.Clamp(cfg.VolumeStep, 1, 20);
-        var sliderRect = new UiRect(volRect.Right - 220f, volRect.CenterY - 12f, 146f, 24f);
-        _volumeStepSliderRect = sliderRect;
-        float val01 = (clampedStep - 1) / 19f;
-        UiPrimitives.DrawVolumeSlider(g, t, hit, "st.volstep.slider", sliderRect, val01, 0f, false, false);
-        if (sliderRect.Bottom > viewport.Y && sliderRect.Y < viewport.Bottom)
-        {
-            var clipped = ClipToViewport(sliderRect, viewport);
-            if (!clipped.IsEmpty) hit.Add("st.volstep.slider", clipped, UiCursorKind.Hand);
-        }
-
         var stepBoxRect = new UiRect(volRect.Right - 64f, volRect.CenterY - 15f, 64f, 30f);
         UiPrimitives.DrawTextBox(g, t, hit, "st.volstep.box", stepBoxRect, clampedStep.ToString(CultureInfo.InvariantCulture),
-            focused: actions.ActiveInlineEditTag == "st.volstep.box");
+            focused: actions.ActiveInlineEditTag == "st.volstep.box", fontSize: 12.5f, centered: true);
         register("st.volstep.box", stepBoxRect, () =>
         {
             actions.StartInlineEdit("st.volstep.box", stepBoxRect, clampedStep.ToString(CultureInfo.InvariantCulture), null, (text, _) =>
@@ -453,25 +441,18 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
                 if (cfg.VolumeStep == step) return;
                 cfg.VolumeStep = step;
                 SaveConfig();
-            });
+            }, centered: true);
         }, UiCursorKind.IBeam, L10n.T("St.VolumeStep"));
-        g.DrawLine(volRect.X + 2f, volRect.Bottom, volRect.Right - 2f, volRect.Bottom, t.Border, 1f, roundCaps: false);
         cy += volRowH;
 
-        cy = DrawSettingsSwitchWithHint(g, t, hit, "st.traywheel.everywhere", new UiRect(x + pad, cy, innerW, rowH),
+        cy = DrawSettingsSwitchWithHint(g, t, hit, "st.traywheel.everywhere", new UiRect(x + pad, cy, innerW, trayH),
             UiIcon.Speaker, L10n.T("St.TrayWheelEverywhere"), L10n.T("St.TrayWheelEverywhereHint"), cfg.TrayWheelEverywhere, true, () =>
             {
                 cfg.TrayWheelEverywhere = !cfg.TrayWheelEverywhere;
                 SaveConfig();
             }, register);
 
-        cy = DrawSettingsSwitchWithHint(g, t, hit, "st.traywheel.paused", new UiRect(x + pad, cy, innerW, rowH),
-            UiIcon.Pause, L10n.T("Tray.PauseWheel"), L10n.T("Tray.PauseWheelHint"), cfg.TrayWheelPaused, true, () =>
-            {
-                actions.Host.SetTrayWheelPaused(!cfg.TrayWheelPaused);
-            }, register);
-
-        cy = DrawSettingsSwitchWithHint(g, t, hit, "st.expmic", new UiRect(x + pad, cy, innerW, rowH),
+        cy = DrawSettingsSwitchWithHint(g, t, hit, "st.expmic", new UiRect(x + pad, cy, innerW, micH),
             UiIcon.Microphone, L10n.T("St.ExperimentalMic"), L10n.T("St.ExperimentalMicHint"), cfg.ExperimentalMic, true, () =>
             {
                 cfg.ExperimentalMic = !cfg.ExperimentalMic;
@@ -481,7 +462,7 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
 
         if (cfg.ExperimentalMic)
         {
-            cy = DrawSettingsSwitchWithHint(g, t, hit, "st.micinpanel", new UiRect(x + pad + 20f, cy, innerW - 20f, rowH),
+            cy = DrawSettingsSwitchWithHint(g, t, hit, "st.micinpanel", new UiRect(x + pad + 32f, cy + 6f, innerW - 32f, micPanelH - 6f),
                 UiIcon.Microphone, L10n.T("Exp.MicPanel"), "", cfg.MicInPanel, true, () =>
                 {
                     cfg.MicInPanel = !cfg.MicInPanel;
@@ -490,37 +471,22 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
                 }, register);
         }
 
-        cy = DrawSettingsSwitchWithHint(g, t, hit, "st.panelchangesysdef", new UiRect(x + pad, cy, innerW, rowH),
+        cy = DrawSettingsSwitchWithHint(g, t, hit, "st.panelchangesysdef", new UiRect(x + pad, cy, innerW, systemH),
             UiIcon.Switch, L10n.T("St.PanelChangeSystemDefault"), L10n.T("St.PanelChangeSystemDefaultHint"), cfg.PanelChangeSystemDefault, true, () =>
             {
                 cfg.PanelChangeSystemDefault = !cfg.PanelChangeSystemDefault;
                 SaveConfig();
             }, register);
 
-        cy = DrawSettingsSwitchWithHint(g, t, hit, "st.panelretainedonly", new UiRect(x + pad, cy, innerW, rowH),
+        cy = DrawSettingsSwitchWithHint(g, t, hit, "st.panelretainedonly", new UiRect(x + pad, cy, innerW, retainedH),
             UiIcon.Speaker, L10n.T("St.PanelOutputVolumesRetainedOnly"), L10n.T("St.PanelOutputVolumesRetainedOnlyHint"), cfg.PanelOutputVolumesRetainedOnly, true, () =>
             {
                 cfg.PanelOutputVolumesRetainedOnly = !cfg.PanelOutputVolumesRetainedOnly;
                 SaveConfig();
             }, register);
 
-        cy = DrawSettingsSwitchWithHint(g, t, hit, "st.micmute.persist", new UiRect(x + pad, cy, innerW, rowH),
-            UiIcon.Microphone, L10n.T("Theme.MicMuteOsdPersist"), "", cfg.MicMuteOsdPersistent, true, () =>
-            {
-                cfg.MicMuteOsdPersistent = !cfg.MicMuteOsdPersistent;
-                SaveConfig();
-            }, register);
-
-        cy = DrawSettingsSwitchWithHint(g, t, hit, "st.micmute.trackdef", new UiRect(x + pad, cy, innerW, rowH),
-            UiIcon.Microphone, L10n.T("Theme.MicMuteTrackInput"), "", cfg.MicMuteOsdDefaultInputPersistent, true, () =>
-            {
-                cfg.MicMuteOsdDefaultInputPersistent = !cfg.MicMuteOsdDefaultInputPersistent;
-                SaveConfig();
-            }, register);
-
-        bool drawCollapseBottom = cfg.ExperimentalUnlocked;
-        cy = DrawSettingsSwitchWithHint(g, t, hit, "st.collapsedev", new UiRect(x + pad, cy, innerW, rowH),
-            UiIcon.Options, L10n.T("Exp.Collapse"), L10n.T("Exp.CollapseHint"), cfg.CollapseDeviceSections, drawCollapseBottom, () =>
+        cy = DrawSettingsSwitchWithHint(g, t, hit, "st.collapsedev", new UiRect(x + pad, cy, innerW, collapseH),
+            UiIcon.Options, L10n.T("Exp.Collapse"), L10n.T("Exp.CollapseHint"), cfg.CollapseDeviceSections, true, () =>
             {
                 cfg.CollapseDeviceSections = !cfg.CollapseDeviceSections;
                 _keepDevicesExpanded = !cfg.CollapseDeviceSections;
@@ -530,11 +496,12 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
 
         if (cfg.ExperimentalUnlocked)
         {
-            DrawSettingsSwitchWithHint(g, t, hit, "st.expmode", new UiRect(x + pad, cy, innerW, rowH),
-                UiIcon.Experiment, L10n.T("St.ExperimentalMode"), L10n.T("St.ExperimentalModeHint"), cfg.ExperimentalMode, false, () =>
+            DrawSettingsSwitchWithHint(g, t, hit, "st.expmode", new UiRect(x + pad, cy, innerW, experimentalH),
+                UiIcon.Experiment, L10n.T("St.ExperimentalMode"), L10n.T("St.ExperimentalModeHint"), cfg.ExperimentalMode, true, () =>
                 {
                     cfg.ExperimentalMode = !cfg.ExperimentalMode;
                     if (!SaveConfig()) return;
+                    if (!cfg.ExperimentalMode) AutoRuleService.StopExecutionHistory();
                     actions.ShowNotice(L10n.T("St.ExpModeNeedRestart"));
                 }, register);
         }
@@ -675,9 +642,8 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
             bool isChecked = !hiddenList.Contains(dev.Id, StringComparer.OrdinalIgnoreCase);
 
             string cardId = $"st.devchk.{prefix}.{dev.Id}";
-            string editId = $"st.devchk.edit.{prefix}.{dev.Id}";
 
-            bool hot = hit.IsHover(cardId) || hit.IsHover(editId);
+            bool hot = hit.IsHover(cardId);
             g.FillRoundedRect(cardRect, 8f, t.SurfaceBg);
             g.DrawRoundedRect(cardRect, 8f, hot ? t.Accent : t.Border, 1f);
 
@@ -703,7 +669,7 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
             (string title, string detail) = SplitDeviceName(dev);
             string shownTitle = GetDeviceTitle(dev, title);
             float txtX = cardRect.X + 52f;
-            float txtW = MathF.Max(20f, cardRect.Width - 76f);
+            float txtW = MathF.Max(20f, cardRect.Width - 60f);
             if (detail.Length > 0)
             {
                 g.DrawText(shownTitle, new UiRect(txtX, cardRect.Y + 6f, txtW, 18f), t.TextPrimary, 12f, 400, UiTextAlign.Leading, UiVertAlign.Center);
@@ -715,8 +681,7 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
             }
 
             // Card click toggles visibility
-            var toggleArea = new UiRect(cardRect.X, cardRect.Y, cardRect.Width - 24f, cardRect.Height);
-            register(cardId, toggleArea, () =>
+            register(cardId, cardRect, () =>
             {
                 if (hiddenList.Contains(dev.Id, StringComparer.OrdinalIgnoreCase))
                     hiddenList.RemoveAll(id => string.Equals(id, dev.Id, StringComparison.OrdinalIgnoreCase));
@@ -725,13 +690,6 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
                 SaveConfig();
             }, UiCursorKind.Hand, dev.DisplayName);
 
-            // Small inline rename icon button on right
-            var editRect = new UiRect(cardRect.Right - 24f, cardRect.CenterY - 10f, 20f, 20f);
-            UiPrimitives.DrawGhostIconButton(g, t, hit, editId, editRect, UiIcon.Edit, 12f, tooltip: L10n.T("St.DeviceNames"));
-            string tag = "st.rename." + dev.Id;
-            if (actions.ActiveInlineEditTag == tag)
-                UiPrimitives.DrawTextBox(g, t, hit, tag, cardRect, actions.Config.DeviceNames.GetValueOrDefault(dev.Id, ""), focused: true);
-            register(editId, editRect, () => _aliasEditor.Open(tag, cardRect, dev.Id, device: true), UiCursorKind.Hand, L10n.T("St.DeviceNames"));
         }
 
         int totalRows = (int)MathF.Ceiling(devices.Count / (float)cols);
@@ -838,62 +796,7 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
         return y;
     }
 
-    private float RenderMaintenanceCard(
-        D2dTarget g, UiThemePalette t, UiHitMap hit, UiRect viewport,
-        float x, float y, float w,
-        Action<string, UiRect, Action, UiCursorKind, string?> register)
-    {
-        float pad = 16f;
-        float innerW = w - pad * 2f;
-        float cardH = pad + 28f + 22f + 36f + pad;
-        var card = new UiRect(x, y, w, cardH);
-        UiPrimitives.DrawCard(g, t, card);
-
-        float cy = y + pad;
-        UiPrimitives.DrawSettingsSectionHeader(g, t, new UiRect(x + pad, cy, innerW, 28f), UiIcon.File, L10n.T("Exp.ConfigFiles"));
-        cy += 28f;
-        g.DrawText(L10n.T("Exp.ConfigTransferHint"), new UiRect(x + pad + 32f, cy, innerW - 32f, 18f), t.TextSecondary, 11.5f, 400, UiTextAlign.Leading, UiVertAlign.Center);
-        cy += 22f;
-
-        float gap = 8f;
-        float btnW = MathF.Max(90f, (innerW - gap * 3f) / 4f);
-        float bx = x + pad;
-
-        var expRect = new UiRect(bx, cy, btnW, 34f);
-        UiPrimitives.DrawSecondaryButton(g, t, hit, "st.cfg.export", expRect, L10n.T("Exp.ExportConfig"), icon: UiIcon.File);
-        register("st.cfg.export", expRect, ExportConfig, UiCursorKind.Hand, L10n.T("Exp.ExportConfig"));
-        bx += btnW + gap;
-
-        var impRect = new UiRect(bx, cy, btnW, 34f);
-        UiPrimitives.DrawSecondaryButton(g, t, hit, "st.cfg.import", impRect, L10n.T("Exp.ImportConfig"), icon: UiIcon.Refresh);
-        register("st.cfg.import", impRect, ImportConfig, UiCursorKind.Hand, L10n.T("Exp.ImportConfig"));
-        bx += btnW + gap;
-
-        var openLabel = IsZh() ? "打开数据目录" : "Open Data Folder";
-        var dirRect = new UiRect(bx, cy, btnW, 34f);
-        UiPrimitives.DrawSecondaryButton(g, t, hit, "st.cfg.opendir", dirRect, openLabel, icon: UiIcon.Apps);
-        register("st.cfg.opendir", dirRect, () =>
-        {
-            try
-            {
-                Directory.CreateDirectory(actions.Host.DataDirectory);
-                Process.Start(new ProcessStartInfo("explorer.exe", actions.Host.DataDirectory) { UseShellExecute = true });
-            }
-            catch
-            {
-                ShellOpen.Folder(actions.Host.DataDirectory);
-            }
-        }, UiCursorKind.Hand, actions.Host.DataDirectory);
-        bx += btnW + gap;
-
-        var rstRect = new UiRect(bx, cy, btnW, 34f);
-        UiPrimitives.DrawSecondaryButton(g, t, hit, "st.cfg.reset", rstRect, L10n.T("Exp.ClearConfig"), danger: true, icon: UiIcon.Reset);
-        register("st.cfg.reset", rstRect, ResetSettings, UiCursorKind.Hand, L10n.T("Exp.ClearConfigHint"));
-
-        return y + cardH;
-    }
-
-    private float RenderAboutCard(
+    private float RenderUpdatesCard(
         D2dTarget g, UiThemePalette t, UiHitMap hit, UiRect viewport,
         float x, float y, float w, AppConfig cfg,
         Action<string, UiRect, Action, UiCursorKind, string?> register)
@@ -901,7 +804,7 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
         var updates = actions.Host.Updates;
         bool store = updates.IsPackaged;
         string displayVersion = MainWindowShell.ProductVersion;
-        string versionLine = string.Format(L10n.T("Upd.Current"), displayVersion, AppRuntimeIdentity.Current.CommandEdition, UpdateBootstrap.Architecture)
+        string versionLine = string.Format(L10n.T("Upd.Current"), "v" + displayVersion, AppRuntimeIdentity.Current.CommandEdition, UpdateBootstrap.Architecture)
             + " · " + UpdateProtocol.RuntimeName;
         string? newestLine = updates.Release != null ? string.Format(L10n.T("Upd.Newest"), updates.Release.Tag) : null;
 
@@ -924,33 +827,33 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
         bool showDismiss = !store && updates.ShouldNotify;
         bool showActionRow = showDownload || showInstall || showCancel || showDismiss;
 
-        float pad = 16f;
+        const float pad = 19f;
         float innerW = w - pad * 2f;
         float verH = newestLine != null ? 42f : 23f;
-        float autoH = store ? 0f : 52f;
+        float autoH = store ? 0f : SwitchHeight(L10n.T("Upd.Automatic"), L10n.T("Upd.AutomaticHint"), innerW);
         int statusLines = 1 + (outcomeLine != null ? 1 : 0) + (dlLine != null ? 1 : 0) + (errLine != null ? 1 : 0);
-        float statusH = statusLines * 18f + 10f;
+        float statusH = statusLines * 18f + 16f;
         float progH = showProgress ? 16f : 0f;
         float notesH = showNotes ? Math.Clamp(D2dSharedContext.Instance.MeasureText(notes, UiMetrics.FontFamily, 12f, 400, Math.Max(1f, innerW - 22f), 180f, true).Height + 8f, 28f, 180f) + 13f : 0f;
         float actionsH = showActionRow ? 42f : 0f;
-        float footerH = 28f;
 
-        float cardH = pad + 34f + verH + autoH + statusH + progH + notesH + actionsH + footerH + pad;
+        float cardH = pad + 40f + verH + autoH + statusH + progH + notesH + actionsH + pad;
         var card = new UiRect(x, y, w, cardH);
         UiPrimitives.DrawCard(g, t, card);
 
         float cy = y + pad;
-        UiPrimitives.DrawSettingsSectionHeader(g, t, new UiRect(x + pad, cy, innerW - 210f, 28f), UiIcon.Clock, L10n.T("Upd.Title"));
+        UiPrimitives.DrawSettingsSectionHeader(g, t, new UiRect(x + pad, cy, innerW - 180f, 34f), UiIcon.Clock, L10n.T("Upd.Title"));
 
-        var logRect = new UiRect(x + w - pad - 32f, cy, 32f, 30f);
+        var logRect = new UiRect(x + w - pad - 28f, cy, 28f, 36f);
         UiPrimitives.DrawGhostIconButton(g, t, hit, "st.about.changelog", logRect, UiIcon.History, 16f, tooltip: L10n.T("Upd.Changelog"));
         register("st.about.changelog", logRect, () => OpenUrl(updates.Release?.Url ?? UpdateProtocol.Repository + "/releases"), UiCursorKind.Hand, L10n.T("Upd.Changelog"));
 
-        var chkRect = new UiRect(logRect.X - 134f, cy, 128f, 30f);
-        UiPrimitives.DrawSecondaryButton(g, t, hit, "st.about.checkupd", chkRect, L10n.T("St.CheckUpdate"), enabled: !updates.Busy, icon: UiIcon.Refresh, fontSize: 12f);
+        float checkWidth = D2dSharedContext.Instance.MeasureText(L10n.T("St.CheckUpdate"), UiMetrics.FontFamily, 13f, 400, innerW, 36f, false).Width + 29f;
+        var chkRect = new UiRect(logRect.X - 4f - checkWidth, cy, checkWidth, 36f);
+        UiPrimitives.DrawSecondaryButton(g, t, hit, "st.about.checkupd", chkRect, L10n.T("St.CheckUpdate"), enabled: !updates.Busy, fontSize: 13f);
         if (!updates.Busy)
             register("st.about.checkupd", chkRect, CheckForUpdates, UiCursorKind.Hand, L10n.T("St.CheckUpdate"));
-        cy += 36f;
+        cy += 40f;
 
         // Current & newest version
         g.DrawText(versionLine, new UiRect(x + pad, cy, innerW, 18f), t.TextSecondary, 11.5f, 400, UiTextAlign.Leading, UiVertAlign.Center);
@@ -965,7 +868,7 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
         // Auto-check updates switch row (unpackaged only)
         if (!store)
         {
-            cy = DrawSettingsSwitchWithHint(g, t, hit, "st.about.autochk", new UiRect(x + pad, cy, innerW, 52f),
+            cy = DrawSettingsSwitchWithHint(g, t, hit, "st.about.autochk", new UiRect(x + pad, cy, innerW, autoH),
                 UiIcon.Clock, L10n.T("Upd.Automatic"), L10n.T("Upd.AutomaticHint"), cfg.AutoCheckUpdates, true, () =>
                 {
                     cfg.AutoCheckUpdates = !cfg.AutoCheckUpdates;
@@ -1044,52 +947,69 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
             cy += 42f;
         }
 
-        cy += 4f;
-        // 5-click version / author label to unlock experimental mode
-        string verText = $"{L10n.T("App.About")} · SonicRoute {displayVersion} Native AOT";
-        float right = x + w - pad;
-        void Link(string id, string label, Action click)
-        {
-            float width = D2dSharedContext.Instance.MeasureText(label, UiMetrics.FontFamily, 12f, 400, 160f, 24f, false).Width + 8f;
-            var rect = new UiRect(right - width, cy, width, 24f);
-            register(id, rect, click, UiCursorKind.Hand, null);
-            g.DrawText(label, rect, hit.IsHover(id) ? t.AccentHover : t.Accent, 12f, 400, UiTextAlign.Center, UiVertAlign.Center);
-            right = rect.X - 2f;
-        }
-        Link("st.about.license", "GPL-3.0", ShowLicense);
-        Link("st.about.github", "GitHub", () => OpenUrl(UpdateProtocol.Repository));
-        Link("st.about.ifdian", L10n.T("St.Afdian"), () => OpenUrl("https://www.ifdian.net/a/koukou021"));
-        Link("st.about.bili", L10n.T("St.Bilibili"), () => OpenUrl("https://b23.tv/TDqSAKM"));
-
-        var verRect = new UiRect(x + pad, cy, MathF.Max(1f, right - x - pad - 4f), 24f);
-        register("st.about.author", verRect, OnAuthorLabelClicked, UiCursorKind.Hand, L10n.T("St.ExpAuthorTip"));
-        g.DrawText(verText, verRect, hit.IsHover("st.about.author") ? t.Accent : t.TextSecondary, 11.5f, 400, UiTextAlign.Leading, UiVertAlign.Center);
-
         return y + cardH;
     }
 
-    private static float DrawSettingsSwitchWithHint(
+    private float RenderAboutCard(D2dTarget g, UiThemePalette t, UiHitMap hit, float x, float y, float w,
+        Action<string, UiRect, Action, UiCursorKind, string?> register)
+    {
+        const float pad = 18f;
+        const float cardHeight = pad + 16f + 18f + 12f + 22f + pad;
+        UiPrimitives.DrawCard(g, t, new UiRect(x, y, w, cardHeight));
+        var author = new UiRect(x + pad, y + pad + 16f, w - pad * 2, 18f);
+        register("st.about.author", author, OnAuthorLabelClicked, UiCursorKind.Hand, L10n.T("St.ExpAuthorTip"));
+        g.DrawText(L10n.T("App.About") + " v" + MainWindowShell.ProductVersion, author, t.TextSecondary, 11.5f);
+
+        float cursor = author.X;
+        float linkY = author.Bottom + 12f;
+        void Append(string text, string? id = null, Action? open = null)
+        {
+            float width = D2dSharedContext.Instance.MeasureText(text, UiMetrics.FontFamily, 13f, 400, w, 22f, false).Width;
+            var rect = new UiRect(cursor, linkY, width, 22f);
+            if (id != null && open != null) register(id, rect, open, UiCursorKind.Hand, text);
+            g.DrawText(text, rect, id == null ? t.TextSecondary : hit.IsHover(id) ? t.AccentHover : t.Accent, 13f);
+            if (id != null) g.DrawLine(rect.X, rect.Bottom - 4f, rect.Right, rect.Bottom - 4f, t.Accent, .8f, roundCaps: false);
+            cursor += width + 3f;
+        }
+        Append(L10n.T("St.AuthorHome"));
+        Append(L10n.T("St.Bilibili"), "st.about.bili", () => OpenUrl("https://b23.tv/TDqSAKM"));
+        Append(" ‖ ");
+        Append(L10n.T("St.Afdian"), "st.about.ifdian", () => OpenUrl("https://www.ifdian.net/a/koukou021"));
+        Append(" ‖ ");
+        Append("GitHub", "st.about.github", () => OpenUrl(UpdateProtocol.Repository));
+        Append(" ‖ ");
+        Append("GPL-3.0", "st.about.license", ShowLicense);
+        return y + cardHeight;
+    }
+
+    internal static float TextHeight(string text, float size, float width) =>
+        MathF.Ceiling(D2dSharedContext.Instance.MeasureText(text, UiMetrics.FontFamily, size, 400, MathF.Max(1f, width), 2048f, true).Height);
+
+    internal static float SwitchHeight(string title, string hint, float width)
+    {
+        float textWidth = width - 84f;
+        float textHeight = TextHeight(title, 12.5f, textWidth);
+        if (hint.Length != 0) textHeight += 3f + TextHeight(hint, 11.5f, textWidth);
+        return 21f + MathF.Max(20f, textHeight);
+    }
+
+    internal static float DrawSettingsSwitchWithHint(
         D2dTarget g, UiThemePalette t, UiHitMap hit,
         string id, UiRect rect, UiIcon icon, string title, string hint, bool isChecked, bool drawBottomBorder,
         Action onClick, Action<string, UiRect, Action, UiCursorKind, string?> register)
     {
         register(id, rect, onClick, UiCursorKind.Hand, string.IsNullOrEmpty(hint) ? null : hint);
-        if (string.IsNullOrEmpty(hint))
-        {
-            UiPrimitives.DrawSettingsSwitchRow(g, t, hit, id, rect, icon, title, isChecked, drawBottomBorder);
-            return rect.Bottom;
-        }
-        if (hit.IsHover(id))
-            g.FillRoundedRect(rect.Deflate(0f, 1f), 6f, t.NavHover.WithAlphaFraction(0.55f));
-
+        float textW = MathF.Max(1f, rect.Width - 84f);
+        float titleH = TextHeight(title, 12.5f, textW);
+        float hintH = hint.Length == 0 ? 0f : TextHeight(hint, 11.5f, textW);
+        float textY = rect.CenterY - (titleH + (hintH == 0f ? 0f : 3f + hintH) + 1f) * .5f;
         g.DrawIcon(icon, new UiRect(rect.X + 2f, rect.CenterY - 8.5f, 17f, 17f), t.TextSecondary, 1.8f);
-        float textW = MathF.Max(60f, rect.Width - 82f);
-        g.DrawText(title, new UiRect(rect.X + 32f, rect.Y + 6f, textW, 18f), t.TextPrimary, 12.5f, 400, UiTextAlign.Leading, UiVertAlign.Center);
-        g.DrawText(hint, new UiRect(rect.X + 32f, rect.Y + 26f, textW, 22f), t.TextSecondary, 11f, 400, UiTextAlign.Leading, UiVertAlign.Top, wrap: false, ellipsis: true);
-
+        g.DrawText(title, new UiRect(rect.X + 32f, textY, textW, titleH), t.TextPrimary, 12.5f, 400, UiTextAlign.Leading, UiVertAlign.Top, wrap: true, ellipsis: false);
+        if (hintH > 0)
+            g.DrawText(hint, new UiRect(rect.X + 32f, textY + titleH + 3f, textW, hintH), t.TextSecondary, 11.5f, 400, UiTextAlign.Leading, UiVertAlign.Top, wrap: true, ellipsis: false);
         UiPrimitives.DrawSwitch(g, t, hit, id, new UiRect(rect.Right - 36f, rect.CenterY - 12f, 34f, 24f), isChecked);
         if (drawBottomBorder)
-            g.DrawLine(rect.X + 2f, rect.Bottom, rect.Right - 2f, rect.Bottom, t.Border, 1f, roundCaps: false);
+            g.DrawLine(rect.X, rect.Bottom - .5f, rect.Right, rect.Bottom - .5f, t.Border, 1f, roundCaps: false);
         return rect.Bottom;
     }
 
@@ -1121,20 +1041,15 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
     private static void DrawToolbarAction(
         D2dTarget g, UiThemePalette t, UiHitMap hit,
         string id, UiRect rect, string text, Action onClick,
-        Action<string, UiRect, Action, UiCursorKind, string?> register)
+        Action<string, UiRect, Action, UiCursorKind, string?> register, bool enabled = true)
     {
-        UiPrimitives.DrawSecondaryButton(g, t, hit, id, rect, text, fontSize: 11.5f);
-        register(id, rect, onClick, UiCursorKind.Hand, text);
+        UiPrimitives.DrawSecondaryButton(g, t, hit, id, rect, text, fontSize: 11.5f, enabled: enabled);
+        if (enabled) register(id, rect, onClick, UiCursorKind.Hand, text);
     }
 
     public bool OnPointerMove(float x, float y, bool leftDown)
     {
         if (leftDown && _scroll.DragMove(y)) return true;
-        if (_draggingVolumeStep && leftDown)
-        {
-            UpdateVolumeStepFromX(x);
-            return true;
-        }
         return false;
     }
 
@@ -1143,14 +1058,6 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
         if (e.Button != UiMouseButton.Left) return false;
         if (targetId == "st.scroll" && _scroll.BeginDrag(e.Y))
             return true;
-
-        if (targetId == "st.volstep.slider")
-        {
-            _initialVolumeStep = actions.Config.VolumeStep;
-            _draggingVolumeStep = true;
-            UpdateVolumeStepFromX(e.X);
-            return true;
-        }
 
         return false;
     }
@@ -1163,16 +1070,7 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
             _scroll.EndDrag();
             return true;
         }
-        if (_draggingVolumeStep)
-        {
-            FinishVolumeStepDrag();
-            return true;
-        }
         if (clickId == null) return false;
-        const string deviceCard = "st.devchk.";
-        if (e.ClickCount >= 2 && clickId.StartsWith(deviceCard, StringComparison.Ordinal)
-            && !clickId.StartsWith("st.devchk.edit.", StringComparison.Ordinal))
-            clickId = "st.devchk.edit." + clickId[deviceCard.Length..];
         if (!_clicks.TryGetValue(clickId, out var click)) return false;
         click();
         return true;
@@ -1181,12 +1079,6 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
     public bool OnMouseWheel(float x, float y, float delta, bool horizontal)
     {
         if (horizontal || !_contentRect.Contains(x, y)) return false;
-        if (_volumeStepSliderRect.Contains(x, y))
-        {
-            actions.Config.VolumeStep = Math.Clamp(actions.Config.VolumeStep + (delta > 0 ? 1 : -1), 1, 20);
-            SaveConfig();
-            return true;
-        }
         _scroll.OnWheel(delta);
         return true;
     }
@@ -1202,36 +1094,6 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
         {
             actions.Host.Updates.Changed -= OnUpdatesChanged;
             _subscribedUpdates = false;
-        }
-    }
-
-    private void FinishVolumeStepDrag()
-    {
-        if (!_draggingVolumeStep) return;
-        _draggingVolumeStep = false;
-        if (_initialVolumeStep != actions.Config.VolumeStep) SaveConfig();
-    }
-
-    public bool OnFocusedKey(string id, int vk)
-    {
-        if (id != "st.volstep.slider" ||
-            !ViewSliderKeys.TryChange(vk, actions.Config.VolumeStep, 1, 20, 1, 5, out double next)) return false;
-        if ((int)next != actions.Config.VolumeStep)
-        {
-            actions.Config.VolumeStep = (int)next;
-            SaveConfig();
-        }
-        return true;
-    }
-
-    private void UpdateVolumeStepFromX(float x)
-    {
-        int pct = UiPrimitives.SliderValueFromX(_volumeStepSliderRect, x);
-        int step = Math.Clamp(1 + (int)MathF.Round(pct / 100f * 19f), 1, 20);
-        if (actions.Config.VolumeStep != step)
-        {
-            actions.Config.VolumeStep = step;
-            actions.Invalidate();
         }
     }
 
@@ -1287,153 +1149,98 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
 
     private void ExportLanguages()
     {
-        string dir = Path.Combine(actions.Host.DataDirectory, "LangExport");
-        bool ok = L10n.ExportBuiltinLanguages(dir);
-        if (ok) ShellOpen.Folder(dir);
-        actions.ShowNotice(L10n.T(ok ? "Exp.LangExportDone" : "Exp.LangExportFail"));
+        if (_languageFilesBusy) return;
+        string? dir = NativeDialogs.BrowseFolder(actions.OwnerWindow.Handle, L10n.T("Exp.ExportLang"));
+        if (dir == null) return;
+        RunLanguageOperation(() =>
+        {
+            bool ok = L10n.ExportBuiltinLanguages(dir);
+            return () =>
+            {
+                if (ok) ShellOpen.Folder(dir);
+                actions.ShowNotice(L10n.T(ok ? "Exp.LangExportDone" : "Exp.LangExportFail"));
+            };
+        }, "Exp.LangExportFail");
     }
 
     private void ImportLanguage()
     {
-        string? path = NativeDialogs.Open(actions.OwnerWindow.Handle, "JSON language file|*.json|All files|*.*");
-        if (path == null) return;
-        var res = L10n.ImportLanguageFile(path);
-        if (!res.Ok)
+        if (!_languageFilesBusy)
+            ImportLanguages(NativeDialogs.OpenMultiple(actions.OwnerWindow.Handle, "JSON (*.json)|*.json", L10n.T("Exp.ImportLang")));
+    }
+
+    private void ImportLanguages(string[] paths)
+    {
+        if (_languageFilesBusy || paths.Length == 0) return;
+        RunLanguageOperation(() =>
         {
-            actions.ShowNotice(L10n.T("Exp.LangImportFail"));
-            return;
-        }
-        actions.Config.Language = res.Code;
-        if (!SaveConfig()) return;
-        L10n.Instance.ApplyImportedLanguage(res.Code);
-        actions.RefreshAll();
-        actions.ShowNotice(res.CoveragePct < 90
-            ? string.Format(L10n.T("Exp.LangCoverageLow"), res.CoveragePct)
-            : L10n.T("Exp.LangImportDone"));
+            int ok = 0, lastCoverage = 100;
+            string? last = null;
+            foreach (string path in paths)
+            {
+                if (!path.EndsWith(".json", StringComparison.OrdinalIgnoreCase)) continue;
+                var result = L10n.ImportLanguageFile(path);
+                if (!result.Ok) continue;
+                ok++;
+                last = result.Code;
+                lastCoverage = result.CoveragePct;
+            }
+            return () =>
+            {
+                if (last == null) { actions.ShowNotice(L10n.T("Exp.LangImportFail")); return; }
+                actions.Config.Language = last;
+                if (!SaveConfig()) return;
+                L10n.Instance.ApplyImportedLanguage(last);
+                actions.RefreshAll();
+                string message = paths.Length == 1 && lastCoverage < 80
+                    ? string.Format(L10n.T("Exp.LangCoverageLow"), lastCoverage)
+                    : ok < paths.Length ? string.Format(L10n.T("Exp.LangImportPartial"), ok, paths.Length - ok)
+                    : L10n.T("Exp.LangImportDone");
+                actions.ShowNotice(message);
+            };
+        }, "Exp.LangImportFail");
     }
 
     private void RestoreLanguages()
     {
-        _ = Task.Run(async () =>
+        RunLanguageOperation(async () =>
         {
             var res = await L10n.RestoreBuiltinLanguagesAsync().ConfigureAwait(false);
-            actions.Host.TryPost(() =>
+            return () =>
             {
-                if (_disposed) return;
                 if (res.Restored > 0)
                 {
                     L10n.Instance.ApplyImportedLanguage(actions.Config.Language);
                     actions.RefreshAll();
                     actions.ShowNotice(string.Format(L10n.T(res.Ok ? "Exp.LangRestored" : "Exp.LangRestorePartial"), res.Restored));
                 }
-                else
-                {
-                    actions.ShowNotice(L10n.T(res.Ok ? "Exp.LangNoOverride" : "Exp.LangRestoreFail"));
-                }
-            });
-        });
+                else actions.ShowNotice(L10n.T(res.Ok ? "Exp.LangNoOverride" : "Exp.LangRestoreFail"));
+            };
+        }, "Exp.LangRestoreFail");
     }
 
-    private void ExportConfig()
+    private void RunLanguageOperation(Func<Action> work, string errorKey) =>
+        RunLanguageOperation(() => Task.Run(work), errorKey);
+
+    private async void RunLanguageOperation(Func<Task<Action>> work, string errorKey)
     {
-        string? path = NativeDialogs.Save(actions.OwnerWindow.Handle, "SonicRoute configuration|*.json|All files|*.*", "json");
-        if (path == null) return;
-        string snapshot = ConfigService.CaptureExportSnapshot();
-        _ = Task.Run(() =>
+        if (_languageFilesBusy) return;
+        _languageFilesBusy = true;
+        actions.Invalidate();
+        Action done;
+        try { done = await work().ConfigureAwait(false); }
+        catch (Exception e)
         {
-            bool ok = ConfigService.ExportTo(path, snapshot);
-            actions.Host.TryPost(() =>
-            {
-                if (!_disposed)
-                    actions.ShowNotice(L10n.T(ok ? "Exp.ExportDone" : "Exp.TransferFail"));
-            });
-        });
-    }
-
-    private void ImportConfig()
-    {
-        string? path = NativeDialogs.Open(actions.OwnerWindow.Handle, "SonicRoute configuration|*.json|All files|*.*");
-        if (path != null) ImportConfigFromPath(path);
-    }
-
-    private void ImportConfigFromPath(string path)
-    {
-        if (_configImportBusy) return;
-        _configImportBusy = true;
-        _ = Task.Run(() =>
+            ExceptionDiagnostics.Record("Native.LanguageFiles", e);
+            done = () => actions.ShowNotice(L10n.T(errorKey));
+        }
+        actions.Host.TryPost(() =>
         {
-            byte[]? prepared = null;
-            AppConfig? preview = null;
-            int missingDevices = 0;
-            int missingApps = 0;
-            try
-            {
-                prepared = ConfigService.PrepareImport(path);
-                if (prepared != null)
-                {
-                    preview = ConfigService.ReadPreparedConfig(prepared);
-                    if (preview != null)
-                    {
-                        var devIds = new HashSet<string>(
-                            ProductAudio.Devices(Flow.Render).Concat(ProductAudio.Devices(Flow.Capture)).Select(d => d.Id),
-                            StringComparer.OrdinalIgnoreCase);
-                        missingDevices = (preview.DeviceNames?.Keys ?? Enumerable.Empty<string>())
-                            .Concat(preview.HiddenOutputDevices ?? [])
-                            .Concat(preview.HiddenInputDevices ?? [])
-                            .Distinct(StringComparer.OrdinalIgnoreCase)
-                            .Count(id => !AudioService.IsSystemDefault(id) && !devIds.Contains(id));
-
-                        var appNames = new HashSet<string>(
-                            actions.Host.Audio.Apps().Select(a => a.ProcessName ?? ""),
-                            StringComparer.OrdinalIgnoreCase);
-                        missingApps = (preview.AppNames?.Keys ?? Enumerable.Empty<string>())
-                            .Concat(preview.AppIcons?.Keys ?? Enumerable.Empty<string>())
-                            .Concat(preview.HiddenPanelApps ?? [])
-                            .Concat(preview.DisabledAutoSwitchApps ?? [])
-                            .Where(n => !string.IsNullOrWhiteSpace(n))
-                            .Distinct(StringComparer.OrdinalIgnoreCase)
-                            .Count(n => !appNames.Contains(n));
-                    }
-                }
-            }
-            catch { }
-
-            actions.Host.TryPost(() =>
-            {
-                _configImportBusy = false;
-                if (_disposed) return;
-                if (prepared == null || preview == null)
-                {
-                    actions.ShowNotice(L10n.T("Exp.TransferFail"));
-                    return;
-                }
-
-                string msg = string.Format(L10n.T("Exp.ImportPreview"),
-                    preview.Hotkeys?.Count ?? 0,
-                    preview.DeviceNames?.Count ?? 0,
-                    preview.AppNames?.Count ?? 0,
-                    missingDevices,
-                    missingApps);
-                if (!NativeDialogs.ConfirmImport(actions.OwnerWindow.Handle, L10n.T("Exp.ImportConfig"), msg)) return;
-
-                ConfigService.FlushPendingSaves();
-                if (!ConfigService.ApplyImport(prepared))
-                {
-                    actions.ShowNotice(L10n.T("Exp.TransferFail"));
-                    return;
-                }
-                actions.ShowNotice(L10n.T("Exp.ImportDone"));
-                actions.Host.RestartPreview();
-            });
+            _languageFilesBusy = false;
+            if (_disposed) return;
+            done();
+            actions.Invalidate();
         });
-    }
-
-    private void ResetSettings()
-    {
-        if (!NativeDialogs.Confirm(actions.OwnerWindow.Handle, L10n.T("Exp.ClearConfig"), L10n.T("Exp.ClearConfigHint")))
-            return;
-        if (ConfigService.TryResetToDefault(out _)) actions.Host.RestartPreview();
-        else actions.ShowNotice(L10n.T("Tray.SaveFailed"));
     }
 
     private void OnUpdatesChanged(string? notes)
@@ -1663,5 +1470,4 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
         return new UiRect(l, t, MathF.Max(0f, right - l), MathF.Max(0f, b - t));
     }
 
-    private static bool IsZh() => L10n.CurrentLanguage.StartsWith("zh", StringComparison.OrdinalIgnoreCase);
 }

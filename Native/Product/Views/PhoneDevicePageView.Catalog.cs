@@ -7,22 +7,36 @@ namespace SonicRoute.Native.Product.Views;
 internal sealed partial class PhoneDevicePageView
 {
     private const string CatalogRow = "phone.catalog.row:";
-    private bool _showCatalog, _catalogLoading;
+    private bool _showCatalog, _catalogLoading, _catalogFetched, _focusCatalogSearch;
     private float _detailOffset;
     private UiRect _visibleDeviceRect;
     private AndroidApp[] _filteredCatalog = [];
     private readonly HashSet<string> _selectedCatalog = new(StringComparer.Ordinal);
     private string? _catalogAnchor;
 
+    private AndroidAppCatalogCache? _catalogCache;
+
+    private void DrawAppPin(D2dTarget g, UiThemePalette theme, UiRect bounds, AndroidApp app, bool retained)
+    {
+        string id = "phone.pin:" + app.Package;
+        _hit.Add(id, bounds, UiCursorKind.Hand, L10n.T(retained ? "Phone.RemoveFromQuickPanel" : "Phone.AddToQuickPanel"));
+        if (_hit.IsHover(id)) g.FillRoundedRect(bounds, 8f, theme.NavHover);
+        if (_hit.ShowFocus && _hit.FocusId == id) g.DrawRoundedRect(bounds, 8f, theme.Accent, 1f);
+        g.DrawIcon(UiIcon.Pin, new UiRect(bounds.CenterX - 9f, bounds.CenterY - 9f, 18f, 18f),
+            theme.Accent.WithAlphaFraction(retained ? 1f : 0.55f), rotationDeg: retained ? 45f : 0f, filled: true);
+    }
+
     private void CloseCatalog()
     {
         if (_showCatalog) _scroll.Offset = _detailOffset;
-        _showCatalog = _catalogLoading = false;
+        if (_catalogLoading) _statusMessage = null;
+        _showCatalog = _catalogLoading = _catalogFetched = _focusCatalogSearch = false;
         _selectedCatalog.Clear();
         _catalogAnchor = null;
         _catalogApps = [];
         _filteredCatalog = [];
         CancelCts(ref _catalogCts);
+        _catalogCache = null;
     }
 
     private void SetCatalogSearch(string text)
@@ -51,10 +65,21 @@ internal sealed partial class PhoneDevicePageView
         var done = new UiRect(inner.Right - 70f, inner.Y, 70f, 32f);
         UiPrimitives.DrawSecondaryButton(g, theme, _hit, "phone.catalog.done", done, L10n.T("Phone.DoneButton"));
         g.DrawText(L10n.T("Phone.AppPickerTitle"), new UiRect(inner.X, inner.Y, inner.Width - 80f, 32f), theme.TextPrimary, 18f, 600);
-        var search = new UiRect(inner.X, done.Bottom + 8f, inner.Width, 34f);
+        var search = new UiRect(inner.X, done.Bottom + 12f, inner.Width, 34f);
         UiPrimitives.DrawTextBox(g, theme, _hit, "phone.appsearch", search, _appSearch, L10n.T("Phone.SearchAppsHint"),
             focused: _actions.ActiveInlineEditTag == "phone.appsearch", search: true);
-        string status = L10n.T(_catalogLoading ? "Phone.LoadingPhoneApps" : _catalogApps.Count == 0 ? "Phone.CatalogEmpty" : "Phone.CatalogSelectionHint");
+        if (_focusCatalogSearch)
+        {
+            _focusCatalogSearch = false;
+            _actions.Host.TryPost(() =>
+            {
+                if (!_active || !_showCatalog || _actions.ActiveInlineEditTag != null) return;
+                _hit.FocusPointer(search.CenterX, search.CenterY);
+                _actions.StartInlineEdit("phone.appsearch", search, _appSearch, SetCatalogSearch, (value, _) => SetCatalogSearch(value));
+            });
+        }
+        string status = _catalogLoading ? L10n.T("Phone.LoadingPhoneApps")
+            : _catalogFetched ? L10n.T(_catalogApps.Count == 0 ? "Phone.CatalogEmpty" : "Phone.CatalogSelectionHint") : "";
         float statusH = MathF.Max(16f, D2dSharedContext.Instance.MeasureText(status, UiMetrics.FontFamily, 11f, 400, inner.Width, 84f, true).Height);
         g.DrawText(status, new UiRect(inner.X, search.Bottom + 8f, inner.Width, statusH), theme.TextSecondary, 11f, wrap: true);
         float top = search.Bottom + statusH + 16f;
@@ -81,8 +106,7 @@ internal sealed partial class PhoneDevicePageView
                 g.DrawBgraBitmap("phonepage.icon:" + app.Package, pixels, width, height, icon, version: version);
             bool pinned = retained.Any(item => item.Package == app.Package);
             var pin = new UiRect(row.Right - 34f, row.CenterY - 14f, 28f, 28f);
-            UiPrimitives.DrawGhostIconButton(g, theme, _hit, "phone.pin:" + app.Package, pin, UiIcon.Pin, 14f,
-                active: pinned, tooltip: L10n.T(pinned ? "Phone.RemoveFromQuickPanel" : "Phone.AddToQuickPanel"));
+            DrawAppPin(g, theme, pin, app, pinned);
             float tw = MathF.Max(1f, pin.X - icon.Right - 14f);
             g.DrawText(app.Name, new UiRect(icon.Right + 8f, row.Y + 6f, tw, 18f), theme.TextPrimary, 13f);
             g.DrawText(app.Package, new UiRect(icon.Right + 8f, row.Y + 24f, tw, 15f), theme.TextSecondary, 10f);
@@ -120,10 +144,10 @@ internal sealed partial class PhoneDevicePageView
         _actions.ShowMenuAtCursor([new UiMenuItem
         {
             Text = apps.Length == 0 ? L10n.T("Phone.AddSelectedApps") : string.Format(L10n.T("Phone.AddSelectedAppsCount"), apps.Length),
-            Enabled = apps.Length > 0 && !_busy,
+            Enabled = apps.Length > 0 && !_busy && !_catalogLoading,
             Click = () =>
             {
-                if (_active && _showCatalog && !_busy && store.Profile.Id == profile) store.RetainMany(apps);
+                if (_active && _showCatalog && !_busy && !_catalogLoading && store.Profile.Id == profile) store.RetainMany(apps);
             }
         }]);
     }

@@ -4,6 +4,9 @@ internal enum UiIcon
 {
     Play,
     Pause,
+    WifiSignalOuter,
+    WifiSignalNear,
+    WifiSignalDot,
     PreviousTrack,
     NextTrack,
     Waiting,
@@ -35,6 +38,8 @@ internal enum UiIcon
     Phone,
 #if SONICROUTE_PHONE
     AirPlay,
+    Download,
+    Folder,
 #endif
     Pin,
     File,
@@ -74,6 +79,9 @@ internal static class UiIcons
     {
         UiIcon.Play => "M6,3 L21,12 L6,21 Z",
         UiIcon.Pause => "M5,3 L10,3 L10,21 L5,21 Z M14,3 L19,3 L19,21 L14,21 Z",
+        UiIcon.WifiSignalOuter => "M0,5.66 Q12,-4.29 24,5.66 L21.26,8.4 Q12,0.69 2.74,8.4 Z",
+        UiIcon.WifiSignalNear => "M5.49,11.49 Q12,5.31 18.51,11.49 L15.77,14.23 Q12,10.46 8.23,14.23 Z",
+        UiIcon.WifiSignalDot => "M12,14.91 L14.57,17.49 L12,20.06 L9.43,17.49 Z",
         UiIcon.PreviousTrack => "M4,3 L7,3 L7,10 L20,3 L20,21 L7,14 L7,21 L4,21 Z",
         UiIcon.NextTrack => "M4,3 L17,10 L17,3 L20,3 L20,21 L17,21 L17,14 L4,21 Z",
         UiIcon.Waiting => "M5,3 L19,3 M5,21 L19,21 M7,3 L7,7 L17,17 L17,21 M17,3 L17,7 L7,17 L7,21",
@@ -105,6 +113,10 @@ internal static class UiIcons
         UiIcon.Phone => "M7,1 L17,1 Q19,1 19,3 L19,21 Q19,23 17,23 L7,23 Q5,23 5,21 L5,3 Q5,1 7,1 Z M10,3 L14,3 M10,21 L14,21",
 #if SONICROUTE_PHONE
         UiIcon.AirPlay => "M6,18 H4 Q2,18 2,16 V5 Q2,3 4,3 H20 Q22,3 22,5 V16 Q22,18 20,18 H18 M5,22 L12,13 L19,22 Z",
+#endif
+#if SONICROUTE_PHONE
+        UiIcon.Folder => "M2,6 Q2,4 4,4 H9 L12,7 H20 Q22,7 22,9 V18 Q22,20 20,20 H4 Q2,20 2,18 Z",
+        UiIcon.Download => "M12,2 V15 M6,9 L12,15 L18,9 M3,17 V22 H21 V17",
 #endif
         UiIcon.Pin => "M8,2 L16,2 L15,8 L19,12 L19,14 L13,14 L12,23 L11,14 L5,14 L5,12 L9,8 Z",
         UiIcon.File => "M5,2 L14,2 L20,8 L20,22 L5,22 Z M14,2 L14,8 L20,8",

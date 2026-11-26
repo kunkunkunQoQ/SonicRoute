@@ -48,7 +48,7 @@ internal sealed class MainWindowShell : LayeredWindow, IViewHostActions
     private UiRect _pageViewport;
     private nint _appIconHandle;
 
-    // Sidebar collapse animation (196 <-> 0 DIP, 180ms CubicOut)
+    // Sidebar collapse animation (196 <-> 64 DIP, 180ms CubicOut)
     private float _sidebarWidth;
     private float _sidebarStartWidth;
     private float _sidebarTargetWidth;
@@ -259,7 +259,8 @@ internal sealed class MainWindowShell : LayeredWindow, IViewHostActions
         bool selectAll = false,
         bool readOnlyMultiline = false,
         int maxLength = 0,
-        bool acceptFileDrop = false)
+        bool acceptFileDrop = false,
+        bool centered = false)
     {
         if (Handle == 0 || !IsVisible) return;
         ClosePopups();
@@ -292,7 +293,8 @@ internal sealed class MainWindowShell : LayeredWindow, IViewHostActions
             selectAll,
             readOnlyMultiline,
             maxLength,
-            acceptFileDrop);
+            acceptFileDrop,
+            centered);
         Invalidate();
     }
 
@@ -464,7 +466,7 @@ internal sealed class MainWindowShell : LayeredWindow, IViewHostActions
         {
             g.PushClip(navClip);
             _hit.PushClip(navClip);
-            RenderNavRail(g, new UiRect(0f, bodyY, UiMetrics.NavExpandedWidth, bodyH));
+            RenderNavRail(g, navClip);
             _hit.PopClip();
             g.PopClip();
             g.DrawLine(navClip.Right - 0.5f, bodyY, navClip.Right - 0.5f, heightDip, _theme.Border, 1f, roundCaps: false);
@@ -500,7 +502,8 @@ internal sealed class MainWindowShell : LayeredWindow, IViewHostActions
     {
         float textW = D2dSharedContext.Instance.MeasureText(WindowTitle, UiMetrics.FontFamily, 13.5f, 600, 200f, 32f, false).Width;
         var pillRect = new UiRect(8f, (rect.Height - 28f) * 0.5f, textW + 16f, 28f);
-        _hit.Add("shell.titleToggle", pillRect, UiCursorKind.Hand, L10n.T("Window.DragToMove"));
+        string toggleTip = L10n.T(_config.MainSidebarCollapsed ? "Window.ExpandNavigation" : "Window.CollapseNavigation");
+        _hit.Add("shell.titleToggle", pillRect, UiCursorKind.Hand, toggleTip + "\n" + L10n.T("Window.DragToMove"));
 
         bool pillHot = _hit.IsHover("shell.titleToggle");
         if (pillHot) g.FillRoundedRect(pillRect, 7f, _theme.NavHover);
@@ -563,9 +566,11 @@ internal sealed class MainWindowShell : LayeredWindow, IViewHostActions
 
     private void RenderNavRail(D2dTarget g, UiRect navRect)
     {
-        float x = navRect.X + 14f;
+        float expanded = (navRect.Width - UiMetrics.NavCollapsedWidth) / (UiMetrics.NavExpandedWidth - UiMetrics.NavCollapsedWidth);
+        float sidePadding = 12f + 2f * expanded;
+        float x = navRect.X + sidePadding;
         float y = navRect.Y + 22f;
-        float itemW = navRect.Width - 28f;
+        float itemW = navRect.Width - 2f * sidePadding;
 
         DrawNavItem(g, MainNavTab.Apps, L10n.T("Nav.Apps"), UiIcon.Apps, new UiRect(x, y, itemW, UiMetrics.NavItemHeight));
         y += UiMetrics.NavItemHeight + 4f;
@@ -582,23 +587,39 @@ internal sealed class MainWindowShell : LayeredWindow, IViewHostActions
             y += UiMetrics.NavItemHeight + 8f;
             DrawNavItem(g, MainNavTab.Experimental, L10n.T("Nav.Experimental"), UiIcon.Experiment, new UiRect(x, y, itemW, UiMetrics.NavItemHeight));
         }
+
+        if (_config.MainSidebarCollapsed)
+        {
+            const string id = "shell.expandNavigation";
+            var expand = new UiRect(navRect.X + (UiMetrics.NavCollapsedWidth - UiMetrics.NavItemHeight) * .5f,
+                navRect.Bottom - UiMetrics.NavItemHeight - 12f, UiMetrics.NavItemHeight, UiMetrics.NavItemHeight);
+            UiPrimitives.DrawGhostIconButton(g, _theme, _hit, id, expand, UiIcon.ExpandNav, 19f,
+                tooltip: L10n.T("Window.ExpandNavigation"));
+        }
     }
 
     private void DrawNavItem(D2dTarget g, MainNavTab tab, string label, UiIcon icon, UiRect rect)
     {
         string id = "nav." + tab;
-        _hit.Add(id, rect, UiCursorKind.Hand);
+        _hit.Add(id, rect, UiCursorKind.Hand, _config.MainSidebarCollapsed || _sidebarAnimating ? label : null);
         bool selected = _currentTab == tab;
         bool hot = _hit.IsHover(id);
 
         if (selected) g.FillRoundedRect(rect, UiMetrics.NavItemRadius, _theme.NavSelected);
         else if (hot) g.FillRoundedRect(rect, UiMetrics.NavItemRadius, _theme.NavHover);
 
-        var iconRect = new UiRect(rect.X + 14f, rect.CenterY - 9.5f, 19f, 19f);
+        float expanded = Math.Clamp((rect.Width - UiMetrics.NavItemHeight) / (UiMetrics.NavExpandedWidth - 28f - UiMetrics.NavItemHeight), 0f, 1f);
+        float iconInset = (UiMetrics.NavItemHeight - 19f) * .5f;
+        var iconRect = new UiRect(rect.X + iconInset + (14f - iconInset) * expanded, rect.CenterY - 9.5f, 19f, 19f);
         g.DrawIcon(icon, iconRect, selected ? _theme.Accent : _theme.TextSecondary, 1.8f);
 
-        var textRect = new UiRect(rect.X + 14f + 30f, rect.Y, MathF.Max(10f, rect.Width - 52f), rect.Height);
-        g.DrawText(label, textRect, _theme.TextPrimary, UiMetrics.NavFontSize, selected ? 600 : 400, UiTextAlign.Leading, UiVertAlign.Center);
+        float textWidth = rect.Width - 52f;
+        if (textWidth > 8f)
+        {
+            var textRect = new UiRect(rect.X + 44f, rect.Y, textWidth, rect.Height);
+            g.DrawText(label, textRect, _theme.TextPrimary.WithAlphaFraction(expanded), UiMetrics.NavFontSize,
+                selected ? 600 : 400, UiTextAlign.Leading, UiVertAlign.Center);
+        }
     }
 
     private void RenderNoticeToast(D2dTarget g, float widthDip, float heightDip, string text)
@@ -735,6 +756,7 @@ internal sealed class MainWindowShell : LayeredWindow, IViewHostActions
     {
         switch (clickId)
         {
+            case "shell.expandNavigation": if (_config.MainSidebarCollapsed) ToggleSidebar(); break;
             case "shell.min": MinimizeWindow(); break;
             case "shell.max": ToggleMaximize(); break;
             case "shell.close": Hide(); break;

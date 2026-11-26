@@ -13,25 +13,10 @@ namespace SonicRoute.Native.Product.Views;
 
 internal sealed class ExperimentalPageView(IViewHostActions actions) : IViewPage
 {
-    private static readonly (string Code, string Key)[] OsdPositionChoices =
-    [
-        ("TL", "Theme.PosTL"),
-        ("TC", "Theme.PosTC"),
-        ("TR", "Theme.PosTR"),
-        ("ML", "Theme.PosML"),
-        ("MC", "Theme.PosMC"),
-        ("MR", "Theme.PosMR"),
-        ("BL", "Theme.PosBL"),
-        ("BC", "Theme.PosBC"),
-        ("BR", "Theme.PosBR"),
-        ("Custom", "Exp.Osd.Custom"),
-    ];
-
     private readonly UiScrollState _scroll = new();
     private readonly Dictionary<string, Action> _clicks = new(StringComparer.Ordinal);
     private UiRect _contentRect;
     private bool _clearingHistory;
-    private bool _resettingRoutes;
     private bool _configBusy;
     private bool _disposed;
 
@@ -63,9 +48,9 @@ internal sealed class ExperimentalPageView(IViewHostActions actions) : IViewPage
 
     public void RefreshData() => actions.Invalidate();
 
-    public void OnFilesDropped(string[] paths)
+    public void OnFilesDropped(string[] paths, string? targetId)
     {
-        if (paths == null || paths.Length == 0 || _configBusy) return;
+        if (targetId != "exp.cfg.import" || paths.Length == 0 || _configBusy) return;
         string? jsonPath = paths.FirstOrDefault(p =>
             !string.IsNullOrWhiteSpace(p) &&
             p.EndsWith(".json", StringComparison.OrdinalIgnoreCase) &&
@@ -85,11 +70,35 @@ internal sealed class ExperimentalPageView(IViewHostActions actions) : IViewPage
         var viewport = contentRect;
         _scroll.ViewportHeight = viewport.Height;
 
-        float padR = _scroll.MaxOffset > 0.5f ? UiMetrics.ScrollBarWidth + 6f : 0f;
+        const float pad = 19f, gap = 14f;
+        bool histActive = cfg.ExperimentalMode && cfg.ExecutionHistoryEnabled;
+        string limitHint = L10n.T("History.LimitHint");
+        string transferHint = L10n.T("Exp.ConfigTransferHint");
+        string clearHint = L10n.T("Exp.ClearConfigHint");
+        (float PollRow, float HistoryRow, float LimitH, float Left, float Right, float TransferH, float ClearH, float Total) Measure(float width)
+        {
+            float inner = width - 2f * pad;
+            float poll = SettingsPageView.SwitchHeight(L10n.T("Exp.BackgroundPolling"), L10n.T("Exp.BackgroundPollingHint"), inner);
+            float history = SettingsPageView.SwitchHeight(L10n.T("History.Title"), L10n.T("History.Hint"), inner);
+            float limit = histActive ? SettingsPageView.TextHeight(limitHint, 11.5f, inner - 32f) : 0f;
+            float left = (inner - 1f) * 2f / 3f - gap, right = inner - left - 2f * gap - 1f;
+            float transfer = SettingsPageView.TextHeight(transferHint, 11.5f, left);
+            float clear = SettingsPageView.TextHeight(clearHint, 11.5f, right);
+            float options = histActive ? 96f + limit : 0f;
+            float total = 36f + 3f * (2f * pad + 14f) + poll + history + options + 26f + MathF.Max(transfer, clear) + 10f + 34f;
+            return (poll, history, limit, left, right, transfer, clear, total);
+        }
+        float w = MathF.Max(240f, viewport.Width - UiMetrics.ScrollBarWidth);
+        var layout = Measure(w);
+        if (layout.Total <= viewport.Height)
+        {
+            w = MathF.Max(240f, viewport.Width);
+            layout = Measure(w);
+        }
+        _scroll.ContentHeight = layout.Total;
+        _scroll.Clamp();
         float x = viewport.X;
-        float w = MathF.Max(240f, viewport.Width - padR);
         float y = viewport.Y - _scroll.Offset;
-        float startY = y;
 
         void Register(string id, UiRect r, Action onClick, UiCursorKind cursor = UiCursorKind.Hand, string? tip = null)
         {
@@ -107,31 +116,28 @@ internal sealed class ExperimentalPageView(IViewHostActions actions) : IViewPage
         g.DrawText(L10n.T("Nav.Experimental"), new UiRect(x, y, w, 22f), t.TextPrimary, 16f, 600);
         y += 36f;
 
-        float pad = 16f;
         float innerW = w - pad * 2f;
 
-        // 2. Background Polling Fallback Card (WPF 1.36 ExpBackgroundPollingCheck)
-        float pollH = pad + 64f + pad;
+        float pollRow = layout.PollRow;
+        float pollH = pad + pollRow + pad;
         UiPrimitives.DrawCard(g, t, new UiRect(x, y, w, pollH));
-        DrawSwitchRow(g, t, hit, "exp.polling", new UiRect(x + pad, y + pad, innerW, 64f),
+        SettingsPageView.DrawSettingsSwitchWithHint(g, t, hit, "exp.polling", new UiRect(x + pad, y + pad, innerW, pollRow),
             UiIcon.Options, L10n.T("Exp.BackgroundPolling"), L10n.T("Exp.BackgroundPollingHint"),
-            cfg.BackgroundPollingFallbackEnabled, false, () =>
+            cfg.BackgroundPollingFallbackEnabled, true, () =>
             {
                 cfg.BackgroundPollingFallbackEnabled = !cfg.BackgroundPollingFallbackEnabled;
                 SaveConfig();
             }, Register);
         y += pollH + 14f;
 
-        // 3. Execution History Card (WPF 1.36 ExpHistoryCheck)
-        bool histActive = cfg.ExperimentalMode && cfg.ExecutionHistoryEnabled;
-        string limitHint = L10n.T("History.LimitHint");
-        float limitHintH = histActive ? D2dSharedContext.Instance.MeasureText(limitHint, UiMetrics.FontFamily, 11.5f, 400, innerW - 32f, 90f, true).Height : 0f;
-        float histH = pad + 60f + (histActive ? 86f + limitHintH : 0f) + pad;
+        float limitHintH = layout.LimitH;
+        float historyRow = layout.HistoryRow;
+        float histH = pad + historyRow + (histActive ? 96f + limitHintH : 0f) + pad;
         UiPrimitives.DrawCard(g, t, new UiRect(x, y, w, histH));
         float hy = y + pad;
-        DrawSwitchRow(g, t, hit, "exp.history", new UiRect(x + pad, hy, innerW, 60f),
-            UiIcon.History, L10n.T("History.Title"), L10n.T("History.Hint"),
-            cfg.ExecutionHistoryEnabled, histActive, () =>
+        SettingsPageView.DrawSettingsSwitchWithHint(g, t, hit, "exp.history", new UiRect(x + pad, hy, innerW, historyRow),
+            UiIcon.Options, L10n.T("History.Title"), L10n.T("History.Hint"),
+            cfg.ExecutionHistoryEnabled, true, () =>
             {
                 bool previous = cfg.ExecutionHistoryEnabled;
                 cfg.ExecutionHistoryEnabled = !previous;
@@ -146,9 +152,10 @@ internal sealed class ExperimentalPageView(IViewHostActions actions) : IViewPage
             }, Register);
         if (histActive)
         {
-            hy += 66f;
-            g.DrawText(L10n.T("History.Limit"), new UiRect(x + pad + 32f, hy, 140f, 32f), t.TextPrimary, 12.5f, 400, UiTextAlign.Leading, UiVertAlign.Center);
-            var limRect = new UiRect(x + pad + 178f, hy, 70f, 32f);
+            hy += historyRow + 8f;
+            float labelW = D2dSharedContext.Instance.MeasureText(L10n.T("History.Limit"), UiMetrics.FontFamily, 12.5f, 400, 240f, 32f, false).Width;
+            g.DrawText(L10n.T("History.Limit"), new UiRect(x + pad + 32f, hy, labelW, 32f), t.TextPrimary, 12.5f, 400, UiTextAlign.Leading, UiVertAlign.Center);
+            var limRect = new UiRect(x + pad + 32f + labelW + 10f, hy, 70f, 32f);
             UiPrimitives.DrawTextBox(g, t, hit, "exp.hist.limit", limRect,
                 Math.Clamp(cfg.ExecutionHistoryLimitMb, 1, 64).ToString(CultureInfo.InvariantCulture),
                 focused: actions.ActiveInlineEditTag == "exp.hist.limit");
@@ -176,11 +183,14 @@ internal sealed class ExperimentalPageView(IViewHostActions actions) : IViewPage
             }, UiCursorKind.IBeam);
 
             g.DrawText(limitHint, new UiRect(x + pad + 32f, limRect.Bottom + 6f, innerW - 32f, limitHintH), t.TextSecondary, 11.5f, 400, UiTextAlign.Leading, UiVertAlign.Top, wrap: true);
-            var viewRect = new UiRect(x + pad + 32f, limRect.Bottom + 16f + limitHintH, 130f, 32f);
-            UiPrimitives.DrawSecondaryButton(g, t, hit, "exp.hist.view", viewRect, L10n.T("History.View"), fontSize: 12f);
+            float ButtonW(string key) => MathF.Max(80f, D2dSharedContext.Instance.MeasureText(L10n.T(key), UiMetrics.FontFamily, 13f, 400, innerW, 34f, false).Width + 2f);
+            var viewRect = new UiRect(x + pad + 32f, limRect.Bottom + 16f + limitHintH, ButtonW("History.View"), 34f);
+            UiPrimitives.DrawSecondaryButton(g, t, hit, "exp.hist.view", viewRect, "", fontSize: 13f);
+            g.DrawText(L10n.T("History.View"), viewRect, t.TextPrimary, 13f, 400, UiTextAlign.Center, UiVertAlign.Center);
             Register("exp.hist.view", viewRect, actions.OpenHistory);
-            var clrRect = new UiRect(viewRect.Right + 8f, viewRect.Y, 120f, 32f);
-            UiPrimitives.DrawSecondaryButton(g, t, hit, "exp.hist.clear", clrRect, L10n.T("History.Clear"), enabled: !_clearingHistory, fontSize: 12f);
+            var clrRect = new UiRect(viewRect.Right + 8f, viewRect.Y, ButtonW("History.Clear"), 34f);
+            UiPrimitives.DrawSecondaryButton(g, t, hit, "exp.hist.clear", clrRect, "", enabled: !_clearingHistory);
+            g.DrawText(L10n.T("History.Clear"), clrRect, _clearingHistory ? t.TextSecondary : t.TextPrimary, 13f, 400, UiTextAlign.Center, UiVertAlign.Center);
             if (!_clearingHistory) Register("exp.hist.clear", clrRect, () =>
             {
                 var store = AutoRuleService.GetHistoryStore();
@@ -203,24 +213,27 @@ internal sealed class ExperimentalPageView(IViewHostActions actions) : IViewPage
         }
         y += histH + 14f;
 
-        // 7. Config Files Management Card (WPF 1.36 ExpConfigFiles)
-        float cfgH = pad + 28f + 38f + 40f + pad;
+        float leftWidth = layout.Left, rightWidth = layout.Right;
+        float rightX = x + pad + leftWidth + 2f * gap + 1f;
+        float transferH = layout.TransferH, clearH = layout.ClearH;
+        float hintH = MathF.Max(transferH, clearH);
+        float cfgH = pad * 2 + 18f + 8f + hintH + 10f + 34f;
         UiPrimitives.DrawCard(g, t, new UiRect(x, y, w, cfgH));
         float cy = y + pad;
-        UiPrimitives.DrawSettingsSectionHeader(g, t, new UiRect(x + pad, cy, innerW, 28f), UiIcon.File, L10n.T("Exp.ConfigFiles"));
-        cy += 34f;
-        g.DrawText(L10n.T("Exp.ConfigTransferHint"), new UiRect(x + pad + 32f, cy, innerW - 32f, 22f),
-            t.TextSecondary, 11.5f, 400, UiTextAlign.Leading, UiVertAlign.Center);
-        cy += 30f;
+        g.DrawText(L10n.T("Exp.ConfigFiles"), new UiRect(x + pad, cy, innerW, 18f), t.TextSecondary, 13f, 600);
+        cy += 26f;
+        g.DrawLine(rightX - gap - 1f, cy, rightX - gap - 1f, y + cfgH - pad, t.Border, 1f, roundCaps: false);
+        g.DrawText(transferHint, new UiRect(x + pad, cy, leftWidth, transferH), t.TextSecondary, 11.5f, 400, UiTextAlign.Leading, UiVertAlign.Top, wrap: true);
+        g.DrawText(clearHint, new UiRect(rightX, cy, rightWidth, clearH), t.TextSecondary, 11.5f, 400, UiTextAlign.Leading, UiVertAlign.Top, wrap: true);
+        float ButtonWidth(string key) => D2dSharedContext.Instance.MeasureText(L10n.T(key), UiMetrics.FontFamily, 13f, 400, innerW, 34f, false).Width + 20f;
+        float btnW = MathF.Min(MathF.Max(ButtonWidth("Exp.ExportConfig"), ButtonWidth("Exp.ImportConfig")), (leftWidth - 8f) / 2f);
+        var expBtn = new UiRect(x + pad, cy + hintH + 10f, btnW, 34f);
+        var impBtn = new UiRect(expBtn.Right + 8f, expBtn.Y, btnW, 34f);
+        var rstBtn = new UiRect(rightX, cy + hintH + 10f, MathF.Min(ButtonWidth("Exp.ClearConfig"), rightWidth), 34f);
 
-        float btnW = MathF.Min(164f, (innerW - 48f) / 3f);
-        var expBtn = new UiRect(x + pad + 32f, cy, btnW, 34f);
-        var impBtn = new UiRect(expBtn.Right + 8f, cy, btnW, 34f);
-        var rstBtn = new UiRect(impBtn.Right + 16f, cy, btnW, 34f);
-
-        UiPrimitives.DrawSecondaryButton(g, t, hit, "exp.cfg.export", expBtn, L10n.T("Exp.ExportConfig"), enabled: !_configBusy, fontSize: 12f);
-        UiPrimitives.DrawSecondaryButton(g, t, hit, "exp.cfg.import", impBtn, L10n.T("Exp.ImportConfig"), enabled: !_configBusy, fontSize: 12f);
-        UiPrimitives.DrawSecondaryButton(g, t, hit, "exp.cfg.clear", rstBtn, L10n.T("Exp.ClearConfig"), enabled: !_configBusy, danger: true, fontSize: 12f);
+        UiPrimitives.DrawSecondaryButton(g, t, hit, "exp.cfg.export", expBtn, L10n.T("Exp.ExportConfig"), enabled: !_configBusy, fontSize: 13f);
+        UiPrimitives.DrawSecondaryButton(g, t, hit, "exp.cfg.import", impBtn, L10n.T("Exp.ImportConfig"), enabled: !_configBusy, fontSize: 13f);
+        UiPrimitives.DrawSecondaryButton(g, t, hit, "exp.cfg.clear", rstBtn, L10n.T("Exp.ClearConfig"), enabled: !_configBusy, fontSize: 13f);
         if (!_configBusy)
         {
             Register("exp.cfg.export", expBtn, ExportConfig, UiCursorKind.Hand, L10n.T("Exp.ExportConfig"));
@@ -228,265 +241,11 @@ internal sealed class ExperimentalPageView(IViewHostActions actions) : IViewPage
             Register("exp.cfg.clear", rstBtn, ResetConfig, UiCursorKind.Hand, L10n.T("Exp.ClearConfigHint"));
         }
 
-        y += cfgH + 16f;
-
-        // 1. Experimental Master Toggle Card
-        float masterH = pad + 56f + pad;
-        UiPrimitives.DrawCard(g, t, new UiRect(x, y, w, masterH));
-        DrawSwitchRow(g, t, hit, "exp.mode", new UiRect(x + pad, y + pad, innerW, 56f),
-            UiIcon.Experiment, L10n.T("St.ExperimentalMode"), L10n.T("St.ExperimentalModeHint"),
-            cfg.ExperimentalMode, false, () =>
-            {
-                if (!cfg.ExperimentalMode && !NativeDialogs.Confirm(actions.OwnerWindow.Handle, L10n.T("St.ExperimentalMode"),
-                    IsZh() ? "实验功能可能不稳定，确定启用？" : "Experimental features may be unstable. Enable them?"))
-                    return;
-                cfg.ExperimentalUnlocked = true;
-                cfg.ExperimentalMode = !cfg.ExperimentalMode;
-                if (!SaveConfig()) return;
-                if (!cfg.ExperimentalMode) AutoRuleService.StopExecutionHistory();
-                actions.ShowNotice(L10n.T("St.ExpModeNeedRestart"));
-            }, Register);
-        y += masterH + 14f;
-
-        // 4. Mic & Panel Quick Behavior Card
-        float micH = pad + 56f + (cfg.ExperimentalMic ? 52f : 0f) + 56f + pad;
-        UiPrimitives.DrawCard(g, t, new UiRect(x, y, w, micH));
-        float my = y + pad;
-        DrawSwitchRow(g, t, hit, "exp.mic", new UiRect(x + pad, my, innerW, 56f),
-            UiIcon.Microphone, L10n.T("St.ExperimentalMic"), L10n.T("St.ExperimentalMicHint"),
-            cfg.ExperimentalMic, true, () =>
-            {
-                cfg.ExperimentalMic = !cfg.ExperimentalMic;
-                if (!SaveConfig()) return;
-                actions.ShowNotice(L10n.T("St.ExpMicNeedRestart"));
-            }, Register);
-        my += 56f;
-        if (cfg.ExperimentalMic)
-        {
-            DrawSwitchRow(g, t, hit, "exp.micpanel", new UiRect(x + pad + 20f, my, innerW - 20f, 52f),
-                UiIcon.Microphone, L10n.T("Exp.MicPanel"), "",
-                cfg.MicInPanel, true, () =>
-                {
-                    cfg.MicInPanel = !cfg.MicInPanel;
-                    if (!SaveConfig()) return;
-                    actions.ShowNotice(L10n.T("St.ExpMicPanelNeedRestart"));
-                }, Register);
-            my += 52f;
-        }
-        DrawSwitchRow(g, t, hit, "exp.panelretained", new UiRect(x + pad, my, innerW, 56f),
-            UiIcon.Speaker, L10n.T("St.PanelOutputVolumesRetainedOnly"), L10n.T("St.PanelOutputVolumesRetainedOnlyHint"),
-            cfg.PanelOutputVolumesRetainedOnly, false, () =>
-            {
-                cfg.PanelOutputVolumesRetainedOnly = !cfg.PanelOutputVolumesRetainedOnly;
-                SaveConfig();
-            }, Register);
-        y += micH + 14f;
-
-        // 5. OSD Preview & Quick Parameters Card
-        float osdH = pad + 32f + 56f + 44f + 44f + pad;
-        UiPrimitives.DrawCard(g, t, new UiRect(x, y, w, osdH));
-        float oy = y + pad;
-        UiPrimitives.DrawSettingsSectionHeader(g, t, new UiRect(x + pad, oy, innerW - 230f, 28f), UiIcon.Monitor, L10n.T("Exp.Osd"));
-        var prevBtn = new UiRect(x + w - pad - 224f, oy, 108f, 30f);
-        UiPrimitives.DrawSecondaryButton(g, t, hit, "exp.osd.preview", prevBtn, L10n.T("Exp.OsdPreview"), icon: UiIcon.Play, fontSize: 12f);
-        Register("exp.osd.preview", prevBtn, () => actions.Host.PreviewOsd(), UiCursorKind.Hand, L10n.T("Exp.OsdPreview"));
-
-        var themeBtn = new UiRect(prevBtn.Right + 8f, oy, 108f, 30f);
-        UiPrimitives.DrawSecondaryButton(g, t, hit, "exp.osd.theme", themeBtn, L10n.T("Nav.Theme"), icon: UiIcon.Theme, fontSize: 12f);
-        Register("exp.osd.theme", themeBtn, () => actions.NavigateTo(MainNavTab.Theme), UiCursorKind.Hand, L10n.T("Nav.Theme"));
-        oy += 36f;
-
-        DrawSwitchRow(g, t, hit, "exp.osd.volvisual", new UiRect(x + pad, oy, innerW, 52f),
-            UiIcon.Speaker, L10n.T("Theme.OsdVolumeVisual"), L10n.T("Theme.OsdVolumeVisualHint"),
-            cfg.OsdVolumeVisualEnabled, true, () =>
-            {
-                cfg.OsdVolumeVisualEnabled = !cfg.OsdVolumeVisualEnabled;
-                SaveConfig();
-            }, Register);
-        oy += 58f;
-
-        // Row 1: Position + Width + Font Scale
-        float thirdW = (innerW - 20f) / 3f;
-        g.DrawText(L10n.T("Exp.Osd"), new UiRect(x + pad, oy, thirdW, 16f), t.TextSecondary, 11f, 400);
-        var posCombo = new UiRect(x + pad, oy + 18f, thirdW, 28f);
-        string posLabel = GetOsdPositionLabel(cfg.OsdPosition);
-        UiPrimitives.DrawComboBox(g, t, hit, "exp.osd.pos", posCombo, posLabel);
-        Register("exp.osd.pos", posCombo, () => OpenOsdPositionCombo(posCombo), UiCursorKind.Hand, L10n.T("Exp.OsdHint"));
-
-        float col2X = posCombo.Right + 10f;
-        g.DrawText(L10n.T("Exp.OsdWidthLabel"), new UiRect(col2X, oy, thirdW, 16f), t.TextSecondary, 11f, 400);
-        var wRect = new UiRect(col2X, oy + 18f, thirdW, 28f);
-        UiPrimitives.DrawTextBox(g, t, hit, "exp.osd.w", wRect, $"{Math.Clamp(cfg.OsdWidth, 180, 600)} px",
-            focused: actions.ActiveInlineEditTag == "exp.osd.w");
-        Register("exp.osd.w", wRect, () =>
-        {
-            actions.StartInlineEdit("exp.osd.w", wRect, cfg.OsdWidth.ToString(CultureInfo.InvariantCulture), null, (txt, _) =>
-            {
-                if (int.TryParse(txt.Trim().Replace("px", "", StringComparison.OrdinalIgnoreCase).Trim(), out int val))
-                {
-                    cfg.OsdWidth = Math.Clamp(val, 180, 600);
-                    if (!SaveConfig()) return;
-                    actions.Host.PreviewOsd();
-                }
-            }, mono: true);
-        }, UiCursorKind.IBeam, null);
-
-        float col3X = wRect.Right + 10f;
-        double fontScale = Math.Clamp(cfg.OsdFontScale, 0.7, 2.0);
-        g.DrawText(L10n.T("Exp.OsdFontLabel"), new UiRect(col3X, oy, thirdW, 16f), t.TextSecondary, 11f, 400);
-        var fsRect = new UiRect(col3X, oy + 18f, thirdW, 28f);
-        UiPrimitives.DrawTextBox(g, t, hit, "exp.osd.font", fsRect, $"{(int)Math.Round(fontScale * 100)}%",
-            focused: actions.ActiveInlineEditTag == "exp.osd.font");
-        Register("exp.osd.font", fsRect, () =>
-        {
-            actions.StartInlineEdit("exp.osd.font", fsRect, fontScale.ToString("0.00", CultureInfo.InvariantCulture), null, (txt, _) =>
-            {
-                string cleaned = txt.Trim();
-                bool percentage = cleaned.EndsWith('%');
-                var number = percentage ? cleaned.AsSpan(0, cleaned.Length - 1) : cleaned.AsSpan();
-                if (!double.TryParse(number, NumberStyles.Float, CultureInfo.InvariantCulture, out double value) || !double.IsFinite(value)) return;
-                double scale = Math.Clamp(Math.Round(percentage ? value / 100 : value, 2), 0.7, 2.0);
-                if (scale == cfg.OsdFontScale) return;
-                cfg.OsdFontScale = scale;
-                if (SaveConfig()) actions.Host.PreviewOsd();
-            }, mono: true);
-        }, UiCursorKind.IBeam, null);
-        oy += 52f;
-
-        // Row 2: Fade-in + Fade-out
-        float halfW = (innerW - 12f) / 2f;
-        g.DrawText(L10n.T("Exp.OsdFadeInLabel"), new UiRect(x + pad, oy, halfW, 16f), t.TextSecondary, 11f, 400);
-        var finRect = new UiRect(x + pad, oy + 18f, halfW, 28f);
-        UiPrimitives.DrawTextBox(g, t, hit, "exp.osd.fin", finRect, $"{Math.Clamp(cfg.OsdFadeInMs, 0, 500)} ms",
-            focused: actions.ActiveInlineEditTag == "exp.osd.fin");
-        Register("exp.osd.fin", finRect, () =>
-        {
-            actions.StartInlineEdit("exp.osd.fin", finRect, cfg.OsdFadeInMs.ToString(CultureInfo.InvariantCulture), null, (txt, _) =>
-            {
-                if (int.TryParse(txt.Trim().Replace("ms", "", StringComparison.OrdinalIgnoreCase).Trim(), out int val))
-                {
-                    cfg.OsdFadeInMs = Math.Clamp(val, 0, 500);
-                    SaveConfig();
-                }
-            }, mono: true);
-        }, UiCursorKind.IBeam, null);
-
-        float foutX = finRect.Right + 12f;
-        g.DrawText(L10n.T("Exp.OsdFadeOutLabel"), new UiRect(foutX, oy, halfW, 16f), t.TextSecondary, 11f, 400);
-        var foutRect = new UiRect(foutX, oy + 18f, halfW, 28f);
-        UiPrimitives.DrawTextBox(g, t, hit, "exp.osd.fout", foutRect, $"{Math.Clamp(cfg.OsdFadeOutMs, 0, 1000)} ms",
-            focused: actions.ActiveInlineEditTag == "exp.osd.fout");
-        Register("exp.osd.fout", foutRect, () =>
-        {
-            actions.StartInlineEdit("exp.osd.fout", foutRect, cfg.OsdFadeOutMs.ToString(CultureInfo.InvariantCulture), null, (txt, _) =>
-            {
-                if (int.TryParse(txt.Trim().Replace("ms", "", StringComparison.OrdinalIgnoreCase).Trim(), out int val))
-                {
-                    cfg.OsdFadeOutMs = Math.Clamp(val, 0, 1000);
-                    SaveConfig();
-                }
-            }, mono: true);
-        }, UiCursorKind.IBeam, null);
-
-        y += osdH + 14f;
-
-        // 6. Multi-output & Routing Helpers Card
-        float routeH = pad + 28f + 36f + 40f + pad;
-        UiPrimitives.DrawCard(g, t, new UiRect(x, y, w, routeH));
-        float ry = y + pad;
-        UiPrimitives.DrawSettingsSectionHeader(g, t, new UiRect(x + pad, ry, innerW, 28f), UiIcon.Reset,
-            IsZh() ? "多输出与路由重置" : "Multi-Output & Route Helpers");
-        ry += 32f;
-        g.DrawText(L10n.T("Auto.ResetAllRoutingHint"), new UiRect(x + pad + 32f, ry, innerW - 32f, 32f),
-            t.TextSecondary, 11.5f, 400, UiTextAlign.Leading, UiVertAlign.Top, wrap: true);
-        ry += 38f;
-        var rstRoutesRect = new UiRect(x + pad + 32f, ry, 240f, 34f);
-        UiPrimitives.DrawSecondaryButton(g, t, hit, "exp.resetroutes", rstRoutesRect, L10n.T("Act.ResetAllApps"),
-            enabled: !_resettingRoutes, icon: UiIcon.Reset, fontSize: 12f);
-        if (!_resettingRoutes)
-            Register("exp.resetroutes", rstRoutesRect, ResetAllAppRoutes);
-        y += routeH + 14f;
-
-
 
         hit.PopClip();
         g.PopClip();
 
-        _scroll.ContentHeight = MathF.Max(0f, y - startY);
-        _scroll.Clamp();
         _scroll.Draw(g, t, hit, "exp.scroll", viewport);
-    }
-
-    private void OpenOsdPositionCombo(UiRect anchor)
-    {
-        var choices = new List<ComboChoice>(OsdPositionChoices.Length);
-        foreach (var (code, key) in OsdPositionChoices)
-        {
-            choices.Add(new ComboChoice(code, L10n.T(key)));
-        }
-        string cur = string.IsNullOrWhiteSpace(actions.Config.OsdPosition) ? "TR" : actions.Config.OsdPosition;
-        actions.ShowCombo(anchor, choices, cur, picked =>
-        {
-            actions.Config.OsdPosition = picked.Key;
-            if (!SaveConfig()) return;
-            actions.Host.PreviewOsd();
-        });
-    }
-
-    private static string GetOsdPositionLabel(string? code)
-    {
-        string normalized = string.IsNullOrWhiteSpace(code) ? "TR" : code.Trim();
-        foreach (var (c, key) in OsdPositionChoices)
-        {
-            if (string.Equals(c, normalized, StringComparison.OrdinalIgnoreCase))
-                return L10n.T(key);
-        }
-        return normalized;
-    }
-
-    private static void DrawSwitchRow(
-        D2dTarget g, UiThemePalette t, UiHitMap hit,
-        string id, UiRect rect, UiIcon icon, string title, string hint, bool isChecked, bool drawBottomBorder,
-        Action onClick, Action<string, UiRect, Action, UiCursorKind, string?> register)
-    {
-        register(id, rect, onClick, UiCursorKind.Hand, string.IsNullOrEmpty(hint) ? null : hint);
-        if (hit.IsHover(id))
-            g.FillRoundedRect(rect.Deflate(0f, 1f), 6f, t.NavHover.WithAlphaFraction(0.55f));
-
-        g.DrawIcon(icon, new UiRect(rect.X + 2f, rect.CenterY - 8.5f, 17f, 17f), t.TextSecondary, 1.8f);
-        float textW = MathF.Max(60f, rect.Width - 82f);
-        if (string.IsNullOrEmpty(hint))
-        {
-            g.DrawText(title, new UiRect(rect.X + 32f, rect.Y, textW, rect.Height), t.TextPrimary, 12.5f, 400, UiTextAlign.Leading, UiVertAlign.Center);
-        }
-        else
-        {
-            g.DrawText(title, new UiRect(rect.X + 32f, rect.Y + 4f, textW, 18f), t.TextPrimary, 12.5f, 400, UiTextAlign.Leading, UiVertAlign.Center);
-            g.DrawText(hint, new UiRect(rect.X + 32f, rect.Y + 24f, textW, rect.Height - 26f), t.TextSecondary, 11f, 400, UiTextAlign.Leading, UiVertAlign.Top, wrap: true, ellipsis: true);
-        }
-        UiPrimitives.DrawSwitch(g, t, hit, id, new UiRect(rect.Right - 36f, rect.CenterY - 12f, 34f, 24f), isChecked);
-        if (drawBottomBorder)
-            g.DrawLine(rect.X + 2f, rect.Bottom, rect.Right - 2f, rect.Bottom, t.Border, 1f, roundCaps: false);
-    }
-
-    private void ResetAllAppRoutes()
-    {
-        if (_resettingRoutes) return;
-        _resettingRoutes = true;
-        actions.Invalidate();
-        _ = Task.Run(() =>
-        {
-            bool ok = false;
-            try { ok = actions.Host.Audio.ResetRoutes(); }
-            catch { }
-            actions.Host.TryPost(() =>
-            {
-                _resettingRoutes = false;
-                if (_disposed) return;
-                actions.ShowNotice(L10n.T(ok ? "Act.ResetAllAppsDone" : "Act.ResetAllAppsFailed"));
-                actions.Invalidate();
-            });
-        });
     }
 
     private void ExportConfig()
@@ -650,5 +409,4 @@ internal sealed class ExperimentalPageView(IViewHostActions actions) : IViewPage
         return new UiRect(l, t, MathF.Max(0f, right - l), MathF.Max(0f, b - t));
     }
 
-    private static bool IsZh() => L10n.CurrentLanguage.StartsWith("zh", StringComparison.OrdinalIgnoreCase);
 }

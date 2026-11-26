@@ -35,10 +35,13 @@ internal sealed class OsdWindow : LayeredWindow
     private int _dragWinStartX;
     private int _dragWinStartY;
 
-    internal OsdWindow(AppConfig config)
+    private readonly Action _adjustChanged;
+
+    internal OsdWindow(AppConfig config, Action adjustChanged)
         : base(Math.Clamp(config.OsdWidth, 180, 600), 70f, 180f, 40f)
     {
         _config = config;
+        _adjustChanged = adjustChanged;
         _theme = UiThemePalette.Resolve(config);
         NoActivate = true;
         ClickThrough = true;
@@ -105,6 +108,7 @@ internal sealed class OsdWindow : LayeredWindow
         if (owner != 0) OwnerHandle = owner;
         _theme = UiThemePalette.Resolve(_config);
         _adjusting = true;
+        _adjustChanged();
         _dragging = false;
         _title = L10n.T("Exp.OsdDragTitle");
         _text = L10n.T("Exp.OsdDragHint");
@@ -391,6 +395,7 @@ internal sealed class OsdWindow : LayeredWindow
     private void EndAdjustFlags()
     {
         _adjusting = false;
+        _adjustChanged();
         _dragging = false;
         ReleasePointerCapture();
         SetClickThrough(true);

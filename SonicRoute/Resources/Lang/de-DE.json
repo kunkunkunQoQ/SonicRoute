@@ -1,4 +1,6 @@
 {
+  "Window.ExpandNavigation": "Navigation ausklappen",
+  "Window.CollapseNavigation": "Navigation einklappen",
   "Window.DragToMove": "Zum Verschieben des Fensters ziehen",
   "Window.Minimize": "Minimieren",
   "Window.Maximize": "Maximieren",

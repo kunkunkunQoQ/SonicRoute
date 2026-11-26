@@ -1,4 +1,6 @@
 {
+  "Window.ExpandNavigation": "탐색 메뉴 펼치기",
+  "Window.CollapseNavigation": "탐색 메뉴 접기",
   "Window.DragToMove": "끌어서 창 이동",
   "Window.Minimize": "최소화",
   "Window.Maximize": "최대화",

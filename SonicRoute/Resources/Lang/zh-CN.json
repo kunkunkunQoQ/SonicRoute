@@ -1,4 +1,6 @@
 {
+  "Window.ExpandNavigation": "展开导航栏",
+  "Window.CollapseNavigation": "折叠导航栏",
   "Window.DragToMove": "拖动以移动窗口",
   "Window.Minimize": "最小化",
   "Window.Maximize": "最大化",

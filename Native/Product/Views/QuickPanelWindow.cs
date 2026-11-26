@@ -213,10 +213,13 @@ internal sealed class QuickPanelWindow : LayeredWindow
         SyncCompanionsVisibility();
     }
 
+    internal bool IsAdjusting => _adjustMode;
+
     internal void BeginAdjust()
     {
         ShowQuickPanel();
         _adjustMode = true;
+        _host.NotifyAdjustmentChanged();
         _adjustDragging = false;
         _adjustOrigLeftPx = LeftPx;
         _adjustOrigTopPx = TopPx;
@@ -502,7 +505,11 @@ internal sealed class QuickPanelWindow : LayeredWindow
         StopAnimationTimer();
         _timerInterval = 0;
         _animatingEntrance = false;
-        _adjustMode = false;
+        if (_adjustMode)
+        {
+            _adjustMode = false;
+            _host.NotifyAdjustmentChanged();
+        }
         _adjustDragging = false;
         SubscribeEvents(false);
         CloseCombo();
@@ -517,7 +524,11 @@ internal sealed class QuickPanelWindow : LayeredWindow
         StopAnimationTimer();
         _timerInterval = 0;
         _animatingEntrance = false;
-        _adjustMode = false;
+        if (_adjustMode)
+        {
+            _adjustMode = false;
+            _host.NotifyAdjustmentChanged();
+        }
         _adjustDragging = false;
         SubscribeEvents(false);
         CloseCombo();
@@ -2119,7 +2130,7 @@ internal sealed class QuickPanelWindow : LayeredWindow
 #if SONICROUTE_PHONE
         if (_config.QuickPanelShowPhoneAudio)
         {
-            _phoneCompanion ??= new PhoneAudioWindowView(_host, _config, CheckAutoDismiss, () => { Hide(); (_onOpenMain ?? _host.OpenProductMain)(); });
+            _phoneCompanion ??= new PhoneAudioWindowView(_host, _config, CheckAutoDismiss);
             _phoneCompanion.ShowForOwner(this);
             float s = DpiScale;
             phoneOccupied = new UiRect(_phoneCompanion.LeftPx / s, _phoneCompanion.TopPx / s, _phoneCompanion.WidthDip, _phoneCompanion.HeightDip);
@@ -2260,7 +2271,11 @@ internal sealed class QuickPanelWindow : LayeredWindow
         _config.QuickPanelPosMode = "custom";
         (_config.QuickPanelCustomX, _config.QuickPanelCustomY) = CurrentCustomPosition();
         if (!CommitPanelSettings()) { CancelAdjustMode(); return; }
-        _adjustMode = false;
+        if (_adjustMode)
+        {
+            _adjustMode = false;
+            _host.NotifyAdjustmentChanged();
+        }
         _adjustDragging = false;
         _host.ViewSettingsChanged();
         _host.PublishOsd("📍", L10n.T("Exp.PanelPosSaved"), success: true);
@@ -2268,9 +2283,13 @@ internal sealed class QuickPanelWindow : LayeredWindow
         Invalidate();
     }
 
-    private void CancelAdjustMode()
+    internal void CancelAdjustMode()
     {
-        _adjustMode = false;
+        if (_adjustMode)
+        {
+            _adjustMode = false;
+            _host.NotifyAdjustmentChanged();
+        }
         _adjustDragging = false;
         MovePx(_adjustOrigLeftPx, _adjustOrigTopPx);
         SyncCompanionsVisibility();

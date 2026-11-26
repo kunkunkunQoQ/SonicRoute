@@ -31,7 +31,6 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
     private readonly ApplicationHost _host;
     private readonly AppConfig _config;
     private readonly Action? _onDeactivatedCheck;
-    private readonly Action? _onManageApps;
     private readonly UiHitMap _hit = new();
     private readonly UiScrollState _scroll = new();
     private readonly InlineEditHost _inlineEdit = new();
@@ -76,7 +75,8 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
     private bool _seeking;
     private double _seekPositionMs;
     private string? _seekPackage;
-    private string? _rightPressId;
+    private UiRect _mediaTitleRect;
+    private CancellationTokenSource? _catalogRefresh;
     private string? _seekTitle;
     private UiRect _seekSliderRect;
     private bool _seekTimerRunning;
@@ -91,14 +91,12 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
     internal PhoneAudioWindowView(
         ApplicationHost host,
         AppConfig config,
-        Action? onDeactivatedCheck = null,
-        Action? onManageApps = null)
+        Action? onDeactivatedCheck = null)
         : base(UiMetrics.PhoneCompanionWidth, Math.Clamp(config.QuickPanelHeight, 350, 850), UiMetrics.PhoneCompanionWidth, 350f)
     {
         _host = host;
         _config = config;
         _onDeactivatedCheck = onDeactivatedCheck;
-        _onManageApps = onManageApps;
         _theme = UiThemePalette.Resolve(config);
         TopMost = true;
         ToolWindow = true;
@@ -160,7 +158,6 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
         if (!IsVisible) Show(activate: false);
         AttachPhone();
         AttachCrossDeviceDrag();
-        _airPlay.Attach();
         RefreshData();
         UpdateSeekAnimationTimer();
     }
@@ -201,6 +198,8 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
         var phone = _host.Phone;
         var profile = phone.Store.Profile;
         var online = profile.LastDevice is { } last ? phone.Connections.Get(last).Device : null;
+        if (IsVisible && _airPlaySelected) _airPlay.Attach();
+        else _airPlay.Detach();
         if (_airPlaySelected)
         {
             _activeDevice = online;
@@ -341,7 +340,7 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
         base.OnShown();
         AttachPhone();
         AttachCrossDeviceDrag();
-        _airPlay.Attach();
+        if (_airPlaySelected) _airPlay.Attach();
         if (!_airPlaySelected && _activeDevice != null && _mediaCts == null)
             RestartMediaWatch(_activeDevice);
         UpdateSeekAnimationTimer();
@@ -349,6 +348,7 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
 
     protected override void OnHidden()
     {
+        CancelCatalogRefresh();
         ++_commandVersion;
         CancelAppDrag();
         _seekKey = 0;
@@ -368,6 +368,7 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
 
     protected override void OnClosed()
     {
+        CancelCatalogRefresh();
         ++_commandVersion;
         CancelAppDrag();
         _seekKey = 0;
@@ -397,7 +398,6 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
 
     protected override void OnCaptureLost()
     {
-        _rightPressId = null;
         CancelAppDrag();
         bool changed = false;
         if (_seeking)
@@ -566,13 +566,23 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
 
     protected override string GetWindowTitle() => L10n.T("Phone.AudioWindowTitle");
 
-    private static UiRect AirPlayDropBounds(float w, float h) => new UiRect(8f, 12f, w - 16f, MathF.Max(40f, h - 66f));
+    private const float PanelPaddingX = 9f;
+    private const float PanelPaddingY = 13f;
+    private UiRect AirPlayDropBounds(float w, float h)
+    {
+        float width = w - PanelPaddingX * 2f;
+        float height = _airPlay.MeasureHeight(width - 22f, showHeaderStatus: false) + 22f;
+        return new UiRect(PanelPaddingX, PanelPaddingY, width, MathF.Min(height, MathF.Max(1f, h - PanelPaddingY * 2f - 42f)));
+    }
+
+    protected override int HitTestNonClient(float xDip, float yDip) =>
+        !_airPlaySelected && _mediaTitleRect.Contains(xDip, yDip) ? 2 : 1;
 
     private static UiRect ComputeDropAreaRect(float widthDip, float heightDip, bool airPlaySelected)
     {
         if (airPlaySelected) return default;
-        const float padX = 8f;
-        const float padY = 12f;
+        const float padX = PanelPaddingX;
+        const float padY = PanelPaddingY;
         float contentW = widthDip - padX * 2f;
         float footerH = 36f;
         float footerY = heightDip - padY - footerH;
@@ -645,8 +655,8 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
         g.FillRoundedRect(outer, UiMetrics.QuickPanelCornerRadius, _theme.WindowBgAlpha);
         g.DrawRoundedRect(outer, UiMetrics.QuickPanelCornerRadius, _theme.Border, 1f);
 
-        const float padX = 8f;
-        const float padY = 12f;
+        const float padX = PanelPaddingX;
+        const float padY = PanelPaddingY;
         float contentW = widthDip - padX * 2f;
         float footerH = 36f;
         float footerY = heightDip - padY - footerH;
@@ -654,7 +664,7 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
         var phone = _host.Phone;
         var profile = phone.Store.Profile;
         var online = _activeDevice;
-        var wholePhoneSource = online == null ? null : phone.Sources.Sources.FirstOrDefault(s => s.App.IsDeviceAudio && AndroidDeviceIdentity.Matches(s.Device, online));
+
 
         if (_airPlaySelected)
         {
@@ -667,7 +677,7 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
                 return;
             }
             UiPrimitives.DrawCard(g, _theme, airBox, 10f);
-            var inner = airBox.Deflate(10f);
+            var inner = airBox.Deflate(11f);
             float airH = _airPlay.MeasureHeight(inner.Width, showHeaderStatus: false);
             _scroll.ViewportHeight = inner.Height;
             _scroll.ContentHeight = airH;
@@ -684,12 +694,12 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
             return;
         }
 
-        // 1. Top Media + Seek Bar + Receive-to-PC card
+        // Android media card and seek bar
         float y = padY;
         var mediaCard = new UiRect(padX, y, contentW, MediaCardHeight);
         UiPrimitives.DrawCard(g, _theme, mediaCard, 10f);
 
-        var artRect = new UiRect(mediaCard.X + 6f, mediaCard.Y + 10f, 56f, 56f);
+        var artRect = new UiRect(mediaCard.X + 7f, mediaCard.Y + 10f, 56f, 56f);
         g.FillRoundedRect(artRect, 8f, _theme.SurfaceBg);
         g.DrawRoundedRect(artRect, 8f, _theme.Border, 1f);
 
@@ -722,27 +732,36 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
         string mediaTitle = _mediaState is { HasSession: true } ms && ms.Title.Length > 0
             ? ms.Title
             : (_mediaState is { HasSession: true } ? mediaApp?.Name ?? _mediaState.Package : L10n.T("Phone.MediaDefaultTitle"));
-        string mediaSub = _mediaState is { HasSession: true } ms2
-            ? (ms2.Artist.Length > 0 ? ms2.Artist : (ms2.Playing ? L10n.T("Phone.MediaPlaying") : L10n.T("Phone.MediaPaused")))
-            : online != null ? L10n.T("Phone.MediaNonePlaying") : L10n.T("Phone.MediaSubtitleIdle");
-        g.DrawText(mediaTitle, new UiRect(infoX, mediaCard.Y + 4f, infoW, 18f), _theme.TextPrimary, 13f, 600, UiTextAlign.Leading, UiVertAlign.Center);
-        g.DrawText(mediaSub, new UiRect(infoX, mediaCard.Y + 21f, infoW, 14f), _theme.TextSecondary, 10f, 400, UiTextAlign.Leading, UiVertAlign.Center);
+        string mediaSub = L10n.T("Phone.MediaNonePlaying");
+        if (_mediaState is { HasSession: true } session)
+        {
+            mediaSub = session.Artist.Length > 0 ? session.Artist : L10n.T(session.Playing ? "Phone.MediaPlaying" : "Phone.MediaPaused");
+            if (mediaApp != null) mediaSub += " · " + mediaApp.Name;
+        }
+        _mediaTitleRect = new UiRect(infoX, mediaCard.Y + 5f, infoW, 18f);
+        g.DrawText(mediaTitle, _mediaTitleRect, _theme.TextPrimary, 13f, 600);
+        g.DrawText(mediaSub, new UiRect(infoX, mediaCard.Y + 23f, infoW, 14f), _theme.TextSecondary, 10f);
 
-        float ctrlY = mediaCard.Y + 37f;
-        const float gap = 2f;
-        float btnW = MathF.Min(32f, (infoW - 3f * gap) / 4f);
-        float ctrlStartX = infoX + MathF.Max(0f, (infoW - btnW * 4f - gap * 3f) * 0.5f);
+        float ctrlY = mediaCard.Y + 40f;
+        const float gap = 4f;
+        float btnW = MathF.Min(32f, (infoW - 3 * gap) / 3f);
+        float ctrlStartX = infoX + (infoW - 3 * btnW - 2 * gap) / 2f;
         bool canPrev = _mediaState?.CanPrevious == true;
         bool canToggle = _mediaState?.CanToggle == true;
         bool canNext = _mediaState?.CanNext == true;
         bool isPlaying = _mediaState?.Playing == true;
 
-        UiPrimitives.DrawSecondaryButton(g, _theme, _hit, "companion.prev", new UiRect(ctrlStartX, ctrlY, btnW, 28f), "",
-            enabled: canPrev, radius: 6f, icon: UiIcon.PreviousTrack, tooltip: L10n.T("Phone.MediaPrevious"));
-        UiPrimitives.DrawSecondaryButton(g, _theme, _hit, "companion.play", new UiRect(ctrlStartX + btnW + gap, ctrlY, btnW, 28f), "",
-            enabled: canToggle, radius: 6f, icon: isPlaying ? UiIcon.Pause : UiIcon.Play, tooltip: L10n.T(isPlaying ? "Phone.MediaPause" : "Phone.MediaPlay"));
-        UiPrimitives.DrawSecondaryButton(g, _theme, _hit, "companion.next", new UiRect(ctrlStartX + (btnW + gap) * 2f, ctrlY, btnW, 28f), "",
-            enabled: canNext, radius: 6f, icon: UiIcon.NextTrack, tooltip: L10n.T("Phone.MediaNext"));
+        void TransportButton(string id, int index, UiIcon icon, bool enabled, string tipKey)
+        {
+            var rect = new UiRect(ctrlStartX + index * (btnW + gap), ctrlY, btnW, 28f);
+            if (enabled) _hit.Add(id, rect, UiCursorKind.Hand, L10n.T(tipKey));
+            if (enabled && _hit.IsHoverOrActive(id)) g.FillRoundedRect(rect, 6f, _theme.NavHover);
+            g.DrawIcon(icon, new UiRect(rect.CenterX - 9f, rect.CenterY - 9f, 18f, 18f),
+                enabled ? _theme.TextPrimary : _theme.TextPrimary.WithAlphaFraction(0.5f), filled: true);
+        }
+        TransportButton("companion.prev", 0, UiIcon.PreviousTrack, canPrev, "Phone.MediaPrevious");
+        TransportButton("companion.play", 1, isPlaying ? UiIcon.Pause : UiIcon.Play, canToggle, isPlaying ? "Phone.MediaPause" : "Phone.MediaPlay");
+        TransportButton("companion.next", 2, UiIcon.NextTrack, canNext, "Phone.MediaNext");
 
         // Seek bar row (time · slider · duration)
         float seekY = mediaCard.Y + 70f;
@@ -753,20 +772,13 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
         float progress01 = durationMs > 0 ? Math.Clamp((float)(posMs / durationMs), 0f, 1f) : 0f;
         bool canSeek = _mediaState?.CanSeek == true && durationMs > 0;
 
-        var posRect = new UiRect(mediaCard.X + 6f, seekY, 34f, 18f);
-        var durRect = new UiRect(mediaCard.Right - 40f, seekY, 34f, 18f);
-        g.DrawText(FormatMediaTime(posMs), posRect, _theme.TextSecondary, 9.5f, 400, UiTextAlign.Leading, UiVertAlign.Center, fontFamily: UiMetrics.MonoFontFamily);
-        g.DrawText(durationMs > 0 ? FormatMediaTime(durationMs) : "--:--", durRect, _theme.TextSecondary, 9.5f, 400, UiTextAlign.Trailing, UiVertAlign.Center, fontFamily: UiMetrics.MonoFontFamily);
-
-        var seekSlider = new UiRect(posRect.Right + 2f, seekY, MathF.Max(24f, durRect.X - 2f - (posRect.Right + 2f)), 18f);
+        var posRect = new UiRect(mediaCard.X + 7f, seekY, 32f, 20f);
+        var durRect = new UiRect(mediaCard.Right - 39f, seekY, 32f, 20f);
+        g.DrawText(FormatMediaTime(posMs), posRect, _theme.TextSecondary, 10f);
+        g.DrawText(durationMs > 0 ? FormatMediaTime(durationMs) : "--:--", durRect, _theme.TextSecondary, 10f, 400, UiTextAlign.Trailing);
+        var seekSlider = new UiRect(posRect.Right, seekY, durRect.X - posRect.Right, 20f);
         UiPrimitives.DrawVolumeSlider(g, _theme, _hit, "companion.seek", seekSlider, progress01, 0f, muted: false, showPeak: false,
-            style: UiSliderStyle.MediaSeek, enabled: canSeek);
-
-        var receiveRect = new UiRect(ctrlStartX + (btnW + gap) * 3f, ctrlY, btnW, 28f);
-        bool receivingPhone = wholePhoneSource != null;
-        UiPrimitives.DrawSecondaryButton(g, _theme, _hit, "companion.receive", receiveRect, "",
-            enabled: online != null, radius: 6f, icon: UiIcon.Speaker, active: receivingPhone,
-            tooltip: L10n.T(receivingPhone ? "Phone.StopReceiving" : "Phone.AndroidReceiveToPc"));
+            enabled: canSeek);
 
         y = mediaCard.Bottom + 6f;
 
@@ -794,7 +806,7 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
 
         // App list: Whole-Phone Audio Row + Retained Apps (sorted by DeviceAudio then Playing)
         var apps = GetFilteredApps();
-        const float itemH = 48f;
+        const float itemH = 50f;
         const float itemGap = 4f;
         _scroll.ViewportHeight = listRect.Height;
         _scroll.ContentHeight = apps.Length * (itemH + itemGap);
@@ -814,20 +826,17 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
             _hit.PushClip(listRect);
             for (int i = 0; i < apps.Length; i++)
             {
-                float iy = listRect.Y + i * (itemH + itemGap) - _scroll.Offset;
+                float iy = listRect.Y + 2f + i * (itemH + itemGap) - _scroll.Offset;
                 if (iy + itemH < listRect.Y || iy > listRect.Bottom) continue;
 
                 var app = apps[i];
-                var rowRect = new UiRect(listRect.X, iy, itemW, itemH);
+                var rowRect = new UiRect(listRect.X + 4f, iy + 2f, MathF.Max(1f, itemW - 6f), itemH);
                 string rowId = $"companion.app:{app.Package}";
-                bool isPlayingApp = app.IsDeviceAudio
-                    ? (_mediaState?.Playing == true || (_mediaState?.PlayingPackages.Count ?? 0) > 0 || wholePhoneSource != null)
-                    : (_mediaState?.PlayingPackages.Contains(app.Package) == true
-                        || (online != null && phone.Sources.Sources.Any(s => s.App.Package == app.Package && AndroidDeviceIdentity.Matches(s.Device, online))));
+                bool isPlayingApp = IsAppCurrentlyPlaying(app);
                 bool hot = _hit.IsHover(rowId);
 
                 string rowName = app.IsDeviceAudio ? phone.Store.GetProfileDisplayName(profile) : app.Name;
-                string rowSub = app.IsDeviceAudio ? L10n.T("Phone.DeviceAudioDescription") : app.Package;
+                string rowSub = PhoneAppPresentation.Description(app);
                 _hit.Add(rowId, rowRect, UiCursorKind.Hand, rowName);
                 bool selected = _selectedPackage == app.Package;
                 UiColor bg = selected ? _theme.NavSelected : hot ? _theme.NavHover : isPlayingApp ? _theme.Overlay : _theme.SurfaceBgAlpha;
@@ -838,8 +847,7 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
                 var iconRect = new UiRect(rowRect.X + 8f, rowRect.CenterY - 14f, 28f, 28f);
                 if (app.IsDeviceAudio)
                 {
-                    g.FillRoundedRect(iconRect, 6f, _theme.Overlay);
-                    g.DrawIcon(UiIcon.Phone, iconRect.Deflate(5f), _theme.Accent, 1.7f);
+                    g.DrawIcon(UiIcon.Phone, iconRect, _theme.TextSecondary, 1.7f);
                 }
                 else if (TryGetAppIcon(app, out var ibgra, out int iw, out int ih, out int iver))
                 {
@@ -847,9 +855,8 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
                 }
                 else
                 {
-                    g.FillRoundedRect(iconRect, 6f, _theme.SurfaceAlt);
                     string initial = string.IsNullOrEmpty(rowName) ? "♪" : rowName[..1];
-                    g.DrawText(initial, iconRect, _theme.TextSecondary, 14f, 600, UiTextAlign.Center, UiVertAlign.Center);
+                    g.DrawText(initial, iconRect, _theme.TextSecondary, 16f, 400, UiTextAlign.Center, UiVertAlign.Center);
                 }
 
                 float badgeW = isPlayingApp ? 46f : 0f;
@@ -861,8 +868,8 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
 
                 float tx = iconRect.Right + 8f;
                 float tw = MathF.Max(10f, rowRect.Right - 8f - badgeW - tx);
-                g.DrawText(rowName, new UiRect(tx, rowRect.Y + 6f, tw, 18f), _theme.TextPrimary, 12.5f, 600, UiTextAlign.Leading, UiVertAlign.Center);
-                g.DrawText(rowSub, new UiRect(tx, rowRect.Y + 24f, tw, 15f), _theme.TextSecondary, 10f, 400, UiTextAlign.Leading, UiVertAlign.Center);
+                g.DrawText(rowName, new UiRect(tx, rowRect.Y + 8f, tw, 18f), _theme.TextPrimary, 13f, 600, UiTextAlign.Leading, UiVertAlign.Center);
+                g.DrawText(rowSub, new UiRect(tx, rowRect.Y + 26f, tw, 15f), _theme.TextSecondary, 10f, 400, UiTextAlign.Leading, UiVertAlign.Center);
             }
             _hit.PopClip();
             g.PopClip();
@@ -916,120 +923,60 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
         AndroidPhoneProfile profile,
         AndroidDevice? online)
     {
-        var footerRect = new UiRect(padX, footerY, contentW, footerH);
-        float rightEdge = footerRect.Right;
-
+        var footer = new UiRect(padX, footerY, contentW, footerH);
+        float right = footer.Right;
         if (!_airPlaySelected)
         {
-            var refreshRect = new UiRect(rightEdge - 32f, footerRect.Y, 32f, footerH);
-            UiPrimitives.DrawSecondaryButton(g, _theme, _hit, "companion.refresh", refreshRect, "",
-                radius: 8f, icon: UiIcon.Refresh, tooltip: L10n.T("History.Refresh"));
-            rightEdge = refreshRect.X - 4f;
-
-            var manageRect = new UiRect(rightEdge - 32f, footerRect.Y, 32f, footerH);
-            UiPrimitives.DrawSecondaryButton(g, _theme, _hit, "companion.manage", manageRect, "",
-                radius: 8f, icon: UiIcon.Apps, tooltip: L10n.T("Phone.ManagePhoneApps"));
-            rightEdge = manageRect.X - 4f;
+            var refresh = new UiRect(right - footerH, footerY, footerH, footerH);
+            UiPrimitives.DrawSecondaryButton(g, _theme, _hit, "companion.refresh", refresh, "",
+                enabled: _catalogRefresh == null, radius: 8f, icon: UiIcon.Refresh, tooltip: L10n.T("History.Refresh"));
+            right = refresh.X - 4f;
         }
-
-        var deviceCardRect = new UiRect(footerRect.X, footerRect.Y, MathF.Max(40f, rightEdge - footerRect.X), footerH);
-        string comboLabel = _airPlaySelected ? "AirPlay"
-            : profile.LastDevice != null ? phone.Store.GetProfileDisplayName(profile)
-            : L10n.T("Phone.DeviceSelector");
-
-        _hit.Add("companion.device", deviceCardRect, UiCursorKind.Hand, _dropStatusMessage);
-        bool devHot = _hit.IsHover("companion.device");
-        g.FillRoundedRect(deviceCardRect, 8f, _theme.SurfaceBg);
-        g.DrawRoundedRect(deviceCardRect, 8f, devHot ? _theme.Accent : _theme.Border, 1f);
-
-        // Device kind icon (AirPlay or Phone)
-        var kindRect = new UiRect(deviceCardRect.X + 7f, deviceCardRect.CenterY - 8f, 16f, 16f);
-        if (_airPlaySelected && _host.HasAirPlay && _host.AirPlay.Source != null)
-            _hit.Add("companion.airplaygrip", kindRect, UiCursorKind.Hand, L10n.T("Phone.AirPlayDragToWindows"));
-        g.DrawIcon(_airPlaySelected ? UiIcon.AirPlay : UiIcon.Phone, kindRect, _theme.TextPrimary, 1.7f);
-
-        // Right-side indicator: chevron + status dot + signal bars (for Android)
-        g.DrawIcon(UiIcon.ChevronDown, new UiRect(deviceCardRect.Right - 17f, deviceCardRect.CenterY - 5f, 10f, 10f), _theme.TextSecondary, 1.7f);
-
-        float textLeft = kindRect.Right + 6f;
-        float rightReserved = 22f;
-
+        var card = new UiRect(padX, footerY, right - padX, footerH);
+        string name = _airPlaySelected ? "AirPlay" : profile.LastDevice == null
+            ? L10n.T("Phone.DeviceSelector") : phone.Store.GetProfileDisplayName(profile);
+        string status = _airPlaySelected ? AirPlayReceiverViewControl.GetStageLabel(_host.AirPlay.Status)
+            : L10n.T(_catalogRefresh != null ? "Phone.StatusLoading" : online == null ? "Phone.Disconnected" : "Phone.ConnectedStatus");
+        _hit.Add("companion.device", card, UiCursorKind.Hand, _dropStatusMessage ?? name);
+        g.FillRoundedRect(card, 8f, _theme.SurfaceBgAlpha);
+        g.DrawRoundedRect(card, 8f, _hit.IsHover("companion.device") ? _theme.Accent : _theme.Border);
+        var icon = new UiRect(card.X + 7f, card.CenterY - 8f, 16f, 16f);
+        if (_airPlaySelected && _host.AirPlay.Source != null)
+            _hit.Add("companion.airplaygrip", icon, UiCursorKind.Hand, L10n.T("Phone.AirPlayDragToWindows"));
+        g.DrawIcon(_airPlaySelected ? UiIcon.AirPlay : UiIcon.Phone, icon, _theme.TextPrimary, 1.5f);
+        float statusX = card.Right - 85f;
+        g.DrawText(name, new UiRect(card.X + 28f, card.Y, MathF.Max(1f, statusX - card.X - 30f), footerH),
+            _theme.TextPrimary, 11f, 700);
+        float labelLeft = statusX;
         if (!_airPlaySelected && online != null)
         {
+            var signal = new UiRect(statusX, card.CenterY - 6f, 14f, 12f);
             if (online.IsWifi)
             {
-                var sigRect = new UiRect(deviceCardRect.Right - 36f, deviceCardRect.CenterY - 6f, 14f, 12f);
-                int level = _connectionQuality?.SignalLevel ?? 0;
-                string latencyTip = _connectionQuality == null
-                    ? L10n.T("Phone.MeasuringLatency")
-                    : _connectionQuality.RoundTripMs is { } ms
-                        ? string.Format(L10n.T("Phone.LatencyRoundTripFormat"), ms)
-                        : L10n.T("Phone.LatencyTimeout");
-                _hit.Add("companion.signal", sigRect, UiCursorKind.Hand, latencyTip);
-                DrawSignalBars(g, sigRect, level);
-                rightReserved = 42f;
+                string tip = _connectionQuality == null ? L10n.T("Phone.MeasuringLatency")
+                    : _connectionQuality.RoundTripMs is { } ms ? string.Format(L10n.T("Phone.LatencyRoundTripFormat"), ms) : L10n.T("Phone.LatencyTimeout");
+                _hit.Add("companion.signal", signal, UiCursorKind.Hand, tip);
+                DrawSignal(g, signal, _connectionQuality?.SignalLevel ?? 0);
             }
             else
             {
-                g.FillEllipse(deviceCardRect.Right - 27f, deviceCardRect.CenterY, 3.5f, 3.5f, _theme.Success);
-                rightReserved = 36f;
+                void Line(float x1, float y1, float x2, float y2) =>
+                    g.DrawLine(signal.X + x1, signal.Y + y1, signal.X + x2, signal.Y + y2, _theme.Accent, 1.4f);
+                Line(7, 1, 7, 9); Line(3, 5, 11, 5); Line(3, 5, 3, 8);
+                Line(11, 5, 11, 3); Line(7, 9, 10, 9); Line(10, 9, 10, 12);
             }
+            labelLeft += 16f;
         }
-        else if (_airPlaySelected)
-        {
-            var airStatus = _host.AirPlay.Status;
-            UiColor airDot = airStatus.ErrorKey != null ? _theme.Fail : airStatus.Stage switch
-            {
-                AirPlayStage.Connected => _theme.Success,
-                AirPlayStage.Waiting or AirPlayStage.Starting => _theme.Accent,
-                _ => _theme.TextSecondary,
-            };
-            g.FillEllipse(deviceCardRect.Right - 27f, deviceCardRect.CenterY, 3.5f, 3.5f, airDot);
-            rightReserved = 36f;
-        }
-        else
-        {
-            g.FillEllipse(deviceCardRect.Right - 27f, deviceCardRect.CenterY, 3.5f, 3.5f, _theme.TextSecondary);
-            rightReserved = 36f;
-        }
-
-        float labelW = MathF.Max(20f, deviceCardRect.Right - rightReserved - textLeft);
-        if (_airPlaySelected)
-        {
-            var airStatus = _host.AirPlay.Status;
-            string airStage = AirPlayReceiverViewControl.GetStageLabel(airStatus);
-            if (_host.AirPlay.Port > 0 && airStatus.Stage is AirPlayStage.Waiting or AirPlayStage.Connected)
-                airStage += $" · {_host.AirPlay.Port}";
-            g.DrawText("AirPlay", new UiRect(textLeft, deviceCardRect.Y + 3f, labelW, 15f), _theme.TextPrimary, 11.5f, 600, UiTextAlign.Leading, UiVertAlign.Center);
-            g.DrawText(airStage, new UiRect(textLeft, deviceCardRect.Y + 18f, labelW, 14f), _theme.TextSecondary, 9.5f, 400, UiTextAlign.Leading, UiVertAlign.Center);
-        }
-        else
-        {
-            string subText = _dropStatusMessage
-                ?? (online != null
-                    ? (_connectionQuality?.RoundTripMs is { } ms ? string.Format(L10n.T("Phone.LatencyRoundTripFormat"), ms) : L10n.T("Phone.ConnectedStatus"))
-                    : L10n.T("Phone.Disconnected"));
-            g.DrawText(comboLabel, new UiRect(textLeft, deviceCardRect.Y + 3f, labelW, 15f), _theme.TextPrimary, 11.5f, 600, UiTextAlign.Leading, UiVertAlign.Center);
-            g.DrawText(subText, new UiRect(textLeft, deviceCardRect.Y + 18f, labelW, 14f),
-                _dropStatusMessage != null ? _theme.Fail : (online != null ? _theme.Success : _theme.TextSecondary),
-                9.5f, 400, UiTextAlign.Leading, UiVertAlign.Center);
-        }
+        g.DrawText(status, new UiRect(labelLeft, card.Y, statusX + 56f - labelLeft, footerH), _theme.TextSecondary, 10f, 400, UiTextAlign.Trailing);
+        g.DrawIcon(UiIcon.ChevronDown, new UiRect(right - 21f, card.CenterY - 5f, 10f, 10f), _theme.TextSecondary, 1.5f);
     }
 
-    private void DrawSignalBars(D2dTarget g, UiRect rect, int signalLevel)
+    private void DrawSignal(D2dTarget g, UiRect rect, int level)
     {
-        float barW = 2.2f;
-        float gap = 1.5f;
-        float baseY = rect.Bottom - 1f;
-        for (int i = 0; i < 4; i++)
-        {
-            float barH = 3f + i * 2.3f;
-            bool active = signalLevel >= i + 1;
-            UiColor col = active
-                ? (i == 3 && signalLevel == 3 ? _theme.Success.WithAlphaFraction(0.6f) : _theme.Success)
-                : _theme.TextSecondary.WithAlphaFraction(0.3f);
-            g.FillRoundedRect(new UiRect(rect.X + i * (barW + gap), baseY - barH, barW, barH), 1f, col);
-        }
+        var box = new UiRect(rect.X, rect.Y, 14f, 14f);
+        g.DrawIcon(UiIcon.WifiSignalOuter, box, _theme.Accent.WithAlphaFraction(level >= 4 ? 1f : level == 3 ? 0.6f : 0.2f), filled: true);
+        g.DrawIcon(UiIcon.WifiSignalNear, box, _theme.Accent.WithAlphaFraction(level >= 2 ? 1f : 0.2f), filled: true);
+        g.DrawIcon(UiIcon.WifiSignalDot, box, _theme.Accent.WithAlphaFraction(level >= 1 ? 1f : 0.2f), filled: true);
     }
 
     protected override void OnPointerMove(float xDip, float yDip, bool leftDown)
@@ -1066,7 +1013,7 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
             long durationMs = _mediaState?.DurationMs ?? 0L;
             if (durationMs > 0)
             {
-                int pct = UiPrimitives.SliderValueFromX(_seekSliderRect, xDip, UiSliderStyle.MediaSeek);
+                int pct = UiPrimitives.SliderValueFromX(_seekSliderRect, xDip);
                 _seekPositionMs = (long)Math.Round(durationMs * (pct / 100.0));
                 Invalidate();
             }
@@ -1092,7 +1039,6 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
         if (e.Button == UiMouseButton.Right)
         {
             if (_dragIcon != null) { ReleasePointerCapture(); return; }
-            _rightPressId = _hit.HitTest(e.X, e.Y)?.Id;
             return;
         }
         if (e.Button != UiMouseButton.Left) return;
@@ -1124,7 +1070,7 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
             _seekPackage = st.Package;
             _seekTitle = st.Title;
             StopSeekTimer();
-            int pct = UiPrimitives.SliderValueFromX(h.Bounds, e.X, UiSliderStyle.MediaSeek);
+            int pct = UiPrimitives.SliderValueFromX(h.Bounds, e.X);
             _seekPositionMs = (long)Math.Round(st.DurationMs * (pct / 100.0));
         }
         Invalidate();
@@ -1133,14 +1079,6 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
     protected override void OnPointerUp(UiPointerEventArgs e)
     {
         var hit = _hit.HitTest(e.X, e.Y);
-        if (e.Button == UiMouseButton.Right)
-        {
-            string? pressed = _rightPressId;
-            _rightPressId = null;
-            if (hit is { } row && row.Id == pressed && row.Id.StartsWith(AppPrefix, StringComparison.Ordinal))
-                ToggleAppAudioCapture(row.Id[AppPrefix.Length..]);
-            return;
-        }
         if (e.Button != UiMouseButton.Left) return;
         var app = _pressApp;
         var device = _pressDevice;
@@ -1180,7 +1118,6 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
         if (hit.Value.Id.StartsWith(AppPrefix, StringComparison.Ordinal))
         {
             _selectedPackage = hit.Value.Id[AppPrefix.Length..];
-            if (e.ClickCount == 2) LaunchAppVirtualDisplay(_selectedPackage);
             Invalidate();
             return;
         }
@@ -1204,9 +1141,6 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
                     _ = RunCompanionCommand(() => client.SendAsync(command, media.Token));
                 }
                 break;
-            case "companion.receive":
-                ToggleWholePhoneAudio();
-                break;
             case "companion.search":
                 StartInlineEdit("companion.search", item.Bounds, _searchText, t => { _searchText = t; Invalidate(); }, (t, _) => { _searchText = t; Invalidate(); });
                 break;
@@ -1214,7 +1148,7 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
                 OpenPhoneManagementDeepLink();
                 break;
             case "companion.refresh":
-                _ = RunCompanionCommand(() => _host.Phone.RefreshAsync(restore: true));
+                _ = RefreshCatalogAsync();
                 break;
             case "companion.airplaygrip":
             case "companion.device":
@@ -1328,30 +1262,53 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
         }).ConfigureAwait(false);
     }
 
+    private async Task RefreshCatalogAsync()
+    {
+        if (_catalogRefresh != null) return;
+        var phone = _host.Phone;
+        var selected = phone.Store.Profile;
+        var refresh = new CancellationTokenSource();
+        _catalogRefresh = refresh;
+        Invalidate();
+        try
+        {
+            await RunCompanionCommand(async () =>
+            {
+                await phone.ReconnectSelectedDeviceAsync(refresh.Token).ConfigureAwait(false);
+                refresh.Token.ThrowIfCancellationRequested();
+                if (phone.Store.Profile.Id != selected.Id || selected.LastDevice == null ||
+                    phone.Connections.Resolve(selected.LastDevice) is not { } device) return;
+                using var read = CancellationTokenSource.CreateLinkedTokenSource(refresh.Token, phone.Connections.OperationToken(device));
+                var apps = await phone.Adb.AppsAsync(device, read.Token, selected.QuickPanelApps.Select(a => a.Package).ToArray()).ConfigureAwait(false);
+                read.Token.ThrowIfCancellationRequested();
+                if (phone.Store.Profile.Id == selected.Id && phone.Connections.IsCurrent(device))
+                    phone.Store.UpdateMetadata(device, apps);
+            });
+        }
+        finally
+        {
+            if (!_host.TryPost(() =>
+            {
+                refresh.Dispose();
+                if (!ReferenceEquals(_catalogRefresh, refresh)) return;
+                _catalogRefresh = null;
+                if (IsVisible) Invalidate();
+            })) refresh.Dispose();
+        }
+    }
+
+    private void CancelCatalogRefresh()
+    {
+        _catalogRefresh?.Cancel();
+        _catalogRefresh = null;
+    }
+
     private void OpenPhoneManagementDeepLink()
     {
         string? profileId = _airPlaySelected ? null : _host.Phone.Store.Profile.Id;
         Hide();
-        if (_onManageApps != null)
-        {
-            // Preserve owner QuickPanel dismissal behavior while deep-linking directly to the selected phone profile.
-            _onDeactivatedCheck?.Invoke();
-            _host.OpenPhoneManagement(profileId);
-        }
-        else
-        {
-            _onDeactivatedCheck?.Invoke();
-            _host.OpenPhoneManagement(profileId);
-        }
-    }
-
-    private void ToggleWholePhoneAudio()
-    {
-        var device = _activeDevice;
-        if (device == null) return;
-        var existing = _host.Phone.Sources.Sources.FirstOrDefault(s => s.App.IsDeviceAudio && AndroidDeviceIdentity.Matches(s.Device, device));
-        _ = RunCompanionCommand(() => existing != null ? _host.Phone.Sources.RemoveAsync(existing.Id) :
-            _host.Phone.Sources.AddAsync(device, AndroidApp.DeviceAudio, keepPhoneAudio: false));
+        _onDeactivatedCheck?.Invoke();
+        _host.OpenPhoneManagement(profileId);
     }
 
     private void DrawReturnOverlay(D2dTarget g, UiRect bounds, bool hovered, bool airPlay)
@@ -1381,56 +1338,23 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
         if (IsVisible) Invalidate();
     }
 
-    private void LaunchAppVirtualDisplay(string package)
-    {
-        var device = _activeDevice;
-        if (device == null) return;
-        var app = GetFilteredApps().FirstOrDefault(a => a.Package == package);
-        if (app == null) return;
-        ViewNative.GetCursorPos(out var pt);
-        _ = RunCompanionCommand(() => _host.Phone.OpenDisplayAsync(device, app, pt.X, pt.Y));
-    }
-
-    private void ToggleAppAudioCapture(string package)
-    {
-        var device = _activeDevice;
-        if (device == null) return;
-        var app = GetFilteredApps().FirstOrDefault(a => a.Package == package);
-        if (app == null) return;
-        var existing = _host.Phone.Sources.Sources.FirstOrDefault(s => s.App.Package == app.Package && AndroidDeviceIdentity.Matches(s.Device, device));
-        _ = RunCompanionCommand(() => existing != null ? _host.Phone.Sources.RemoveAsync(existing.Id) :
-            _host.Phone.Sources.AddAsync(device, app, keepPhoneAudio: false));
-    }
-
     private AndroidApp[] GetFilteredApps()
     {
-        var phone = _host.Phone;
-        var retained = phone.Store.Profile.RetainedApps;
-        if (_activeDevice == null && retained.Count == 0)
-            return Array.Empty<AndroidApp>();
-
+        var profile = _host.Phone.Store.Profile;
+        if (profile.LastDevice == null) return Array.Empty<AndroidApp>();
         string query = _searchText.Trim();
-        var online = _activeDevice;
-        var all = new List<AndroidApp>(retained.Count + 1) { AndroidApp.DeviceAudio };
-        all.AddRange(retained);
-
-        return all
+        return profile.QuickPanelApps.Prepend(AndroidApp.DeviceAudio)
             .Where(a => a.IsDeviceAudio || query.Length == 0
-                || a.Name.Contains(query, StringComparison.OrdinalIgnoreCase)
+                || a.Name.Contains(query, StringComparison.CurrentCultureIgnoreCase)
                 || a.Package.Contains(query, StringComparison.OrdinalIgnoreCase))
             .OrderByDescending(a => a.IsDeviceAudio)
-            .ThenByDescending(a => IsAppCurrentlyPlaying(a, online, phone))
+            .ThenByDescending(IsAppCurrentlyPlaying)
             .ToArray();
     }
 
-    private bool IsAppCurrentlyPlaying(AndroidApp app, AndroidDevice? online, PhonePreview phone)
-    {
-        if (app.IsDeviceAudio)
-            return _mediaState?.Playing == true || (_mediaState?.PlayingPackages.Count ?? 0) > 0;
-        if (_mediaState?.PlayingPackages.Contains(app.Package) == true)
-            return true;
-        return online != null && phone.Sources.Sources.Any(s => s.App.Package == app.Package && AndroidDeviceIdentity.Matches(s.Device, online));
-    }
+    private bool IsAppCurrentlyPlaying(AndroidApp app) => _mediaState is { } state &&
+        (app.IsDeviceAudio ? state.Playing || state.PlayingPackages.Count > 0
+            : (state.Playing && state.Package == app.Package) || state.PlayingPackages.Contains(app.Package));
 
     private void OpenDeviceSwitcher(UiRect anchor)
     {
@@ -1446,6 +1370,7 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
         string selected = _airPlaySelected ? AirPlayChoiceKey : phone.Store.Profile.Id;
         ShowCombo(anchor, choices, selected, picked =>
         {
+            CancelCatalogRefresh();
             if (picked.Key == AirPlayChoiceKey)
             {
                 _airPlaySelected = true;

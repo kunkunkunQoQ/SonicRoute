@@ -123,17 +123,15 @@ internal sealed class AirPlayReceiverViewControl
         string? statusMsg = GetStatusMessage(status);
         if (!string.IsNullOrWhiteSpace(statusMsg))
         {
-            float lineCapacity = MathF.Max(14f, width / 6.5f);
-            int lines = Math.Max(1, (int)MathF.Ceiling(statusMsg.Length / lineCapacity));
-            h += MathF.Max(24f, lines * 16f + 8f);
+            var size = D2dSharedContext.Instance.MeasureText(statusMsg, UiMetrics.FontFamily, 12f, 400, width, 120f, wrap: true);
+            h += MathF.Max(20f, size.Height + 2f) + 4f;
         }
         if (status.Code is { Length: > 0 }) h += 46f;
         if (status.Stage == AirPlayStage.Waiting)
         {
             string steps = L10n.T("Phone.AirPlaySteps");
-            float lineCapacity = MathF.Max(16f, width / 6f);
-            int lines = Math.Max(2, (int)MathF.Ceiling(steps.Length / lineCapacity));
-            h += MathF.Max(36f, lines * 15f + 6f);
+            var size = D2dSharedContext.Instance.MeasureText(steps, UiMetrics.FontFamily, 10.5f, 400, width, 100f, wrap: true);
+            h += MathF.Max(32f, size.Height + 2f) + 4f;
         }
 
         var track = status.Stage == AirPlayStage.Connected ? status.Metadata : null;
@@ -141,7 +139,6 @@ internal sealed class AirPlayReceiverViewControl
             h += 48f;
 
         if (status.Mirroring) h += 70f;
-        if (_host.AirPlay.Source != null) h += 36f;
 
         return h + 4f;
     }
@@ -180,8 +177,6 @@ internal sealed class AirPlayReceiverViewControl
             float dotY = y + 27f;
             g.FillEllipse(textX + 3f, dotY, 3f, 3f, dotCol);
             string stageText = GetStageLabel(status);
-            if (_host.AirPlay.Port > 0 && status.Stage is AirPlayStage.Waiting or AirPlayStage.Connected)
-                stageText += $" · TCP {_host.AirPlay.Port}";
             g.DrawText(stageText, new UiRect(textX + 10f, y + 19f, MathF.Max(10f, textW - 10f), 16f),
                 t.TextSecondary, 11f, 400, UiTextAlign.Leading, UiVertAlign.Center);
         }
@@ -306,11 +301,6 @@ internal sealed class AirPlayReceiverViewControl
             y += 36f;
         }
 
-        if (_host.AirPlay.Source != null)
-        {
-            UiPrimitives.DrawSecondaryButton(g, t, hit, $"{_idPrefix}.disconnect", new UiRect(x, y, w, 30f),
-                L10n.T("Phone.Disconnect"), fontSize: 11f, danger: true);
-        }
     }
 
     internal bool HandleClick(string hitId, UiRect hitBounds)
@@ -382,12 +372,6 @@ internal sealed class AirPlayReceiverViewControl
         if (hitId == $"{_idPrefix}.fullscreen")
         {
             _host.AirPlay.SetMirrorFullscreen(!_host.AirPlay.Status.Fullscreen);
-            return true;
-        }
-
-        if (hitId == $"{_idPrefix}.disconnect")
-        {
-            _host.AirPlay.Disconnect();
             return true;
         }
 

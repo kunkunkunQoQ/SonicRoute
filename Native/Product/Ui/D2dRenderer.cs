@@ -575,7 +575,7 @@ internal sealed unsafe class D2dTarget : IDisposable
             (_target, new D2dPoint(x1, y1), new D2dPoint(x2, y2), SetBrushColor(color), strokeWidth, roundCaps ? _shared.RoundStrokeStyle : _shared.FlatStrokeStyle);
     }
 
-    public void DrawIcon(UiIcon icon, UiRect box, UiColor color, float strokeWidth = 1.8f, float rotationDeg = 0f)
+    public void DrawIcon(UiIcon icon, UiRect box, UiColor color, float strokeWidth = 1.8f, float rotationDeg = 0f, bool filled = false)
     {
         if (color.A == 0 || box.IsEmpty) return;
         nint geom = _shared.GetIconGeometry(icon);
@@ -590,8 +590,11 @@ internal sealed unsafe class D2dTarget : IDisposable
             : ComposeRotationScaleTranslate(scale, rotationDeg, box.CenterX, box.CenterY);
 
         PushTransform(mat);
-        ((delegate* unmanaged[Stdcall]<nint, nint, nint, float, nint, void>)D2dSharedContext.Slot(_target, 22))
-            (_target, geom, SetBrushColor(color), strokeWidth, _shared.RoundStrokeStyle);
+        if (filled)
+            ((delegate* unmanaged[Stdcall]<nint, nint, nint, nint, void>)D2dSharedContext.Slot(_target, 23))(_target, geom, SetBrushColor(color), 0);
+        else
+            ((delegate* unmanaged[Stdcall]<nint, nint, nint, float, nint, void>)D2dSharedContext.Slot(_target, 22))
+                (_target, geom, SetBrushColor(color), strokeWidth, _shared.RoundStrokeStyle);
         PopTransform();
     }
 
@@ -692,7 +695,7 @@ internal sealed unsafe class D2dTarget : IDisposable
         }
     }
 
-    public void DrawBgraBitmap(object cacheKey, byte[] bgraPixels, int widthPx, int heightPx, UiRect dstRect, float opacity = 1f, int version = 0)
+    public void DrawBgraBitmap(object cacheKey, byte[] bgraPixels, int widthPx, int heightPx, UiRect dstRect, float opacity = 1f, int version = 0, bool nearestNeighbor = false)
     {
         if (widthPx <= 0 || heightPx <= 0 || bgraPixels.Length < widthPx * heightPx * 4 || dstRect.IsEmpty) return;
         if (!_bitmaps.TryGetValue(cacheKey, out var entry) || entry.W != widthPx || entry.H != heightPx || entry.Version != version)
@@ -733,7 +736,7 @@ internal sealed unsafe class D2dTarget : IDisposable
         var dst = new D2dRectF(dstRect.X, dstRect.Y, dstRect.Right, dstRect.Bottom);
         var src = new D2dRectF(0f, 0f, widthPx, heightPx);
         ((delegate* unmanaged[Stdcall]<nint, nint, D2dRectF*, float, uint, D2dRectF*, void>)D2dSharedContext.Slot(_target, 26))
-            (_target, entry.Bitmap, &dst, opacity, 1 /*LINEAR*/, &src);
+            (_target, entry.Bitmap, &dst, opacity, nearestNeighbor ? 0u : 1u, &src);
     }
 
     public void PushClip(UiRect rect)

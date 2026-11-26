@@ -46,7 +46,8 @@ internal interface IViewHostActions
         bool selectAll = false,
         bool readOnlyMultiline = false,
         int maxLength = 0,
-        bool acceptFileDrop = false);
+        bool acceptFileDrop = false,
+        bool centered = false);
     void SetInlineEditText(string tag, string text);
     void CloseInlineEdit(bool commit);
     void NavigateTo(MainNavTab tab);

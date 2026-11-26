@@ -4,8 +4,6 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text;
-using System.Text.Json;
-using System.Text.Json.Serialization;
 using System.Threading.Tasks;
 using SonicRoute.Core;
 using SonicRoute.Core.Interop;
@@ -15,19 +13,15 @@ using SonicRoute.Native.Ui;
 
 namespace SonicRoute.Native.Product.Views;
 
-[JsonSourceGenerationOptions(WriteIndented = true)]
-[JsonSerializable(typeof(AutoRule))]
-internal partial class AutomationRuleJsonContext : JsonSerializerContext { }
-
 internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
 {
     private readonly UiScrollState _listScroll = new();
     private readonly UiScrollState _editorScroll = new();
     private readonly Dictionary<string, Action> _clicks = new(StringComparer.Ordinal);
-    private readonly Dictionary<string, Action> _rightClicks = new(StringComparer.Ordinal);
     private readonly Dictionary<string, (AutoRuleStep Step, AutoRuleAction Action)> _fileDropTargets = new(StringComparer.Ordinal);
 
     private List<AutoRule> _rules = new();
+    private readonly Dictionary<string, string> _ruleSummaries = new(StringComparer.Ordinal);
     private Endpoint[] _outputs = [];
     private Endpoint[] _inputs = [];
     private AudioAppInfo[] _apps = [];
@@ -173,7 +167,7 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
                 {
                     outs = actions.Host.Audio.RenderDevicesWithPhone();
                     ins = ProductAudio.Devices(Flow.Capture);
-                    apps = actions.Host.Audio.Apps().ToArray();
+                    apps = actions.Host.Audio.Apps().Where(app => !AudioService.IsInternalApplication(app.ProcessId, app.ProcessName)).ToArray();
                 }
                 catch { }
                 actions.Host.TryPost(() =>
@@ -202,6 +196,9 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
             .ThenBy(r => r.Id, StringComparer.Ordinal)
             .ToList();
 
+        _ruleSummaries.Clear();
+        foreach (var rule in _rules) _ruleSummaries[rule.Id] = RuleActionSummary(rule);
+
         if (_editingRule != null && !_isNewDraft)
         {
             var match = _rules.FirstOrDefault(r => r.Id == _editingRule.Id);
@@ -217,7 +214,6 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
     public void Render(D2dTarget g, UiThemePalette t, UiHitMap hit, UiRect contentRect)
     {
         _clicks.Clear();
-        _rightClicks.Clear();
         _fileDropTargets.Clear();
         _visibleRuleRows.Clear();
         _stepCardRects.Clear();
@@ -230,10 +226,9 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
             RenderLeftPane(g, t, hit, contentRect);
     }
 
-    private void RegisterBtn(string id, UiRect r, UiRect vp, UiHitMap hit, Action onClick, UiCursorKind cursor = UiCursorKind.Hand, string? tooltip = null, Action? onRightClick = null)
+    private void RegisterBtn(string id, UiRect r, UiRect vp, UiHitMap hit, Action onClick, UiCursorKind cursor = UiCursorKind.Hand, string? tooltip = null)
     {
         _clicks[id] = onClick;
-        if (onRightClick != null) _rightClicks[id] = onRightClick;
         if (r.Bottom > vp.Y && r.Y < vp.Bottom)
         {
             var clipped = ClipToViewport(r, vp);
@@ -247,7 +242,7 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
         float innerW = card.Width;
         float y = card.Y;
         const float newW = 136f, iconBtnW = 40f, btnGap = 8f;
-        float toolbarW = newW + 3f * (iconBtnW + btnGap);
+        float toolbarW = newW + iconBtnW + btnGap;
         float titleW = MathF.Max(40f, innerW - toolbarW - 12f);
         g.DrawText(L10n.T("Nav.Automation"), new UiRect(card.X, y, titleW, 28f), t.TextPrimary, 22f, 600);
         string hint = L10n.T("Auto.Hint");
@@ -261,20 +256,6 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
         var tplRect = new UiRect(bx, y, iconBtnW, 40f);
         UiPrimitives.DrawSecondaryButton(g, t, hit, "auto.templates", tplRect, "", icon: UiIcon.Templates, tooltip: L10n.T("Template.Open"));
         RegisterBtn("auto.templates", tplRect, card, hit, () => OpenTemplatesMenu(tplRect), UiCursorKind.Hand, L10n.T("Template.Open"));
-        bx += iconBtnW + btnGap;
-
-        var impRect = new UiRect(bx, y, iconBtnW, 40f);
-        string impTip = IsZh() ? "导入规则 JSON" : "Import rule JSON";
-        UiPrimitives.DrawSecondaryButton(g, t, hit, "auto.import", impRect, "", icon: UiIcon.File, tooltip: impTip);
-        RegisterBtn("auto.import", impRect, card, hit, ImportRuleJson, UiCursorKind.Hand, impTip);
-        bx += iconBtnW + btnGap;
-
-        var histRect = new UiRect(bx, y, iconBtnW, 40f);
-        UiPrimitives.DrawSecondaryButton(g, t, hit, "auto.history", histRect, "", icon: UiIcon.History, enabled: actions.Config.ExperimentalMode && actions.Config.ExecutionHistoryEnabled, tooltip: L10n.T("History.Title"));
-        if (actions.Config.ExperimentalMode && actions.Config.ExecutionHistoryEnabled)
-            RegisterBtn("auto.history", histRect, card, hit, actions.OpenHistory, UiCursorKind.Hand, L10n.T("History.Title"));
-        y += 40f;
-
         y = card.Y + 32f + hintH + 18f;
         float stateW = MathF.Min(130f, innerW * 0.23f);
         float triggerW = MathF.Min(180f, innerW * 0.32f);
@@ -364,66 +345,60 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
                     var gripRect = new UiRect(rowRect.X + 4f, rowRect.Y + 8f, 18f, rowH - 16f);
                     UiPrimitives.DrawGhostIconButton(g, t, hit, "auto.grip." + rule.Id, gripRect, UiIcon.Grip, 13f, tooltip: L10n.T("Auto.DragRules"));
 
-                    // Name + trigger summary
-                    float infoX = gripRect.Right + 4f;
-                    float rightCtrlW = 182f;
-                    float infoW = MathF.Max(40f, rowRect.Right - rightCtrlW - infoX - 4f);
+                    float buttonsX = rowRect.Right - 6f - 150f;
+                    var swRect = new UiRect(buttonsX - 40f, rowRect.CenterY - 12f, 34f, 24f);
+                    float triggerWidth = Math.Clamp(rowRect.Width * .23f, 94f, 180f);
+                    var trigger = new UiRect(swRect.X - triggerWidth - 8f, rowRect.CenterY - 24f, triggerWidth, 48f);
+                    var icon = new UiRect(gripRect.Right + 5f, rowRect.CenterY - 14f, 28f, 28f);
+                    g.FillRoundedRect(icon, 8f, t.NavSelected);
+                    var firstStep = rule.Actions.Count > 0 ? rule.Actions[0].Action : rule.Action;
+                    UiIcon actionIcon = firstStep switch
+                    {
+                        AutoRuleAction.RunPowerShell => UiIcon.Terminal,
+                        AutoRuleAction.LaunchProgram => UiIcon.Switch,
+                        AutoRuleAction.ExecuteRule => UiIcon.Link,
+                        AutoRuleAction.ShowOsd or AutoRuleAction.ShowQuickPanel or AutoRuleAction.HideQuickPanel => UiIcon.Monitor,
+                        AutoRuleAction.ResetAllAppRouting => UiIcon.Reset,
+                        AutoRuleAction.SetMicrophoneMute or AutoRuleAction.ToggleMicrophoneMute or AutoRuleAction.SetGlobalMicMute
+                            or AutoRuleAction.ToggleGlobalMicMute or AutoRuleAction.SetAppInput or AutoRuleAction.SetSystemInput
+                            or AutoRuleAction.SetDefaultInputVolume or AutoRuleAction.AdjustDefaultInputVolume or AutoRuleAction.SetDefaultInputMute
+                            or AutoRuleAction.ToggleDefaultInputMute or AutoRuleAction.SetAppInputMute or AutoRuleAction.ToggleAppInputMute => UiIcon.Microphone,
+                        _ => UiIcon.Speaker
+                    };
+                    g.DrawIcon(actionIcon, icon.Deflate(5f, 5f), t.Accent);
+                    float infoX = icon.Right + 8f;
+                    float infoW = MathF.Max(1f, trigger.X - infoX - 8f);
                     string title = string.IsNullOrWhiteSpace(rule.Name) ? L10n.T("Auto.DefaultNamePrefix") : rule.Name;
-                    g.DrawText(title, new UiRect(infoX, rowRect.Y + 9f, infoW, 20f),
-                        rule.Enabled ? t.TextPrimary : t.TextSecondary, 12.5f, 600, UiTextAlign.Leading, UiVertAlign.Center);
-
-                    string sub = AutomationTriggerTitle(rule.Trigger);
-                    string det = AutomationTriggerDetail(rule);
-                    if (!string.IsNullOrEmpty(det)) sub += " · " + det;
-                    int stepCnt = Math.Max(1, rule.Actions.Count);
-                    sub += $" ({stepCnt})";
-                    bool hkConflict = HasHotkeyConflict(rule);
-                    if (hkConflict) sub += " · " + L10n.T("Auto.HotkeyConflict");
-                    g.DrawText(sub, new UiRect(infoX, rowRect.Y + 32f, infoW, 18f),
-                        hkConflict ? t.Fail : t.TextSecondary, 10.5f, 400, UiTextAlign.Leading, UiVertAlign.Center);
-
-                    // Right controls: Run | Favorite | Enable Switch
-                    float cx = rowRect.Right - 6f;
-                    var swRect = new UiRect(cx - 34f, rowRect.CenterY - 12f, 34f, 24f);
+                    bool onceRan = rule.Trigger == AutoRuleTrigger.Schedule && rule.ScheduleMode == 0 && !string.IsNullOrWhiteSpace(rule.LastRunKey);
+                    bool conflict = HasHotkeyConflict(rule);
+                    float labelY = rowRect.CenterY - (conflict ? 26f : 18f);
+                    g.DrawText(title, new UiRect(infoX, labelY, infoW - (onceRan ? 10f : 0f), 20f), t.TextPrimary, 12.5f, 600);
+                    if (onceRan) g.FillEllipse(infoX + infoW - 4f, labelY + 7f, 3f, 3f, t.Accent);
+                    string summary = _ruleSummaries[rule.Id];
+                    g.DrawText(summary, new UiRect(infoX, labelY + 21f, infoW, 16f), t.TextSecondary, 11.5f);
+                    if (conflict) g.DrawText(L10n.T("Auto.HotkeyConflict"), new UiRect(infoX, labelY + 38f, infoW, 15f), t.Fail, 10.5f);
+                    g.FillRoundedRect(trigger, 10f, t.SurfaceCard);
+                    g.DrawRoundedRect(trigger, 10f, t.Border);
+                    string detail = AutomationTriggerDetail(rule);
+                    g.DrawText(AutomationTriggerTitle(rule.Trigger), new UiRect(trigger.X + 8f, trigger.Y + (detail.Length == 0 ? 15f : 6f), trigger.Width - 16f, 18f),
+                        t.TextPrimary, 11.5f);
+                    if (detail.Length != 0) g.DrawText(detail, new UiRect(trigger.X + 8f, trigger.Y + 25f, trigger.Width - 16f, 17f), t.TextSecondary, 10.5f);
                     UiPrimitives.DrawSwitch(g, t, hit, "auto.sw." + rule.Id, swRect, rule.Enabled);
-                    RegisterBtn("auto.sw." + rule.Id, swRect, _listViewport, hit, () => ToggleRuleEnabled(rule.Id), UiCursorKind.Hand,
-                        L10n.T(rule.Enabled ? "Auto.Disable" : "Auto.Enable"));
-
-                    cx = swRect.X - 4f;
-                    bool fav = actions.Config.FavoriteRuleIds.Contains(rule.Id);
-                    var favRect = new UiRect(cx - 24f, rowRect.CenterY - 12f, 24f, 24f);
-                    UiPrimitives.DrawGhostIconButton(g, t, hit, "auto.fav." + rule.Id, favRect, UiIcon.Pin, 13f,
-                        iconColor: fav ? t.Accent : t.TextSecondary, active: fav, tooltip: L10n.T("Auto.Favorite"));
-                    RegisterBtn("auto.fav." + rule.Id, favRect, _listViewport, hit, () => ToggleFavorite(rule.Id), UiCursorKind.Hand, L10n.T("Auto.Favorite"));
-
-                    cx = favRect.X - 2f;
-                    var runRect = new UiRect(cx - 24f, rowRect.CenterY - 12f, 24f, 24f);
-                    UiPrimitives.DrawGhostIconButton(g, t, hit, "auto.run." + rule.Id, runRect,
-                        running ? UiIcon.Waiting : UiIcon.Play, 13f,
-                        iconColor: running ? t.Accent : t.TextPrimary, enabled: !running, tooltip: L10n.T(running ? "Auto.Running" : "Auto.Run"));
-                    if (!running) RegisterBtn("auto.run." + rule.Id, runRect, _listViewport, hit, () => RunRuleById(rule.Id), UiCursorKind.Hand, L10n.T("Auto.Run"));
-
-                    float buttonX = runRect.X;
-                    void AddRowCommand(string suffix, UiIcon icon, string label, Action command)
+                    RegisterBtn("auto.sw." + rule.Id, swRect, _listViewport, hit, () => ToggleRuleEnabled(rule.Id), tooltip: L10n.T(rule.Enabled ? "Auto.Disable" : "Auto.Enable"));
+                    void Button(string suffix, UiIcon glyph, string key, Action<UiRect> click, bool enabled = true)
                     {
-                        buttonX -= 28f;
-                        var button = new UiRect(buttonX, rowRect.CenterY - 13f, 26f, 26f);
                         string id = suffix + rule.Id;
-                        string tip = L10n.T(label);
-                        UiPrimitives.DrawGhostIconButton(g, t, hit, id, button, icon, 14f, tooltip: tip);
-                        RegisterBtn(id, button, _listViewport, hit, command, UiCursorKind.Hand, tip);
+                        var button = new UiRect(buttonsX, rowRect.CenterY - 14f, 28f, 28f);
+                        string tip = L10n.T(key);
+                        UiPrimitives.DrawGhostIconButton(g, t, hit, id, button, glyph, 16f, enabled: enabled, tooltip: tip);
+                        if (enabled) RegisterBtn(id, button, _listViewport, hit, () => click(button), tooltip: tip);
+                        buttonsX += 30f;
                     }
-                    AddRowCommand("auto.delete.", UiIcon.Delete, "Auto.Delete", () => DeleteRule(rule.Id));
-                    AddRowCommand("auto.copy.", UiIcon.Copy, "Auto.Copy", () => DuplicateRule(rule.Id));
-                    AddRowCommand("auto.edit.", UiIcon.Edit, "Auto.Edit", () => OpenRuleInEditor(rule, false, null));
-
-                    // Row click body (select in editor) + right-click context menu
-                    var bodyRect = new UiRect(gripRect.Right, rowRect.Y, buttonX - gripRect.Right, rowH);
-                    RegisterBtn(rowId, bodyRect, _listViewport, hit, () =>
-                    {
-                        var found = AutoRuleStore.Find(rule.Id) ?? rule;
-                        OpenRuleInEditor(found, false, null);
-                    }, UiCursorKind.Hand, rule.Name, () => ShowRuleContextMenu(rule));
+                    Button("auto.run.", running ? UiIcon.Waiting : UiIcon.Play, running ? "Auto.Running" : "Auto.Run", _ => RunRuleById(rule.Id), !running);
+                    Button("auto.edit.", UiIcon.Edit, "Auto.Edit", _ => OpenRuleInEditor(rule, false, null));
+                    Button("auto.copy.", UiIcon.Copy, "Auto.Copy", _ => DuplicateRule(rule.Id));
+                    Button("auto.delete.", UiIcon.Delete, "Auto.Delete", _ => DeleteRule(rule.Id));
+                    Button("auto.more.", UiIcon.More, "Auto.More", anchor => ShowRuleExtras(rule.Id, anchor));
 
                     // Drop indicator line
                     if (_ruleDragging && _dropRuleId == rule.Id && _dragRuleId != rule.Id)
@@ -486,14 +461,7 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
         y += 14f;
 
         // Basic Info Header
-        UiPrimitives.DrawSettingsSectionHeader(g, t, new UiRect(ex, y, bodyW - 80f, 24f), UiIcon.Info, L10n.T("Auto.BasicInfo"));
-        // Enabled switch on right
-        var enSwRect = new UiRect(ex + bodyW - 40f, y, 36f, 24f);
-        UiPrimitives.DrawSwitch(g, t, hit, "edit.enabled", enSwRect, _editingRule.Enabled);
-        RegisterBtn("edit.enabled", enSwRect, _editorViewport, hit, () => { _editingRule.Enabled = !_editingRule.Enabled; actions.Invalidate(); },
-            tooltip: L10n.T(_editingRule.Enabled ? "Auto.Disable" : "Auto.Enable"));
-        g.DrawText(L10n.T(_editingRule.Enabled ? "Auto.Enabled" : "Auto.Disabled"),
-            new UiRect(enSwRect.X - 72f, y, 66f, 24f), _editingRule.Enabled ? t.Accent : t.TextSecondary, 11.5f, 400, UiTextAlign.Trailing, UiVertAlign.Center);
+        UiPrimitives.DrawSettingsSectionHeader(g, t, new UiRect(ex, y, bodyW, 24f), UiIcon.Info, L10n.T("Auto.BasicInfo"));
         y += 32f;
 
         const float labelW = 84f;
@@ -547,19 +515,8 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
         else if (_editingRule.Trigger is AutoRuleTrigger.AppStart or AutoRuleTrigger.AppSwitch or AutoRuleTrigger.AppExit)
         {
             g.DrawText(L10n.T("Auto.TriggerApp"), new UiRect(ex, y, labelW - 8f, 34f), t.TextSecondary, 12.5f, 400, UiTextAlign.Leading, UiVertAlign.Center);
-            float pickW = MathF.Min(190f, inputW * 0.45f);
-            var boxRect = new UiRect(inputX, y, inputW - pickW - 6f, 34f);
-            UiPrimitives.DrawTextBox(g, t, hit, "edit.trigapp.box", boxRect, _editingRule.TriggerApp,
-                "chrome / game.exe", focused: actions.ActiveInlineEditTag == "edit.trigapp.box");
-            RegisterBtn("edit.trigapp.box", boxRect, _editorViewport, hit, () =>
-            {
-                actions.StartInlineEdit("edit.trigapp.box", boxRect, _editingRule.TriggerApp,
-                    null,
-                    (txt, _) => { _editingRule.TriggerApp = txt.Trim(); actions.Invalidate(); });
-            }, UiCursorKind.IBeam);
-
-            var pickRect = new UiRect(boxRect.Right + 6f, y, pickW, 34f);
-            UiPrimitives.DrawComboBox(g, t, hit, "edit.trigapp.pick", pickRect, IsZh() ? "选择运行中应用" : "Running app");
+            var pickRect = new UiRect(inputX, y, inputW, 34f);
+            UiPrimitives.DrawComboBox(g, t, hit, "edit.trigapp.pick", pickRect, AppChoiceLabel(_editingRule.TriggerApp));
             RegisterBtn("edit.trigapp.pick", pickRect, _editorViewport, hit, () =>
                 OpenAppPickerCombo(pickRect, _editingRule.TriggerApp, proc => { _editingRule.TriggerApp = proc; actions.Invalidate(); }));
             y += 42f;
@@ -644,14 +601,10 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
         float rightX = card.Right - pad;
 
         var saveRect = new UiRect(rightX - 108f, btnY, 108f, 34f);
-        UiPrimitives.DrawAccentButton(g, t, hit, "edit.save", saveRect, IsZh() ? "保存规则" : L10n.T("Auto.Save"));
+        UiPrimitives.DrawAccentButton(g, t, hit, "edit.save", saveRect, L10n.T("Auto.Save"));
         RegisterBtn("edit.save", saveRect, card, hit, SaveEditorRule);
 
-        var testRect = new UiRect(saveRect.X - 106f, btnY, 96f, 34f);
-        UiPrimitives.DrawSecondaryButton(g, t, hit, "edit.test", testRect, IsZh() ? "立即测试" : L10n.T("Auto.Run"), icon: UiIcon.Play);
-        RegisterBtn("edit.test", testRect, card, hit, TestEditorRule);
-
-        var cancelRect = new UiRect(testRect.X - 90f, btnY, 80f, 34f);
+        var cancelRect = new UiRect(saveRect.X - 90f, btnY, 80f, 34f);
         UiPrimitives.DrawSecondaryButton(g, t, hit, "edit.cancel", cancelRect, L10n.T("Auto.Cancel"));
         RegisterBtn("edit.cancel", cancelRect, card, hit, CancelEditor);
     }
@@ -678,7 +631,7 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
             g.DrawLine(cardRect.X, lineY, cardRect.Right, lineY, t.Accent, 2.5f);
         }
 
-        // Top bar: Grip + Step index badge + Action Combo + Up/Down + Copy + Delete
+        // Top bar: Grip + Step index badge + Action Combo + Copy + Delete
         float ty = y + pad;
         var gripRect = new UiRect(x + pad, ty + 2f, 22f, 30f);
         UiPrimitives.DrawGhostIconButton(g, t, hit, $"step.grip.{index}", gripRect, UiIcon.Grip, 14f, tooltip: L10n.T("Auto.DragOrder"));
@@ -686,44 +639,23 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
         var idxBadgeRect = new UiRect(gripRect.Right + 4f, ty + 6f, 44f, 22f);
         UiPrimitives.DrawBadge(g, t, idxBadgeRect, $"#{index + 1}", t.SurfaceBg, fg, border, 11f);
 
-        float rightBtnsW = 128f;
+        float rightBtnsW = 108f;
         float comboW = Math.Clamp(innerW - 76f - rightBtnsW, 130f, 300f);
         var actionComboRect = new UiRect(idxBadgeRect.Right + 8f, ty, comboW, 34f);
         UiPrimitives.DrawComboBox(g, t, hit, $"step.act.{index}", actionComboRect, L10n.T(AutoActionKey(step.Action)), fontSize: 12f);
         RegisterBtn($"step.act.{index}", actionComboRect, _editorViewport, hit, () => OpenActionCombo(actionComboRect, step));
 
-        // Right step buttons: Delete | Copy | Down | Up
+        // Right step buttons: Delete | Copy
         float rx = x + w - pad;
-        bool canDelete = _editingSteps.Count > 1;
-        var delRect = new UiRect(rx - 30f, ty + 2f, 30f, 30f);
-        UiPrimitives.DrawGhostIconButton(g, t, hit, $"step.del.{index}", delRect, UiIcon.Delete, 14f,
-            iconColor: canDelete ? t.Fail : t.TextSecondary, enabled: canDelete, tooltip: L10n.T("Auto.Delete"));
-        if (canDelete) RegisterBtn($"step.del.{index}", delRect, _editorViewport, hit, () => { _editingSteps.RemoveAt(index); actions.Invalidate(); });
+        var delRect = new UiRect(rx - 68f, ty, 68f, 34f);
+        UiPrimitives.DrawSecondaryButton(g, t, hit, $"step.del.{index}", delRect, L10n.T("Auto.Delete"),
+            icon: UiIcon.Delete, danger: true, fontSize: 12f);
+        RegisterBtn($"step.del.{index}", delRect, _editorViewport, hit, () => { _editingSteps.RemoveAt(index); actions.Invalidate(); });
 
         rx = delRect.X - 2f;
         var copyRect = new UiRect(rx - 28f, ty + 2f, 28f, 30f);
         UiPrimitives.DrawGhostIconButton(g, t, hit, $"step.cp.{index}", copyRect, UiIcon.Copy, 14f, tooltip: L10n.T("Auto.Copy"));
         RegisterBtn($"step.cp.{index}", copyRect, _editorViewport, hit, () => { _editingSteps.Insert(index + 1, step.Clone()); actions.Invalidate(); });
-
-        rx = copyRect.X - 2f;
-        bool canDown = index + 1 < _editingSteps.Count;
-        var downRect = new UiRect(rx - 26f, ty + 2f, 26f, 30f);
-        UiPrimitives.DrawGhostIconButton(g, t, hit, $"step.dn.{index}", downRect, UiIcon.ChevronDown, 13f, enabled: canDown);
-        if (canDown) RegisterBtn($"step.dn.{index}", downRect, _editorViewport, hit, () =>
-        {
-            (_editingSteps[index], _editingSteps[index + 1]) = (_editingSteps[index + 1], _editingSteps[index]);
-            actions.Invalidate();
-        });
-
-        rx = downRect.X - 2f;
-        bool canUp = index > 0;
-        var upRect = new UiRect(rx - 26f, ty + 2f, 26f, 30f);
-        UiPrimitives.DrawGhostIconButton(g, t, hit, $"step.up.{index}", upRect, UiIcon.ChevronUp, 13f, enabled: canUp);
-        if (canUp) RegisterBtn($"step.up.{index}", upRect, _editorViewport, hit, () =>
-        {
-            (_editingSteps[index - 1], _editingSteps[index]) = (_editingSteps[index], _editingSteps[index - 1]);
-            actions.Invalidate();
-        });
 
         // Inner params box
         var paramBox = new UiRect(x + pad, ty + 42f, innerW, paramsH);
@@ -768,17 +700,8 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
         if (AutoRuleActions.NeedsApp(step.Action))
         {
             g.DrawText(L10n.T("Auto.TargetApp"), new UiRect(x, y, lw - 6f, 32f), t.TextSecondary, 12f, 400, UiTextAlign.Leading, UiVertAlign.Center);
-            float pickW = MathF.Min(150f, iw * 0.42f);
-            var appBox = new UiRect(ix, y, iw - pickW - 6f, 32f);
-            string tag = $"step.{index}.app";
-            UiPrimitives.DrawTextBox(g, t, hit, tag, appBox, step.TargetApp, "app.exe", focused: actions.ActiveInlineEditTag == tag, fontSize: 12f);
-            RegisterBtn(tag, appBox, _editorViewport, hit, () =>
-            {
-                actions.StartInlineEdit(tag, appBox, step.TargetApp, null, (txt, _) => { step.TargetApp = txt.Trim(); actions.Invalidate(); });
-            }, UiCursorKind.IBeam);
-
-            var pickRect = new UiRect(appBox.Right + 6f, y, pickW, 32f);
-            UiPrimitives.DrawComboBox(g, t, hit, $"step.{index}.apppick", pickRect, IsZh() ? "选择应用" : "Pick App", fontSize: 11.5f);
+            var pickRect = new UiRect(ix, y, iw, 32f);
+            UiPrimitives.DrawComboBox(g, t, hit, $"step.{index}.apppick", pickRect, AppChoiceLabel(step.TargetApp), fontSize: 12f);
             RegisterBtn($"step.{index}.apppick", pickRect, _editorViewport, hit, () =>
                 OpenAppPickerCombo(pickRect, step.TargetApp, proc => { step.TargetApp = proc; actions.Invalidate(); }));
             y += 40f;
@@ -1052,12 +975,6 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
                 return true;
             }
             if (targetId != "edit.hk.rec") CancelHotkeyCapture();
-        }
-        if (e.Button == UiMouseButton.Right)
-        {
-            if (targetId == null || !_rightClicks.TryGetValue(targetId, out var contextMenu)) return false;
-            contextMenu();
-            return true;
         }
         if (e.Button != UiMouseButton.Left) return false;
 
@@ -1341,41 +1258,15 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
         actions.ShowMenu(anchor, items);
     }
 
-    private void ImportRuleJson()
+    private void ShowRuleExtras(string id, UiRect anchor)
     {
-        string? path = NativeDialogs.Open(actions.OwnerWindow.Handle, "Automation rule|*.json|All files|*.*");
-        if (path == null) return;
-        try
-        {
-            string json = File.ReadAllText(path, Encoding.UTF8);
-            var rule = JsonSerializer.Deserialize(json, AutomationRuleJsonContext.Default.AutoRule);
-            if (rule == null) { actions.ShowNotice(L10n.T("Exp.TransferFail")); return; }
-            if (string.IsNullOrWhiteSpace(rule.Id) || AutoRuleStore.Find(rule.Id) != null)
-                rule.Id = Guid.NewGuid().ToString("N");
-            AutoRuleStore.Save(rule, L10n.T("Auto.DefaultNamePrefix"));
-            actions.Host.ViewSettingsChanged();
-            LoadRules();
-            OpenRuleInEditor(rule, false, null);
-            actions.ShowNotice(L10n.T("Auto.Saved"));
-        }
-        catch
-        {
-            actions.ShowNotice(L10n.T("Exp.TransferFail"));
-        }
-    }
-
-    private void ShowRuleContextMenu(AutoRule rule)
-    {
-        bool fav = actions.Config.FavoriteRuleIds.Contains(rule.Id);
-        var items = new List<UiMenuItem>
-        {
-            new() { Text = L10n.T("Auto.Copy"), Icon = UiIcon.Copy, Click = () => DuplicateRule(rule.Id) },
-            new() { Text = IsZh() ? "导出 JSON" : "Export JSON", Icon = UiIcon.File, Click = () => ExportRuleJson(rule.Id) },
-            new() { Text = L10n.T("Auto.Favorite"), Icon = UiIcon.Pin, Checked = fav, Click = () => ToggleFavorite(rule.Id) },
-            UiMenuItem.Separator(),
-            new() { Text = L10n.T("Auto.Delete"), Icon = UiIcon.Delete, Danger = true, Click = () => DeleteRule(rule.Id) }
-        };
-        actions.ShowMenuAtCursor(items);
+        actions.ShowMenu(anchor,
+        [
+            new() { Text = L10n.T("Auto.CopyCommand"), Click = () =>
+                actions.ShowNotice(L10n.T(NativeTextClipboard.TryWrite(actions.OwnerWindow.Handle, RuleCommandLine.BuildShortCommand(id))
+                    ? "Auto.CommandCopied" : "Auto.CommandCopyFailed")) },
+            new() { Text = L10n.T("Auto.Favorite"), Checked = actions.Config.FavoriteRuleIds.Contains(id), Click = () => ToggleFavorite(id) }
+        ]);
     }
 
     private void DuplicateRule(string id)
@@ -1390,35 +1281,12 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
         if (!actions.WriteRule(() => AutoRuleStore.Save(copy))) return;
         actions.Host.ViewSettingsChanged();
         LoadRules();
-        OpenRuleInEditor(copy, false, null);
+        actions.Invalidate();
         actions.ShowNotice(L10n.T("Auto.Copied"));
-    }
-
-    private void ExportRuleJson(string id)
-    {
-        var rule = AutoRuleStore.Find(id);
-        if (rule == null) return;
-        string? path = NativeDialogs.Save(actions.OwnerWindow.Handle, "Automation rule|*.json|All files|*.*", "json");
-        if (path == null) return;
-        try
-        {
-            string json = JsonSerializer.Serialize(rule, AutomationRuleJsonContext.Default.AutoRule);
-            File.WriteAllText(path, json, new UTF8Encoding(false));
-            actions.ShowNotice(L10n.T("Exp.ExportDone"));
-        }
-        catch
-        {
-            actions.ShowNotice(L10n.T("Exp.TransferFail"));
-        }
     }
 
     private void DeleteRule(string id)
     {
-        var rule = AutoRuleStore.Find(id);
-        string name = rule?.Name ?? id;
-        if (!NativeDialogs.Confirm(actions.OwnerWindow.Handle, L10n.T("Auto.Delete"),
-            IsZh() ? $"确定删除“{name}”？" : $"Delete rule \"{name}\"?"))
-            return;
         if (!actions.WriteRule(() => AutoRuleStore.Delete(id))) return;
         actions.Config.FavoriteRuleIds.Remove(id);
         actions.Config.AutomationRuleOrder.Remove(id);
@@ -1473,24 +1341,6 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
                     actions.RefreshHistoryIfOpen();
                     actions.Invalidate();
                 }
-            });
-        });
-    }
-
-    private void TestEditorRule()
-    {
-        if (_editingRule == null) return;
-        actions.CloseInlineEdit(commit: true);
-        if (!ValidateEditor(out string errMsg)) { actions.ShowNotice(errMsg); return; }
-        var draft = _editingRule.Clone();
-        draft.SetSteps(_editingSteps);
-        _ = Task.Run(async () =>
-        {
-            var result = await AutoRuleService.ExecuteWithResultAsync(draft, "manual").ConfigureAwait(false);
-            string msg = AutoRuleService.DescribeResult(result);
-            actions.Host.TryPost(() =>
-            {
-                if (!_disposed) actions.ShowNotice(msg);
             });
         });
     }
@@ -1550,7 +1400,7 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
         if (_editingRule.Trigger == AutoRuleTrigger.Hotkey && string.IsNullOrWhiteSpace(_editingRule.Hotkey))
         { message = L10n.T("Auto.HotkeyRequired"); return false; }
         if (_editingRule.Trigger is AutoRuleTrigger.AppStart or AutoRuleTrigger.AppSwitch or AutoRuleTrigger.AppExit
-            && string.IsNullOrWhiteSpace(_editingRule.TriggerApp))
+            && !_apps.Any(app => string.Equals(app.ProcessName, _editingRule.TriggerApp, StringComparison.OrdinalIgnoreCase)))
         { message = L10n.T("Auto.TriggerAppRequired"); return false; }
         if (_editingRule.Trigger == AutoRuleTrigger.Schedule && _editingRule.ScheduleMode == 2 && _editingRule.ScheduleWeekdays.Count == 0)
         { message = L10n.T("Auto.ScheduleWeekdayRequired"); return false; }
@@ -1559,12 +1409,16 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
         {
             var s = _editingSteps[i];
             string? key = null;
-            if (s.Action == AutoRuleAction.ExecuteRule && (string.IsNullOrWhiteSpace(s.TargetRuleId) || s.TargetRuleId == _editingRule.Id))
+            if (s.Action == AutoRuleAction.ExecuteRule && (string.IsNullOrWhiteSpace(s.TargetRuleId) || s.TargetRuleId == _editingRule.Id || AutoRuleStore.Find(s.TargetRuleId) == null))
                 key = "Auto.RuleRequired";
-            else if (AutoRuleActions.NeedsApp(s.Action) && string.IsNullOrWhiteSpace(s.TargetApp))
+            else if (AutoRuleActions.NeedsApp(s.Action) && (string.IsNullOrWhiteSpace(s.TargetApp) || (_templateHint != null
+                && !_apps.Any(app => string.Equals(app.ProcessName, s.TargetApp, StringComparison.OrdinalIgnoreCase)))))
                 key = "Auto.ActionAppRequired";
             else if (AutoRuleActions.NeedsDevice(s.Action) && (string.IsNullOrWhiteSpace(s.TargetDeviceId)
-                || (s.Action is not (AutoRuleAction.SetAppOutput or AutoRuleAction.SetAppInput) && AudioService.IsSystemDefault(s.TargetDeviceId))))
+                || (_templateHint != null && !AudioService.IsSystemDefault(s.TargetDeviceId) && !(AutoRuleActions.UsesCaptureDevice(s.Action) ? _inputs : _outputs)
+                    .Any(endpoint => string.Equals(endpoint.Id, s.TargetDeviceId, StringComparison.OrdinalIgnoreCase)))
+                || (s.Action is not (AutoRuleAction.SetAppOutput or AutoRuleAction.SetAppInput)
+                    && (AudioService.IsSystemDefault(s.TargetDeviceId) || PcRoutingApi.IsPhoneOutputDevice(s.TargetDeviceId)))))
                 key = "Auto.DeviceRequired";
             else if ((s.Action == AutoRuleAction.LaunchProgram && s.CurrentLaunchItems().Count == 0)
                 || (s.Action == AutoRuleAction.RunPowerShell && s.ProgramPaths.All(string.IsNullOrWhiteSpace)))
@@ -1661,6 +1515,13 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
         });
     }
 
+    private string AppChoiceLabel(string process)
+    {
+        var app = Array.Find(_apps, a => string.Equals(a.ProcessName, process, StringComparison.OrdinalIgnoreCase));
+        if (app == null) return "";
+        return actions.Config.AppNames.TryGetValue(process, out string? alias) && !string.IsNullOrWhiteSpace(alias) ? alias : app.Label;
+    }
+
     private void OpenAppPickerCombo(UiRect anchor, string current, Action<string> onPick)
     {
         var choices = new List<ComboChoice>();
@@ -1672,7 +1533,6 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
             string alias = actions.Config.AppNames.TryGetValue(proc, out var a) && !string.IsNullOrWhiteSpace(a) ? a : app.Label;
             choices.Add(new(proc, $"{alias} ({proc})"));
         }
-        if (choices.Count == 0) choices.Add(new("", IsZh() ? "暂无运行中音频应用" : "No active audio apps"));
         actions.ShowCombo(anchor, choices, current, p => { if (!string.IsNullOrEmpty(p.Key)) onPick(p.Key); });
     }
 
@@ -1749,10 +1609,10 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
         var endpoints = capture ? _inputs : _outputs;
         foreach (var ep in endpoints)
         {
+            if (step.Action is not (AutoRuleAction.SetAppOutput or AutoRuleAction.SetAppInput) && PcRoutingApi.IsPhoneOutputDevice(ep.Id)) continue;
             string name = actions.Config.DeviceNames.TryGetValue(ep.Id, out var alias) && !string.IsNullOrWhiteSpace(alias) ? alias : ep.Name;
             list.Add(new ComboChoice(ep.Id, name));
         }
-        if (list.Count == 0) list.Add(new ComboChoice("", L10n.T("Ov.NoDevice")));
         actions.ShowCombo(anchor, list, step.TargetDeviceId, p =>
         {
             if (!string.IsNullOrEmpty(p.Key)) { step.TargetDeviceId = p.Key; actions.Invalidate(); }
@@ -1820,6 +1680,21 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
             }
         }
         return false;
+    }
+
+    private static string RuleActionSummary(AutoRule rule)
+    {
+        var steps = rule.Actions.Count > 0 ? rule.Actions : rule.CloneSteps();
+        return string.Join(L10n.T("Auto.ActionListSeparator"), steps.Select(step =>
+        {
+            string label = L10n.T(AutoActionKey(step.Action));
+            if (AutoRuleActions.SetsMute(step.Action)) label += "·" + L10n.T(step.Muted ? "Auto.MuteOn" : "Auto.MuteOff");
+            if (AutoRuleActions.AdjustsVolume(step.Action))
+                label += " " + string.Format(L10n.T("Auto.VolumeDeltaValue"), (step.VolumeDelta > 0 ? "+" : "") + step.VolumeDelta);
+            if (AutoRuleActions.SetsVolume(step.Action)) label += " " + step.Volume + "%";
+            if (step.Action == AutoRuleAction.LaunchProgram && step.LaunchMode == 1) label += " · " + L10n.T("Auto.LaunchModeRandom");
+            return label;
+        }));
     }
 
     private static string AutomationTriggerTitle(AutoRuleTrigger trigger) => L10n.T(trigger switch
@@ -1934,5 +1809,4 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
         return new UiRect(l, t, MathF.Max(0f, right - l), MathF.Max(0f, b - t));
     }
 
-    private static bool IsZh() => L10n.CurrentLanguage.StartsWith("zh", StringComparison.OrdinalIgnoreCase);
 }

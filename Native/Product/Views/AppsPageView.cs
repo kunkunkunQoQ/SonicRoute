@@ -20,8 +20,8 @@ namespace SonicRoute.Native.Product.Views;
 
 internal sealed class AppsPageView : IViewPage
 {
-    private const float LeftRowHeight = 44f;
-    private const float PhoneListMaxHeight = 196f;
+    private const float LeftRowHeight = 56.5f;
+    private const float PhoneListMaxHeight = 220f;
     private const int PeakBurstMaxTicks = 24;
     private static readonly StringComparer IdCmp = StringComparer.OrdinalIgnoreCase;
 
@@ -149,6 +149,23 @@ internal sealed class AppsPageView : IViewPage
         _phonePage ??= new PhoneDevicePageView(_actions);
     }
 
+    private async Task RefreshSidebarDeviceAsync()
+    {
+        var phone = _actions.Host.Phone;
+        string profileId = phone.Store.Profile.Id;
+        try { await phone.RefreshSelectedDeviceAsync(phone.Lifetime).ConfigureAwait(false); }
+        catch (OperationCanceledException) { }
+        catch (Exception ex)
+        {
+            ExceptionDiagnostics.Record("Apps.RefreshDevice", ex);
+            _actions.Host.TryPost(() =>
+            {
+                if (_active && phone.Store.Profile.Id == profileId)
+                    _actions.ShowNotice(PhonePreview.TranslateError(ex));
+            });
+        }
+    }
+
     private void OnPhoneStoreChanged()
     {
         _actions.Host.TryPost(() =>
@@ -214,15 +231,16 @@ internal sealed class AppsPageView : IViewPage
         _actions.Invalidate();
     }
 
-    public void OnFilesDropped(string[] paths)
+    public void OnFilesDropped(string[] paths, string? targetId)
     {
 #if SONICROUTE_PHONE
         if (_showingPhone && _phonePage != null)
         {
-            _phonePage.OnFilesDropped(paths);
+            _phonePage.OnFilesDropped(paths, targetId);
             return;
         }
 #endif
+        if (targetId != "apps.icon.import") return;
         if (paths.Length != 1 || _selectedApp == null || string.IsNullOrWhiteSpace(_selectedApp.ProcessName))
         {
             if (_selectedApp == null) _actions.ShowNotice(L10n.T("Apps.SelectHint"));
@@ -250,7 +268,7 @@ internal sealed class AppsPageView : IViewPage
         var rightRect = new UiRect(leftCardRect.Right + 8f, contentRect.Y, MathF.Max(120f, contentRect.Width - leftW - 8f), contentRect.Height);
 
         UiPrimitives.DrawCard(g, t, leftCardRect, UiMetrics.CardCornerRadius);
-        RenderLeftSidebar(g, t, hit, leftCardRect.Deflate(6f, 10f));
+        RenderLeftSidebar(g, t, hit, leftCardRect.Deflate(7f, 11f));
 
 #if SONICROUTE_PHONE
         if (_showingPhone && _phonePage != null)
@@ -287,7 +305,7 @@ internal sealed class AppsPageView : IViewPage
 
         var phoneHdr = new UiRect(inner.X + 1f, y, inner.Width - 2f, 22f);
         DrawSidebarHeader(g, t, hit, phoneHdr, "apps.phone.header", L10n.T("Phone.Title"), profiles.Length);
-        y += 28f;
+        y += 34f;
 
         if (profiles.Length > 0)
         {
@@ -316,17 +334,17 @@ internal sealed class AppsPageView : IViewPage
                 if (selected) g.FillRoundedRect(rowRect, 7f, t.NavSelected);
                 else if (hit.IsHover(id)) g.FillRoundedRect(rowRect, 7f, t.NavHover);
 
-                var iconBox = new UiRect(rowRect.X + 6f, rowRect.CenterY - 11f, 22f, 22f);
-                g.DrawIcon(UiIcon.Phone, iconBox, selected ? t.Accent : t.TextSecondary, 1.6f);
+                var iconBox = new UiRect(rowRect.X + 5f, rowRect.CenterY - 13f, 26f, 26f);
+                g.DrawIcon(UiIcon.Phone, iconBox, t.TextSecondary, 1.6f);
 
                 var conn = phone.Connections.Get(prof.LastDevice!);
                 bool online = conn.Device != null;
                 string sub = !online ? L10n.T("Phone.Disconnected") : conn.Device!.IsWifi ? L10n.T("Phone.WifiConnected") : L10n.T("Phone.UsbConnected");
                 string dispName = phone.Store.GetProfileDisplayName(prof);
 
-                var textArea = new UiRect(iconBox.Right + 6f, rowRect.Y + 4f, MathF.Max(10f, rowRect.Right - iconBox.Right - 20f), rowRect.Height - 8f);
+                var textArea = new UiRect(iconBox.Right + 8f, rowRect.CenterY - 17f, MathF.Max(10f, rowRect.Right - iconBox.Right - 20f), rowRect.Height - 8f);
                 g.DrawText(dispName, new UiRect(textArea.X, textArea.Y, textArea.Width, 18f), t.TextPrimary, 12.5f, selected ? 600 : 400);
-                g.DrawText(sub, new UiRect(textArea.X, textArea.Y + 18f, textArea.Width, 15f), t.TextSecondary, 10.5f);
+                g.DrawText(sub, new UiRect(textArea.X, textArea.Y + 20f, textArea.Width, 15f), t.TextSecondary, 10.5f);
 
                 if (online)
                     g.FillEllipse(rowRect.Right - 8f, rowRect.CenterY, 3f, 3f, t.Success);
@@ -334,7 +352,7 @@ internal sealed class AppsPageView : IViewPage
             hit.PopClip();
             g.PopClip();
             _phoneScroll.Draw(g, t, hit, "apps.phone.scroll", _phoneListRect);
-            y += listH + 4f;
+            y += listH;
         }
         else
         {
@@ -342,8 +360,7 @@ internal sealed class AppsPageView : IViewPage
         }
 
         var addBtnRect = new UiRect(inner.X, y, inner.Width, 26f);
-        bool addActive = _showingPhone && _phonePage?.IsConnectionPage == true;
-        UiPrimitives.DrawSecondaryButton(g, t, hit, "apps.phone.add", addBtnRect, L10n.T("Phone.AddDeviceButton"), fontSize: 12f, active: addActive);
+        UiPrimitives.DrawSecondaryButton(g, t, hit, "apps.phone.add", addBtnRect, L10n.T("Phone.AddDeviceButton"), fontSize: 12f);
         _clicks["apps.phone.add"] = OpenPhoneConnection;
         y += 34f;
 
@@ -355,18 +372,20 @@ internal sealed class AppsPageView : IViewPage
         DrawSidebarHeader(g, t, hit, appsHdr, "apps.list.header", L10n.T("Apps.Title"), _apps.Count);
         y += 30f;
 
-        float refreshH = 30f;
+        float refreshH = 36f;
         var refreshRect = new UiRect(inner.X, inner.Bottom - refreshH, inner.Width, refreshH);
         UiPrimitives.DrawSecondaryButton(g, t, hit, "apps.refresh", refreshRect, L10n.T("Apps.Refresh"), fontSize: 12.5f);
         _clicks["apps.refresh"] = () =>
         {
             TriggerRefresh(forceAppsRefresh: true);
 #if SONICROUTE_PHONE
-            _ = _actions.Host.Phone.RefreshAsync(restore: true);
+            if (_showingPhone) _phonePage?.RefreshFromUser();
+            else if (_actions.Host.Phone.Store.Profile.LastDevice != null)
+                _ = RefreshSidebarDeviceAsync();
 #endif
         };
 
-        float listAvailH = MathF.Max(40f, refreshRect.Y - 10f - y);
+        float listAvailH = MathF.Max(40f, refreshRect.Y - 12f - y);
         _appsListRect = new UiRect(inner.X, y, inner.Width, listAvailH);
         _appsScroll.ViewportHeight = listAvailH;
         _appsScroll.ContentHeight = _apps.Count * LeftRowHeight;
@@ -408,9 +427,9 @@ internal sealed class AppsPageView : IViewPage
             string sub = app.IsExternal
                 ? (app.SourceLabel ?? "")
                 : (!string.IsNullOrWhiteSpace(app.ProcessName) ? app.ProcessName! : $"PID {app.ProcessId}");
-            var textRect = new UiRect(iconRect.Right + 6f, rowRect.Y + 4f, MathF.Max(10f, rowRect.Right - iconRect.Right - 20f), rowRect.Height - 8f);
+            var textRect = new UiRect(iconRect.Right + 8f, rowRect.CenterY - 17f, MathF.Max(10f, rowRect.Right - iconRect.Right - 20f), rowRect.Height - 8f);
             g.DrawText(label, new UiRect(textRect.X, textRect.Y, textRect.Width, 17f), t.TextPrimary, 12.5f, selected ? 600 : 400);
-            g.DrawText(sub, new UiRect(textRect.X, textRect.Y + 18f, textRect.Width, 14f), t.TextSecondary, 10.5f);
+            g.DrawText(sub, new UiRect(textRect.X, textRect.Y + 20f, textRect.Width, 14f), t.TextSecondary, 10.5f);
 
             bool isMuted = _mutedByIdentity.GetValueOrDefault(app.Identity);
             if (isMuted)
@@ -696,11 +715,9 @@ internal sealed class AppsPageView : IViewPage
             return;
         }
 
-        g.FillRoundedRect(rect, 6f, t.NavSelected);
-        g.DrawRoundedRect(rect, 6f, t.Accent.WithAlphaFraction(0.35f), 1f);
         string lbl = GetAppDisplayLabel(app);
         string initial = lbl.Length > 0 ? StringInfo.GetNextTextElement(lbl).ToUpperInvariant() : "?";
-        g.DrawText(initial, rect, t.Accent, rect.Height * 0.48f, 600, UiTextAlign.Center, UiVertAlign.Center);
+        g.DrawText(initial, rect, t.TextPrimary, rect.Height * 0.48f, 600, UiTextAlign.Center, UiVertAlign.Center);
     }
 
     public bool OnPointerMove(float x, float y, bool leftDown)
@@ -781,6 +798,9 @@ internal sealed class AppsPageView : IViewPage
 
     public bool OnFocusedKey(string id, int vk)
     {
+#if SONICROUTE_PHONE
+        if (_showingPhone && _phonePage != null) return _phonePage.OnFocusedKey(id, vk);
+#endif
         if (id != "apps.vol.slider" || _selectedApp == null || _selectedVolume < 0 ||
             !ViewSliderKeys.TryChange(vk, _selectedVolume, 0, 100, 1, 10, out double next)) return false;
         ApplySliderVolume((int)next);

@@ -1,4 +1,6 @@
 {
+  "Window.ExpandNavigation": "Развернуть панель навигации",
+  "Window.CollapseNavigation": "Свернуть панель навигации",
   "Window.DragToMove": "Перетащите, чтобы переместить окно",
   "Window.Minimize": "Свернуть",
   "Window.Maximize": "Развернуть",

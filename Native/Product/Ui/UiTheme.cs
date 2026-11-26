@@ -299,7 +299,7 @@ internal static class UiMetrics
     public const float MainCornerRadius = 10f;
     public const float TitleBarHeight = 42f;
     public const float NavExpandedWidth = 196f;
-    public const float NavCollapsedWidth = 0f;
+    public const float NavCollapsedWidth = 64f;
     public const float NavItemHeight = 40f;
     public const float NavItemRadius = 8f;
     public const float NavFontSize = 13.5f;

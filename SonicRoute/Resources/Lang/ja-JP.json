@@ -1,4 +1,6 @@
 {
+  "Window.ExpandNavigation": "ナビゲーションを展開",
+  "Window.CollapseNavigation": "ナビゲーションを折りたたむ",
   "Window.DragToMove": "ドラッグしてウィンドウを移動",
   "Window.Minimize": "最小化",
   "Window.Maximize": "最大化",
