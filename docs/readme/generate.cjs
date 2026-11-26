@@ -24,12 +24,24 @@ if (JSON.stringify(interfaceLocales) !== JSON.stringify(shared.languages.map(lan
 if (new Set(shared.languages.map(language => language.file)).size !== shared.languages.length) throw new Error('Duplicate README output');
 const sourceVersion = fs.readFileSync(path.join(root, 'build/Version.props'), 'utf8').match(/<SonicRouteVersion>(\d+\.\d+(?:\.\d+)?)<\/SonicRouteVersion>/)?.[1];
 if (!sourceVersion) throw new Error('Missing source version in build/Version.props');
-const releaseSummaryPath = path.join(__dirname, 'releases', shared.release + '.json');
-const releaseSummaries = fs.existsSync(releaseSummaryPath) ? JSON.parse(fs.readFileSync(releaseSummaryPath, 'utf8')) : null;
-if (releaseSummaries && JSON.stringify(Object.keys(releaseSummaries).sort()) !== JSON.stringify(interfaceLocales)) throw new Error('Release summary languages differ from built-in interface languages');
-const previousSummaryVersion = shared.release === 'v1.36' ? 'v1.35' : shared.release === 'v1.35' ? 'v1.34' : 'v1.33';
-const previousSummaryPath = ['v1.35', 'v1.34'].includes(previousSummaryVersion) ? path.join(__dirname, 'releases', previousSummaryVersion + '.json') : null;
-const previousReleaseSummaries = previousSummaryPath && fs.existsSync(previousSummaryPath) ? JSON.parse(fs.readFileSync(previousSummaryPath, 'utf8')) : null;
+// v1.33 is the last release whose summary lives in the locale files.
+const inlineSummaryVersion = 'v1.33';
+const summariesDir = path.join(__dirname, 'releases');
+const versions = [inlineSummaryVersion, ...fs.readdirSync(summariesDir)
+  .filter(file => /^v\d+\.\d+(?:\.\d+)?\.json$/.test(file))
+  .map(file => path.basename(file, '.json'))];
+versions.sort(new Intl.Collator('en', { numeric: true }).compare);
+const releaseIndex = versions.indexOf(shared.release);
+if (releaseIndex < 0) throw new Error('Missing README summaries for ' + shared.release);
+const previousSummaryVersion = versions[releaseIndex - 1];
+function readSummaries(version) {
+  if (!version || version === inlineSummaryVersion) return null;
+  const summaries = JSON.parse(fs.readFileSync(path.join(summariesDir, version + '.json'), 'utf8'));
+  if (JSON.stringify(Object.keys(summaries).sort()) !== JSON.stringify(interfaceLocales)) throw new Error('Incomplete README summaries for ' + version);
+  return summaries;
+}
+const releaseSummaries = readSummaries(shared.release);
+const previousReleaseSummaries = readSummaries(previousSummaryVersion);
 function validate(locale, text) {
   if (JSON.stringify(Object.keys(text).sort()) !== JSON.stringify(keys)) throw new Error(locale + ': translation keys differ');
   for (const key of keys) {
@@ -153,11 +165,11 @@ function render(language, text, releaseSummary = text.releaseSummary, previousRe
     ]),
     '## 🆕 ' + fill(text.releaseHighlightsTitle), '',
     fill(releaseSummary), '',
-    ...(releaseSummaries ? [
+    ...(previousSummaryVersion ? [
       '<details>', `<summary>${previousSummaryVersion}</summary>`, '',
       fill(previousReleaseSummary), '', '</details>', ''
     ] : []),
-    ...(shared.release !== 'v' + sourceVersion && text.developmentNotes?.length ? [
+    ...(text.developmentNotes.length ? [
       '## ' + text.developmentTitle, '',
       ...text.developmentNotes.map(note => '- ' + fill(note)), ''
     ] : []),
@@ -208,7 +220,7 @@ function renderAI(shared) {
     "SYSTEM_ARCHITECTURE_&_FACTUAL_BOUNDS:",
     "  driver_isolation: \"NO_VIRTUAL_AUDIO_CABLE | NO_KERNEL_DRIVERS | NO_TARGET_PROCESS_DLL_INJECTION\"",
     "  routing_backend: \"Undocumented COM Windows.Media.Internal.AudioPolicyConfig -> Windows PropertyStore persistence\"",
-    "  persistence_scope: \"OS-level native persistence (survives app exit & OS reboot without SonicRoute running)\"",
+    "  persistence_scope: \"Windows retains the primary PC playback and recording device preferences. Additional simultaneous outputs require SonicRoute to be running.\"",
     "  routing_scope: \"Per-app endpoint preferences. ResetAllAppRouting clears routes, preserving volume/mute preferences and system default devices; it is not the Windows volume mixer full reset.\"",
     "  hooks_in_use: \"User-mode only: SetWinEventHook (foreground focus tracking), SetWindowsHookEx WH_MOUSE_LL (tray wheel & mouse hotkey input)\"",
     "  execution_resource_model: \"Event-driven first (WinEventHook, CoreAudio device/session notifications, WMI process events). Process rules retain a 1-second snapshot fallback when enabled or event monitoring is unavailable. Visible enabled meters sample active/fading sessions at 33ms; idle, closed and failed states have different wait/recovery paths. This is not zero polling or a zero-CPU guarantee.\"",
@@ -222,6 +234,7 @@ function renderAI(shared) {
     `  - { edition: Legacy, runtime: net48, architecture: x64, asset: "SonicRoute-${shared.release}-Legacy-x64.zip", deployment: MULTIFILE_ZIP }`,
     `  - { edition: Lite, runtime: net10, architecture: arm64, release: "${shared.arm64LastRelease}", asset: "SonicRoute-${shared.arm64LastRelease}-Lite-arm64.exe", deployment: FRAMEWORK_DEPENDENT_SINGLE_EXE, status: EXPERIMENTAL }`,
     "  - { edition: Store, runtime: net10, architecture: x64, deployment: MSIX_WITH_FRAMEWORK_DEPENDENT_FULL_EXE, features: ANDROID_PHONE_AUDIO_AND_VIRTUAL_DISPLAY, updates: MICROSOFT_STORE }",
+    "  - { edition: StoreLite, runtime: net10, architecture: x64, deployment: MSIX_WITH_FRAMEWORK_DEPENDENT_LITE_EXE, features: PC_AUDIO, updates: MICROSOFT_STORE }",
     `  - { edition: Lite, runtime: net8, architecture: x64, asset: "SonicRoute-${shared.net8LastRelease}-Lite-NET8-x64.exe", deployment: FRAMEWORK_DEPENDENT_SINGLE_EXE, status: DISCONTINUED }`,
     `  - { edition: Lite, runtime: net8, architecture: arm64, asset: "SonicRoute-${shared.net8LastRelease}-Lite-NET8-arm64.exe", deployment: FRAMEWORK_DEPENDENT_SINGLE_EXE, status: DISCONTINUED }`,
     "",
@@ -249,7 +262,7 @@ function renderAI(shared) {
     "    symbols: [\"AudioService.ApplyEndpoint\", \"AudioPolicyConfig.SetDefaultEndPoint\", \"SystemDefaultDeviceService.SetDefault\"]",
     "    facts:",
     "      - \"Routing is driverless via undocumented Windows COM Windows.Media.Internal.AudioPolicyConfig.\"",
-    "      - \"Writes per-app device routing to Windows PropertyStore; persists across reboots without SonicRoute running.\"",
+    "      - \"Windows stores native per-app endpoint preferences in the PropertyStore. SonicRoute handles playback on additional selected outputs.\"",
     "      - \"GetApps enumerates non-expired WASAPI sessions. GetPersistedEndpoint separately reads per-app routing; a missing preference follows the system default. There is no universal default/property-store/session resolution chain.\"",
     "      - \"ResetAllAppRouting first uses the native global route-clear call, with a per-running-process/session compatibility fallback. That fallback does not prove that exited apps were reset.\"",
     "",
@@ -392,7 +405,11 @@ function renderAI(shared) {
     `    source: ["${shared.releaseNotes}"]`,
     `    symbols: ["${shared.release}"]`,
     "    facts:",
-    "      - \"v1.36: All editions remap QuickPanel multi-output modifiers (Shift-click keeps existing selections including hidden selected outputs while adding a contiguous range; Ctrl+Shift-click selects or switches the Windows native routing endpoint including SystemDefault rebinding), differentiate DevButtonActive vs DevButtonMirror button styles across light/dark themes, add a collapsible persisted main sidebar and narrower Apps secondary sidebar with full multi-output/optimistic UI parity and cross-window sync, add AudioDeviceNotificationHub and CoalescedVolumeWriter, refine idle main-window reclamation and AtomicFile backups, remove 13 audited unused symbols/resources, and preserve Store taskbar AppUserModelID on startup. Full adds AirPlay simultaneous multi-device output (IMultiOutputAudioSession), Android uncompressed Raw PCM transport and 3 audio latency modes (Ultra-low, Balanced, Stable) with Concentus Opus latency profiles and adaptive PCM buffering, broader Android ROM playback capture compatibility (Android 11+ requirement notice), wireless event-driven AdaptiveBitrateController with smoothed downshifts and sync-frame recovery, MediaFoundation input sample pool/ComLease/2-span decode/FPS clamping, cached ADB helper JAR with shared USB hook, and Store Full AirPlay inbound firewall rules (UDP 5353/319-320, TCP+UDP 47120-47183) with AirPlayListenerPorts.\"",
+    "      - \"v1.36 routing: The quick panel and Apps page share playback selections. Ctrl-click toggles an output. Shift-click adds a range while retaining existing selections, including hidden outputs. For a Windows app, Ctrl+Shift-click a PC output to make it the primary device while keeping other outputs. The two button styles distinguish direct Windows playback from additional mirrored outputs.\"",
+    "      - \"v1.36 desktop: The main navigation remembers its expanded or collapsed state. AudioDeviceNotificationHub shares device notifications, CoalescedVolumeWriter batches writes, and idle window cleanup and atomic configuration backups were refined.\"",
+    "      - \"v1.36 Full: One incoming AirPlay audio stream can play on multiple PC or connected Android outputs. Capturing Android playback requires Android 11 (API 30) or later and support on the device. Each phone can send Opus (default) or uncompressed PCM to the PC. The latency modes are Ultra-low latency, Balanced (default), and Stable. Audio settings apply when the next audio stream starts.\"",
+    "      - \"v1.36 virtual display: AdaptiveBitrateController has separate USB and Wi-Fi policies and adjusts the video bitrate when the Android encoder accepts runtime changes. Video startup constrains the requested frame rate to encoder capabilities. The Windows decoder reuses Media Foundation input samples and can request a sync frame to recover.\"",
+    "      - \"v1.36 Store packaging: Both Store variants set the taskbar AppUserModelID. The Full MSIX declares inbound AirPlay rules for domain and private network profiles (UDP 5353 and 319-320, TCP/UDP 47120-47183).\"",
     "      - \"v1.35: All editions unify QuickPanel optimistic switching for PC microphone inputs (eCapture, single-select independent of playback) and single-output external/AirPlay rows without disabling buttons, update row output names optimistically across PC/Android/AirPlay (preserving default suffix on PC default rows), harden SystemDevCombo rollback/concurrency, run device-switching hotkeys via a non-blocking queue with 45ms fast-completion / 500ms minimum-pending OSD thresholds and 9-locale switching strings, and keep explicitly selected LocalAppOutputMirrors intact when native sessions move between selected endpoints. Full preserves CanChangeActiveOutputs across mode switches, instruments output startup phases without slowing virtual display input, cancels a disabled source phone's in-flight desktop clipboard write while keeping other devices active, and pre-allocates Remote/Cloud clipboard flags before EmptyClipboard.\"",
     "      - \"v1.34: Full, Lite, and Legacy support selecting multiple PC playback devices per app and restoring that selection on playback after restart. Tray volume adjustment and mouse shortcuts share one system mouse hook. Full synchronizes Android USB/Wi-Fi state across both device panels, reconnects from quick phone panel refresh, respects custom names in Android app output menus, and adds Android file browsing and transfer.\"",
     "      - \"v1.33: Full adds a self-built C# AirPlay audio and aspect-preserving screen mirror receiver (PCM/ALAC/AAC-LC and 44.1/48 kHz stereo AAC-ELD without SBR, optional PIN, media metadata/cover, topmost/F11 fullscreen, and drag-and-drop/Quick Panel routing to PC or Android speaker/Bluetooth outputs), adds H.265 (HEVC) with same-connection H.264 fallback and keyframe/corrupt-frame guards, adds Audio/Video decoder selectors (Auto, Concentus Opus, Windows D3D11/software) with visible-only on-demand encoder queries (up to 4 phones cached), enforces foreground-only gamepad gating and SIMD phone PCM16 conversion, combines QR (2-min auto-refresh) and manual pairing in one card with one-shot LAN mDNS discovery and unified device-settings reconnect, quick phone panel refresh, and app-sidebar refresh (verifying active ADB identity first, filtering expired ports via mDNS + short TCP probes, recovering updated IP/port by saved identity and overwriting saved address only after identity verification while preserving manual drafts on failure), device settings restore on re-add/USB restore, and pairing identity/deadline hardening; across all editions (Full/Lite/Legacy), adds two independent persistent Mic OSD toggles, a single-row experimental Configuration management card (Export/Import/Clear), >20-row app list virtualization, coalesced OSD rendering, ImageDataStream PNG input release and retired GPU texture cleanup (Full idle reclaim removes explicit close-window GC requests in favor of natural runtime collection; Lite/Legacy retain single window-close working-set trim), config.json.bak protection, single-instance restart handoff, multi-key mouse arbitration, on-demand error diagnostics, standalone Store Lite MSIX support (9N37LQ8SMLF6), and GPL-3.0-only migration (from 2026-11-17) with an offline viewer.\"",

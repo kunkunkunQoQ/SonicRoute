@@ -68,10 +68,10 @@ Wählen Sie **Lite** für die Audiofunktionen am PC, **Full** für zusätzliche 
 
 ## ✨ Das bietet SonicRoute
 
-- **Wiedergabe und Aufnahme pro App festlegen.** Im Schnellpanel oder auf der App-Seite fügen Sie mit Strg+Klick ein Wiedergabegerät hinzu oder entfernen es, behalten mit Umschalt+Klick die aktuelle Auswahl bei und fügen einen Bereich hinzu und wählen oder wechseln mit Strg+Umschalt+Klick das native Routing-Gerät. Alle Editionen unterstützen mehrere PC-Ausgänge gleichzeitig. In Full können Sie auch Ausgänge eines verbundenen Android-Smartphones hinzufügen.
+- **Wiedergabe- und Aufnahmegerät für jede App wählen.** Im Schnellpanel und auf der Seite „Apps“ fügen Sie mit Strg+Klick einen Ausgang hinzu oder entfernen ihn. Mit Umschalt+Klick erweitern Sie die Auswahl um mehrere aufeinanderfolgende Ausgänge. Mit Strg+Umschalt+Klick auf einen PC-Ausgang legen Sie ihn als primäres Wiedergabegerät der Windows-App fest. SonicRoute gibt den Ton zusätzlich auf den übrigen ausgewählten Geräten wieder. In der Full-Edition können Sie auch Ausgänge eines verbundenen Android-Smartphones nutzen.
 - **Die Lautstärke einzelner Apps regeln.** Im Schnellpanel sehen Sie an den Pegelanzeigen, welche Apps gerade Ton ausgeben. Jede App hat einen eigenen Lautstärkeregler. Mit dem Mausrad über dem Symbol im Infobereich ändern Sie die Lautstärke der aktuellen App. Per Tastenkürzel können Sie alle Mikrofone stummschalten und die Stummschaltung wieder aufheben.
 - **Wiederkehrende Aufgaben automatisieren.** Für Regeln stehen 6 Auslöser und 39 Aktionen zur Verfügung. Beim Start eines Spiels kann eine Regel zum Headset wechseln und den Sprachchat öffnen. Gespeicherte Regeln lassen sich mit `sr` auch im Terminal oder aus einem Skript ausführen.
-- **Android und AirPlay am PC nutzen (Full).** Geben Sie den Ton einer Android-App am PC oder den PC-Ton auf dem Smartphone wieder. Android-Apps lassen sich auf einem eigenen virtuellen Bildschirm bedienen. Über AirPlay empfängt der PC Audio und Bildschirmübertragungen von Apple-Geräten. Sie können den gemeinsamen Speicher des Android-Geräts durchsuchen und mehrere Dateien auf einmal senden oder empfangen.
+- **Android-Smartphone verbinden oder AirPlay empfangen (Full).** Hören Sie den Ton einer Android-App am PC oder geben Sie den PC-Ton auf dem Smartphone wieder. Android-Apps lassen sich auf einem virtuellen Bildschirm bedienen. Im gemeinsamen Speicher des Smartphones können Sie Ordner durchsuchen und mehrere Dateien auf einmal senden oder empfangen. Von einem Apple-Gerät können Sie den Bildschirm per AirPlay spiegeln oder Ton übertragen und ihn gleichzeitig auf mehreren PC- oder Android-Ausgängen wiedergeben.
 
 ## 🎮 Für den Alltag
 
@@ -109,11 +109,15 @@ Full und Lite benötigen die .NET 10 Desktop Runtime für ihre jeweilige Archite
 
 SonicRoute reagiert vor allem auf Windows-Ereignisse. Nur wenn nötig, prüft es den Zustand zusätzlich einmal pro Sekunde. Es gibt nicht mehr benötigte Daten bei Bedarf frei. Die tatsächliche CPU-Auslastung hängt vom System und seiner Nutzung ab.
 
+**Wie stelle ich die Latenz ein, wenn ich Android-Audio am PC höre?**
+
+Öffnen Sie in der Full-Edition die Geräteseite des Smartphones. Unter „Audio“ ist „Ausgewogen“ voreingestellt. Für eine kürzere Verzögerung wählen Sie „Sehr geringe Latenz“. Bei Tonaussetzern können Sie „Stabil“ ausprobieren. Das Smartphone überträgt den Ton standardmäßig mit Opus. Für unkomprimierten Ton wählen Sie in der Decoderliste „Raw PCM“. Die Einstellungen gelten ab der nächsten Audioübertragung von diesem Gerät.
+
 ## 🆕 Neu in v1.36
 
-In allen Editionen behält Umschalt+Klick im Schnellpanel nun die bestehende Auswahl bei und fügt einen Bereich hinzu, Strg+Umschalt+Klick wählt oder wechselt das native Windows-Routing-Gerät, und unterschiedliche Schaltflächenstile trennen native Routen von Spiegelungen. Die linke Hauptseitenleiste lässt sich einklappen, und die App-Seite bietet nun dieselbe Mehrfachausgabe-Steuerung wie das Schnellpanel.
+Im Schnellpanel und auf der Seite „Apps“ erweitert Umschalt+Klick die bestehende Auswahl um mehrere aufeinanderfolgende Ausgänge. Mit Strg+Umschalt+Klick auf einen PC-Ausgang legen Sie ihn als primäres Wiedergabegerät einer Windows-App fest. An den Schaltflächen erkennen Sie, welchen Ausgang Windows für die App verwendet und auf welchen weiteren Ausgängen SonicRoute den Ton ausgibt. Das Hauptfenster merkt sich, ob die Seitenleiste ein- oder ausgeklappt war. Bei beiden Microsoft-Store-Editionen bleibt die laufende App ihrem angehefteten Taskleistensymbol zugeordnet.
 
-Die Full-Edition ergänzt gleichzeitige Mehrfachausgabe für AirPlay, unkomprimiertes PCM sowie drei Audiolatenzmodi (Sehr geringe Latenz, Ausgewogen, Stabil) für Android, breitere App-Aufnahmekompatibilität ab Android 11 und eine adaptive Videobitrate für drahtlose virtuelle Displays sowie Store-Taskleistenidentität und AirPlay-Firewallregeln. Frühere Versionen finden Sie unter [Versionsverlauf](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2).
+Die Full-Edition kann per AirPlay empfangenen Ton auf mehreren Geräten gleichzeitig wiedergeben. Ab Android 11 lässt sich der Ton kompatibler Apps mit Opus oder als unkomprimiertes PCM übertragen. Dafür stehen drei Latenzmodi zur Wahl. Unterstützt der Encoder des Smartphones die Anpassung, richtet sich die Videobitrate des virtuellen Bildschirms nach der USB- oder WLAN-Verbindung. Das Store-Paket der Full-Edition enthält Firewallregeln für eingehende AirPlay-Verbindungen in privaten und Domänennetzwerken. Frühere Änderungen finden Sie unter [Versionsverlauf](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2).
 
 <details>
 <summary>v1.35</summary>

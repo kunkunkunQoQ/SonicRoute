@@ -89,16 +89,13 @@
         "**Scope and earlier licenses.** As of November 17, 2026, GPL-3.0-only covers this revision of the project, including earlier code, to the extent the copyright holder can license it. Permissions already granted under the MIT license and the former custom license remain valid. Existing tags and previously released binaries retain their original licensing. Third-party components retain their own licenses (see {noticesLink})."
     ],
     "features": [
-        "**Choose where each app plays and records.** In the quick panel or the Apps page, Ctrl-click a playback device to add or remove it, Shift-click to keep existing selections and add a contiguous range, or Ctrl+Shift-click to select or switch the native routing device. All editions can play through several PC outputs at once. Full can also include outputs on a connected Android phone.",
+        "**Choose playback and recording devices for each app.** In the quick panel or on the Apps page, Ctrl-click an output to add or remove it. Shift-click to add a range without clearing your selection. For a Windows app, Ctrl+Shift-click a PC output to make it the app’s primary playback device. SonicRoute sends the same audio to the other selected outputs. Full can also use outputs on a connected Android phone.",
         "**See what’s playing and adjust its volume.** Live level meters show which apps are playing, each with its own volume slider. Scroll over the tray icon to adjust the current app’s volume, or use a hotkey to mute and unmute your microphones.",
         "**Automate routine changes.** Choose one of {triggerCount} triggers and build a sequence from {actionCount} available actions. When a game starts, a rule can switch to your headset and open voice chat. You can also run a saved rule from a terminal or script with `sr`.",
-        "**Use Android and AirPlay on your PC (Full).** Play an Android app’s audio on your PC, send PC audio to your phone, or use an Android app in its own virtual display. SonicRoute also receives AirPlay audio and screen mirroring from Apple devices. Browse an Android phone’s shared storage and transfer multiple files in either direction."
+        "**Connect an Android phone or receive AirPlay (Full).** Play Android app audio on your PC, send PC audio to your phone, or open an Android app in its own virtual display. Browse the phone’s shared storage and transfer files in either direction, including several at once. From an Apple device, you can mirror the screen or send AirPlay audio to SonicRoute and play it through several PC or Android outputs at once."
     ],
     "developmentTitle": "In development for Full",
-    "developmentNotes": [
-        "For audio from Android to your PC, choose Opus (default) or uncompressed PCM. Each phone has three latency modes: Ultra-low latency, Balanced (default), and Stable. Changes take effect the next time you start an audio stream from that phone.",
-        "If the Android encoder supports it, the virtual display adjusts its video bitrate as connection conditions change."
-    ],
+    "developmentNotes": [],
     "scenario": "Everyday scenario",
     "whatYouCanDo": "How SonicRoute helps",
     "useCaseNames": [
@@ -124,12 +121,14 @@
     "faqQuestions": [
         "What happens to app routing and volume when I exit SonicRoute?",
         "Which runtime do I need?",
-        "How much CPU or battery does SonicRoute use in the background?"
+        "How much CPU or battery does SonicRoute use in the background?",
+        "How do I adjust the latency when playing Android audio on my PC?"
     ],
     "faqAnswers": [
         "Windows keeps each app’s primary PC playback device, recording device and the volume of existing audio sessions. Playback on additional outputs stops when you exit SonicRoute. Keep SonicRoute running to use hotkeys, tray controls, automation, phone audio, screen mirroring or clipboard sync.",
         "Full and Lite require the .NET 10 Desktop Runtime for the build’s architecture. The Store editions require the x64 runtime. Legacy uses .NET Framework 4.8. Archived .NET 8 builds are still available but no longer receive updates.",
-        "SonicRoute relies on Windows notifications and checks process state once a second when needed. It releases data it no longer uses. CPU use and battery impact depend on your system and what you’re doing."
+        "SonicRoute relies on Windows notifications and checks process state once a second when needed. It releases data it no longer uses. CPU use and battery impact depend on your system and what you’re doing.",
+        "In Full, open the phone’s device page. Under Audio, the default latency mode is Balanced. Try Ultra-low latency for a shorter delay, or Stable if you hear dropouts. The phone sends audio using Opus by default. For uncompressed audio, choose Raw PCM in the decoder list. Changes apply the next time you start an audio stream from that phone."
     ],
     "aiPromptTitle": "Using an AI assistant",
     "aiPromptBody": "For help with a script or a technical issue, give your assistant {aiDoc}. It summarizes the architecture, commands and troubleshooting steps in a compact format for tools such as Cursor, Copilot, ChatGPT and Claude.",
