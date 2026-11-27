@@ -28,12 +28,14 @@ internal sealed partial class PhonePreview : IDisposable
     private IReadOnlyList<AndroidDevice> lastOnline = [];
     private int closed;
 
-    internal readonly AdbClient Adb;
+    private readonly AdbTransportDiscovery adbDiscovery;
+    private readonly AdbOperationAdapter adbOperations;
+    private readonly SrapPhoneTransport appTransport;
+    internal IPhoneOperationPort Operations { get; }
     internal readonly AndroidPhoneStore Store;
     internal readonly AndroidAudioSettingsStore Settings;
     internal readonly AndroidDeviceDiscovery Discovery;
     internal readonly AndroidConnectionManager Connections;
-    internal readonly AndroidWirelessConnection Wireless;
     internal readonly AndroidAudioManager Sources;
     internal readonly PcToPhoneAudioManager Pc;
     internal readonly AndroidVirtualDisplayManager Displays;
@@ -54,24 +56,26 @@ internal sealed partial class PhonePreview : IDisposable
 
         // ArbitratedAdbTransport is AOT-clean in SonicRoute.AndroidAudio and delegates to external adb.exe on 127.0.0.1:5037
         // when active (matching WPF AndroidAudioHost), falling back to DirectAdbTransport when no server is running.
-        Adb = new(new AndroidRuntimeBundle(Path.Combine(root, "PhoneRuntime")));
+        var adb = new AdbClient(new AndroidRuntimeBundle(Path.Combine(root, "PhoneRuntime")));
+        adbDiscovery = new(adb);
+        adbOperations = new(adb);
 
         string storePath = Path.Combine(root, "android-phone.json");
         MigrateLegacyPhoneStore(root, storePath);
         Store = new(storePath, () => L10n.T("Phone.DefaultName"));
+        appTransport = new(Store, root);
+        Operations = new SrapOperationAdapter(adbOperations, appTransport);
         Settings = settings ?? new(Path.Combine(root, "android-audio.json"));
-        Discovery = new(cancel => Adb.DevicesAsync(cancel, deduplicate: false));
-        Connections = new(Store, () => Discovery, Settings.MigrateConnectionPreferences);
-        Wireless = new(Adb);
-        Sources = new(() => new AndroidAudioSession(Adb, Settings.GetStreaming, Connections.ResolveKey), Settings,
+        Discovery = new(adbDiscovery.ReadAsync);
+        Connections = new(Store, () => Discovery, Settings.MigrateConnectionPreferences, appTransport, adb, Settings.MigrateConnectionPreferences);
+        Sources = new(() => Operations.CreateCaptureSession(Settings.GetStreaming, Connections.ResolveKey), Settings,
             (phone, app) => Store.IsSmartVolumeEnabled(phone, app), Connections.IsCurrent, token);
-        Pc = new(() => Adb, silenceLocalProcess);
+        Pc = adbOperations.CreatePcPlayback(silenceLocalProcess);
         Pc.OutputsObserved += (device, outputs) => Store.UpdateOutputs(device, outputs);
         Pc.DeviceDisconnected += OnPcPlaybackDisconnected;
-        var runtime = new VirtualDisplayRuntime(Adb);
-        Displays = new(() => new InProcessVirtualDisplayClient(Adb, runtime, () => Settings));
-        Clipboard = new(Adb, shell, owner, Path.Combine(root, "phone-clipboard.json"),
-            d => Store.IsRemoved(d), d => Connections.Resolve(d), d => Store.FindProfile(d)?.LastDevice);
+        Displays = new(() => Operations.CreateDisplay(() => Settings));
+        Clipboard = new(Operations.OpenClipboard, shell, owner, Path.Combine(root, "phone-clipboard.json"),
+            d => Store.IsRemoved(d), d => !d.IsApp && Connections.Resolve(d) is { IsApp: false } live ? live : null, d => Store.FindProfile(d)?.LastDevice);
 
         Sources.Changed += Notify;
         Sources.ResourcesRetired += QueueSourceReconciliation;
@@ -83,9 +87,30 @@ internal sealed partial class PhonePreview : IDisposable
         Transfers.Changed += OnTransferChanged;
         Displays.ResourcesRetired += Notify;
         Clipboard.Changed += Notify;
+        appTransport.Changed += OnAppTransportChanged;
+        appTransport.Start();
     }
 
     internal CancellationToken Lifetime => token;
+
+    internal Task<IReadOnlyList<AndroidMdnsService>> DiscoverSavedConnectionsAsync(CancellationToken cancel) =>
+        adbDiscovery.DiscoverSavedAsync(cancel);
+
+    internal static Task<IReadOnlyList<AndroidMdnsService>> DiscoverAppConnectionsAsync(CancellationToken cancel) =>
+        SrapPhoneTransport.DiscoverAsync(cancel);
+
+    internal async Task PairAppAsync(string invite, System.Net.IPEndPoint? selected, Action pending, CancellationToken cancel)
+    {
+        var device = await appTransport.PairAsync(invite, selected, pending, cancel).ConfigureAwait(false);
+        await ProbeOutputsIfConnectedAsync([device], force: true, token: cancel).ConfigureAwait(false);
+    }
+
+    private void OnAppTransportChanged()
+    {
+        if (token.IsCancellationRequested) return;
+        UpdatePlaybackConnections();
+        Notify();
+    }
 
     internal bool HasActivePlaybackConnections =>
         LocalAppOutputMirrors.HasPhoneOutputs || Sources.HasActiveWork || Displays.Count > 0 || Pc.HasActiveWork || tryGetAirPlay?.Invoke()?.Source != null;
@@ -110,6 +135,14 @@ internal sealed partial class PhonePreview : IDisposable
     internal static string TranslateError(Exception? error)
     {
         if (error == null) return "";
+        if (error is SrapException srap)
+        {
+            string key = "Phone.Srap." + srap.Code;
+            string message = L10n.T(key);
+            return message == key ? L10n.T("Phone.SrapFailed") : message;
+        }
+        if (error is System.Security.Authentication.AuthenticationException) return L10n.T("Phone.SrapTlsRejected");
+        if (error is FormatException) return L10n.T("Phone.SrapInvalidInvite");
         if (AndroidError.TryGetCode(error, out var code))
         {
             string key = "Phone.Err." + code;
@@ -145,7 +178,7 @@ internal sealed partial class PhonePreview : IDisposable
             try
             {
                 if (prior != null) await prior.ConfigureAwait(false);
-                if (!lifetime.IsCancellationRequested) await TrackAsync(lifetime.Token).ConfigureAwait(false);
+                if (!lifetime.IsCancellationRequested) await TrackAsync(adbDiscovery, lifetime.Token).ConfigureAwait(false);
             }
             finally
             {
@@ -158,11 +191,11 @@ internal sealed partial class PhonePreview : IDisposable
         });
     }
 
-    private async Task TrackAsync(CancellationToken cancel)
+    private async Task TrackAsync(IPhoneTransportDiscovery transport, CancellationToken cancel)
     {
         try
         {
-            await Adb.TrackDevicesAsync(devices =>
+            await transport.TrackAsync(devices =>
             {
                 Discovery.RetirePendingScan();
                 _ = Volatile.Read(ref keepTracking) ? RefreshInBackgroundAsync() : RefreshSavedTransportsAsync(cancel);
@@ -195,7 +228,7 @@ internal sealed partial class PhonePreview : IDisposable
 
             string? attemptedPhone = null;
             if (reconnectProfileId != null && !reconnectToken.IsCancellationRequested &&
-                Store.Profile is { LastDevice: { } saved } selected && selected.Id == reconnectProfileId &&
+                Store.Profile is { LastDevice: { IsApp: false } saved } selected && selected.Id == reconnectProfileId &&
                 Connections.Get(saved).State == AndroidManagedConnectionState.Offline)
             {
                 using var opening = CancellationTokenSource.CreateLinkedTokenSource(reconnectToken, deadline.Token);
@@ -225,7 +258,7 @@ internal sealed partial class PhonePreview : IDisposable
     internal async Task<bool> RecoverMissingWirelessAsync(AndroidDevice? device, IReadOnlyList<AndroidDevice> devices, CancellationToken cancel,
         bool discoverFromUsb = false, string? advertisedAddress = null)
     {
-        if (cancel.IsCancellationRequested || device == null || AndroidDeviceIdentity.StableKey(device) is not { } key
+        if (cancel.IsCancellationRequested || device == null || device.IsApp || AndroidDeviceIdentity.StableKey(device) is not { } key
             || Connections.Resolve(device) != null)
             return false;
 
@@ -243,7 +276,7 @@ internal sealed partial class PhonePreview : IDisposable
         }
         try
         {
-            var result = await Wireless.ReconnectAsync(target, advertisedAddress ?? profile.LastWirelessAddress, attempt.Token, devices,
+            var result = await adbDiscovery.ReconnectAsync(target, advertisedAddress ?? profile.LastWirelessAddress, attempt.Token, devices,
                 retryMissingIdentity: !HasActivePlaybackConnections).ConfigureAwait(false);
             attempt.Token.ThrowIfCancellationRequested();
             if (Connections.Revision != revision || Store.IsRemoved(device) || Store.IsRemoved(result.Device)
@@ -275,6 +308,7 @@ internal sealed partial class PhonePreview : IDisposable
     {
         cancel.ThrowIfCancellationRequested();
         if (Connections.Resolve(device) is { } cached) return cached;
+        if (device.IsApp) return null;
         using (var scan = CancellationTokenSource.CreateLinkedTokenSource(token, cancel))
         {
             scan.CancelAfter(TimeSpan.FromSeconds(5));
@@ -319,7 +353,8 @@ internal sealed partial class PhonePreview : IDisposable
         long now = Environment.TickCount64;
         foreach (var device in devices.Select(d => Connections.Resolve(d)).OfType<AndroidDevice>().DistinctBy(AndroidDeviceIdentity.Key))
         {
-            if (device.State != "device" || string.Equals(device.Serial, "offline-fixture", StringComparison.Ordinal)) continue;
+            if (device.State != "device" || !Operations.CanListOutputs(device)
+                || string.Equals(device.Serial, "offline-fixture", StringComparison.Ordinal)) continue;
             lock (probeTimestamps)
             {
                 if (!force && probeTimestamps.TryGetValue(device.Serial, out long last) && now - last < 3000) continue;
@@ -328,7 +363,7 @@ internal sealed partial class PhonePreview : IDisposable
             try
             {
                 using var read = CancellationTokenSource.CreateLinkedTokenSource(this.token, token, Connections.OperationToken(device));
-                var outputs = await Adb.OutputsAsync(device, read.Token).ConfigureAwait(false);
+                var outputs = await Operations.OutputsAsync(device, read.Token).ConfigureAwait(false);
                 if (Connections.IsCurrent(device)) Store.UpdateOutputs(device, outputs);
             }
             catch
@@ -359,8 +394,8 @@ internal sealed partial class PhonePreview : IDisposable
     internal async Task DiscoverAndConnectAsync(string address, CancellationToken cancel, AndroidSavedConnection? saved = null)
     {
         long revision = Connections.Revision;
-        var result = saved == null ? await Wireless.ConnectAsync(address, cancel).ConfigureAwait(false)
-            : await Wireless.ReconnectAsync(saved.Device, saved.Address, cancel).ConfigureAwait(false);
+        var result = saved == null ? await adbDiscovery.ConnectAsync(address, cancel).ConfigureAwait(false)
+            : await adbDiscovery.ReconnectAsync(saved.Device, saved.Address, cancel).ConfigureAwait(false);
         Accept(result, revision);
     }
 
@@ -378,17 +413,17 @@ internal sealed partial class PhonePreview : IDisposable
     internal async Task PairAsync(string address, string code, CancellationToken cancel)
     {
         long revision = Connections.Revision;
-        var paired = await Wireless.PairCodeAsync(address, code, cancel).ConfigureAwait(false);
+        var paired = await adbDiscovery.PairCodeAsync(address, code, cancel).ConfigureAwait(false);
         cancel.ThrowIfCancellationRequested();
-        Accept(await Wireless.FinishPairingAsync(paired, cancel).ConfigureAwait(false), revision);
+        Accept(await adbDiscovery.FinishPairingAsync(paired, cancel).ConfigureAwait(false), revision);
     }
 
     internal async Task PairAsync(AndroidQrPairing qr, CancellationToken cancel)
     {
         long revision = Connections.Revision;
-        var paired = await Wireless.PairQrAsync(qr, cancel).ConfigureAwait(false);
+        var paired = await adbDiscovery.PairQrAsync(qr, cancel).ConfigureAwait(false);
         cancel.ThrowIfCancellationRequested();
-        Accept(await Wireless.FinishPairingAsync(paired, cancel).ConfigureAwait(false), revision);
+        Accept(await adbDiscovery.FinishPairingAsync(paired, cancel).ConfigureAwait(false), revision);
     }
 
     internal async Task ReconnectAsync(AndroidDevice device)
@@ -402,6 +437,14 @@ internal sealed partial class PhonePreview : IDisposable
     {
         var selected = Store.Profile;
         long revision = Connections.Revision;
+        if (selected.LastDevice?.IsApp == true)
+            return [await appTransport.ReconnectAsync(selected, cancel).ConfigureAwait(false)];
+        if (selected.AppPublicKeySha256 != null && !selected.AppTrustRevoked && (selected.PreferAppTransport
+            || Connections.Resolve(selected.LastDevice)?.IsApp == true))
+        {
+            try { return [await appTransport.ReconnectAsync(selected, cancel).ConfigureAwait(false)]; }
+            catch (SrapException ex) when (ex.Code is "unavailable" or "not_paired") { revision = Connections.Revision; }
+        }
         var devices = await Task.Run(() => RefreshSelectedDeviceAsync(selected, revision, cancel), cancel).ConfigureAwait(false);
         cancel.ThrowIfCancellationRequested();
         if (selected.LastDevice == null) return devices;
@@ -414,7 +457,8 @@ internal sealed partial class PhonePreview : IDisposable
     }
 
     internal Task<IReadOnlyList<AndroidDevice>> RefreshSelectedDeviceAsync(CancellationToken cancel) =>
-        RefreshSelectedDeviceAsync(Store.Profile, Connections.Revision, cancel);
+        Store.Profile.LastDevice?.IsApp == true || Connections.Resolve(Store.Profile.LastDevice)?.IsApp == true ? ReconnectSelectedDeviceAsync(cancel) :
+            RefreshSelectedDeviceAsync(Store.Profile, Connections.Revision, cancel);
 
     private async Task<IReadOnlyList<AndroidDevice>> RefreshSelectedDeviceAsync(AndroidPhoneProfile selected, long revision, CancellationToken cancel)
     {
@@ -441,11 +485,11 @@ internal sealed partial class PhonePreview : IDisposable
             var ready = AndroidDeviceIdentity.FindOnlineDevice(saved, devices);
             if (ready is { IsWifi: false } && (!saved.IsWifi || AndroidDeviceIdentity.SamePhysicalDevice(saved, ready)))
             {
-                result = await Wireless.EnrichReadyResultAsync(new(ready, devices), !HasActivePlaybackConnections, cancel).ConfigureAwait(false);
+                result = await adbDiscovery.EnrichReadyResultAsync(new(ready, devices), !HasActivePlaybackConnections, cancel).ConfigureAwait(false);
             }
             else if (selected.WirelessReconnectTarget(discoverFromUsb: true) is { } target)
             {
-                result = await Wireless.ReconnectAsync(target, selected.LastWirelessAddress, cancel, devices,
+                result = await adbDiscovery.ReconnectAsync(target, selected.LastWirelessAddress, cancel, devices,
                     retryMissingIdentity: !HasActivePlaybackConnections).ConfigureAwait(false);
             }
             else return devices;
@@ -476,6 +520,18 @@ internal sealed partial class PhonePreview : IDisposable
 
     internal async Task DisconnectAsync(AndroidDevice device, bool unpair)
     {
+        if (device.IsApp)
+        {
+            if (Store.FindProfile(device) is not { AppPublicKeySha256: { } fingerprint } appProfile) return;
+            if (unpair) appTransport.RevokeTrust(appProfile.Id, fingerprint);
+            else
+            {
+                Connections.SetDisconnected(device, true);
+                appTransport.Close(appProfile.Id);
+            }
+            await Store.FlushAsync().ConfigureAwait(false);
+            return;
+        }
         if (unpair && device.State != "device")
             throw AndroidError.WithCode(new IOException("Device is offline."), AndroidErrorCode.UnpairPhoneOffline);
 
@@ -507,12 +563,12 @@ internal sealed partial class PhonePreview : IDisposable
             deadline.CancelAfter(TimeSpan.FromSeconds(15));
             if (unpair)
             {
-                await Wireless.UnpairAsync(device, deadline.Token).ConfigureAwait(false);
+                await adbDiscovery.UnpairAsync(device, deadline.Token).ConfigureAwait(false);
             }
             else
             {
                 foreach (var alias in aliases.Where(d => d.IsWifi).DistinctBy(d => d.CommandTarget))
-                    await Wireless.DisconnectAsync(alias, deadline.Token).ConfigureAwait(false);
+                    await adbDiscovery.DisconnectAsync(alias, deadline.Token).ConfigureAwait(false);
             }
             Store.UpdateOutputs(device, [AndroidOutputSink.DefaultSpeaker]);
             foreach (var alias in aliases)
@@ -581,7 +637,7 @@ internal sealed partial class PhonePreview : IDisposable
             throw AndroidError.WithCode(new IOException("Selected device output is disconnected."), AndroidErrorCode.SelectedPhoneOutputDisconnected);
 
         cancel.ThrowIfCancellationRequested();
-        return new AndroidPhonePcmPlayer(Adb, device, pcm, sink, cancel,
+        return Operations.CreatePlayback(device, pcm, sink, cancel,
             (connected, outputs) => { if (Connections.IsCurrent(connected)) Store.UpdateOutputs(connected, outputs); },
             Connections.OperationToken(device));
     }
@@ -592,7 +648,7 @@ internal sealed partial class PhonePreview : IDisposable
     // Enqueue and advance on the host owner. A closed view does not own accepted transfers.
     internal bool EnqueueTransfer(AndroidDevice device, string profileId, string[] paths, string destination, string? remoteFolder)
     {
-        if (paths.Length == 0 || Connections.Get(device).Profile?.Id != profileId) return false;
+        if (device.IsApp || paths.Length == 0 || Connections.Get(device).Profile?.Id != profileId) return false;
         if (Transfers.Get(profileId)?.Phase != AndroidFilePhase.Running && QueuedTransferCount(profileId) == 0)
             return StartTransfer(device, paths, destination, remoteFolder);
         if (!pendingTransfers.TryGetValue(profileId, out var queue)) pendingTransfers.Add(profileId, queue = new());
@@ -626,14 +682,16 @@ internal sealed partial class PhonePreview : IDisposable
 
     internal bool StartTransfer(AndroidDevice device, IReadOnlyList<string> paths, string destination, string? remoteFolder)
     {
+        if (device.IsApp) return false;
         var current = Connections.Get(device);
         return current.Profile != null && current.Device is { } confirmed &&
-            Transfers.TryStart(current.Profile.Id, new AndroidFileTransfer(Adb, confirmed.CommandTarget),
+            Transfers.TryStart(current.Profile.Id, Operations.OpenFiles(confirmed),
                 paths, destination, remoteFolder, () => Connections.IsCurrent(confirmed), Connections.OperationToken(confirmed), out _);
     }
 
     internal async Task<IVirtualDisplayClient> OpenDisplayAsync(AndroidDevice device, AndroidApp app, int x, int y)
     {
+        if (device.IsApp) throw new SrapException("unsupported");
         if (app.IsDeviceAudio)
             app = app with { Name = Store.GetDisplayName(device) };
         device = await ResolveOperationDeviceAsync(device, AndroidErrorCode.DisplayPhoneNotConnected, token).ConfigureAwait(false);
@@ -893,6 +951,7 @@ internal sealed partial class PhonePreview : IDisposable
     {
         if (Interlocked.Exchange(ref closed, 1) != 0) return;
         Store.OutputsChanged -= OnPlaybackDevicesChanged;
+        appTransport.Changed -= OnAppTransportChanged;
         Sources.ResourcesRetired -= QueueSourceReconciliation;
         Sources.CaptureInterrupted -= OnPcPlaybackDisconnected;
         Sources.BeginShutdown();
@@ -905,13 +964,14 @@ internal sealed partial class PhonePreview : IDisposable
         lifetime.Cancel();
         Task.Run(async () =>
         {
+            await appTransport.DisposeAsync().ConfigureAwait(false);
             await Transfers.CloseAsync().ConfigureAwait(false);
             if (tracking != null) await tracking.ConfigureAwait(false);
             await WaitForSourceReconciliationAsync().ConfigureAwait(false);
             await Task.WhenAll(Displays.DisposeAsync().AsTask(), Sources.DisposeAsync().AsTask(), Pc.DisposeAsync().AsTask()).ConfigureAwait(false);
             await Store.FlushAsync().ConfigureAwait(false);
             await Settings.FlushAsync().ConfigureAwait(false);
-            await Adb.DisposeAsync().ConfigureAwait(false);
+            await adbOperations.DisposeAsync().ConfigureAwait(false);
         }).GetAwaiter().GetResult();
         lifetime.Dispose();
     }
@@ -995,6 +1055,13 @@ internal sealed partial class ApplicationHost
 
         string clipboardPath = Path.Combine(_environment.DataDirectory, "phone-clipboard.json");
         var preferences = File.Exists(clipboardPath) ? ClipboardPreferences.TryLoad(clipboardPath) : null;
+        string phonePath = Path.Combine(_environment.DataDirectory, "android-phone.json");
+        if (File.Exists(phonePath) || File.Exists(phonePath + ".bak"))
+            _ = Task.Run(() =>
+            {
+                if (new AndroidPhoneStore(phonePath).Profiles.Any(p => p.AppPublicKeySha256 != null && !p.ManuallyDisconnected && !p.AppTrustRevoked))
+                    _window.TryPost(() => _ = Phone);
+            });
 
         if (settings.ExternalAudio.Any(choice => choice.App != null && choice.Visible)) _ = Phone;
         if (hasSavedRoutes || preferences is { Enabled.Length: > 0 } or { Archived.Length: > 0 })

@@ -19,14 +19,14 @@ internal sealed record AndroidStorageFile(string Name, bool Directory)
     };
 }
 
-internal sealed class AndroidFileTransfer(AdbClient adb, string serial)
+internal sealed class AndroidFileTransfer(AdbClient adb, string serial) : IPhoneFileOperations
 {
     internal const string Storage = "/sdcard";
     internal const string Downloads = Storage + "/Download";
     private const int Chunk = 64 * 1024;
     private static readonly UTF8Encoding Utf8 = new(false, true);
 
-    internal async Task<string> SendAsync(string path, string destination, CancellationToken token)
+    public async Task<string> SendAsync(string path, string destination, CancellationToken token)
     {
         ValidateFolder(destination);
         string name = Path.GetFileName(path);
@@ -118,7 +118,7 @@ internal sealed class AndroidFileTransfer(AdbClient adb, string serial)
         return escaped?.ToString() ?? name;
     }
 
-    internal async Task<List<AndroidStorageFile>> ListAsync(string folder, CancellationToken token)
+    public async Task<List<AndroidStorageFile>> ListAsync(string folder, CancellationToken token)
     {
         var transport = await adb.ResolveTransportAsync(token).ConfigureAwait(false);
         bool wide;
@@ -182,7 +182,7 @@ internal sealed class AndroidFileTransfer(AdbClient adb, string serial)
         && name.StartsWith(".sonicroute-", StringComparison.Ordinal) && name.EndsWith(".part", StringComparison.Ordinal)
         && Guid.TryParseExact(name.AsSpan(".sonicroute-".Length, 32), "N", out _);
 
-    internal async Task<string> ReceiveAsync(string folder, string name, string destination, CancellationToken token)
+    public async Task<string> ReceiveAsync(string folder, string name, string destination, CancellationToken token)
     {
         if (!ValidSegment(name) || !IsSafeTransferName(name)) throw new IOException("Invalid Windows file name.");
         Directory.CreateDirectory(destination);

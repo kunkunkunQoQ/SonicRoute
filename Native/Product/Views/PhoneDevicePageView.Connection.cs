@@ -28,9 +28,19 @@ internal sealed partial class PhoneDevicePageView
     private float RenderConnectionView(D2dTarget g, UiThemePalette t, float x, float y, float w)
     {
         float androidWidth = PhoneTextWidth("Android", 13f) + 42f;
-        UiPrimitives.DrawRadioButton(g, t, _hit, "phone.connchoice.android", new UiRect(x, y, androidWidth, 28f), !_airPlayConnectionChoice, "Android", 13f);
-        UiPrimitives.DrawRadioButton(g, t, _hit, "phone.connchoice.airplay", new UiRect(x + androidWidth, y, PhoneTextWidth("AirPlay", 13f) + 42f, 28f), _airPlayConnectionChoice, "AirPlay", 13f);
+        float airPlayWidth = PhoneTextWidth("AirPlay", 13f) + 42f;
+        float appWidth = PhoneTextWidth("SonicRoute App", 13f) + 42f;
+        UiPrimitives.DrawRadioButton(g, t, _hit, "phone.connchoice.android", new UiRect(x, y, androidWidth, 28f),
+            !_airPlayConnectionChoice && !_appConnectionChoice, "Android", 13f);
+        bool wrapMethods = w < androidWidth + airPlayWidth + appWidth;
+        UiPrimitives.DrawRadioButton(g, t, _hit, "phone.connchoice.app",
+            new UiRect(wrapMethods ? x : x + androidWidth + airPlayWidth, wrapMethods ? y + 28f : y, appWidth, 28f),
+            _appConnectionChoice, "SonicRoute App", 13f);
+        UiPrimitives.DrawRadioButton(g, t, _hit, "phone.connchoice.airplay", new UiRect(x + androidWidth, y, airPlayWidth, 28f), _airPlayConnectionChoice, "AirPlay", 13f);
+        if (wrapMethods) y += 28f;
         y += 36f;
+
+        if (_appConnectionChoice) return RenderAppConnection(g, t, x, y, w);
 
         if (_airPlayConnectionChoice)
         {

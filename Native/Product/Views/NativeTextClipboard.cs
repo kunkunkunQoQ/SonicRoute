@@ -11,6 +11,29 @@ internal static partial class NativeTextClipboard
     internal static bool TryWrite(nint owner, string text) =>
         TryWrite(owner, text, null, 0, 0, out _);
 
+    internal static string? ReadBoundedText(int maxChars)
+    {
+        if (OpenClipboard(0) == 0) return null;
+        try
+        {
+            nint memory = GetClipboardData(CfUnicodeText);
+            if (memory == 0) return null;
+            nuint bytes = GlobalSize(memory);
+            if (bytes < sizeof(char)) return null;
+            nint pointer = GlobalLock(memory);
+            if (pointer == 0) return null;
+            try
+            {
+                int limit = (int)Math.Min(bytes / sizeof(char), (nuint)(maxChars + 1));
+                int length = 0;
+                while (length < limit && Marshal.ReadInt16(pointer, length * sizeof(char)) != 0) length++;
+                return length < limit ? Marshal.PtrToStringUni(pointer, length) : null;
+            }
+            finally { GlobalUnlock(memory); }
+        }
+        finally { CloseClipboard(); }
+    }
+
     internal static bool TryWrite(nint owner, string text, uint? expectedSequence, uint remoteFormat, uint cloudFormat, out uint sequence)
     {
         sequence = 0;
@@ -63,6 +86,8 @@ internal static partial class NativeTextClipboard
 
     [LibraryImport("user32", EntryPoint = "OpenClipboard", SetLastError = true)] private static partial int OpenClipboard(nint owner);
     [LibraryImport("user32", EntryPoint = "CloseClipboard")] private static partial int CloseClipboard();
+    [LibraryImport("user32", EntryPoint = "GetClipboardData")] private static partial nint GetClipboardData(uint format);
+    [LibraryImport("kernel32", EntryPoint = "GlobalSize")] private static partial nuint GlobalSize(nint memory);
     [LibraryImport("user32", EntryPoint = "EmptyClipboard", SetLastError = true)] private static partial int EmptyClipboard();
     [LibraryImport("user32", EntryPoint = "SetClipboardData", SetLastError = true)] private static partial nint SetClipboardData(uint format, nint memory);
     [LibraryImport("user32", EntryPoint = "GetClipboardSequenceNumber")] private static partial uint GetClipboardSequenceNumber();

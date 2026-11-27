@@ -279,7 +279,7 @@ public sealed class AndroidAppCatalogCache(string filePath,
                             if (pkg == null || !packages.Add(pkg))
                                 throw new ArgumentException("Invalid cached app.");
                             AdbClient.ValidatePackage(pkg);
-                            if (uid <= 0 || name == null || name.Length > 1024)
+                            if (uid < 0 || name == null || name.Length > 1024)
                                 throw new ArgumentException("Invalid cached app metadata.");
                             if (!string.IsNullOrWhiteSpace(name))
                                 names[pkg] = name;
@@ -403,7 +403,7 @@ public sealed class AndroidAppCatalogCache(string filePath,
         {
             if (app == null || !packages.Add(app.Package)) throw new ArgumentException("Invalid cached app.");
             AdbClient.ValidatePackage(app.Package);
-            if (app.Uid <= 0 || app.Name == null || app.Name.Length > 1024 || app.IconPng?.Length > 131072)
+            if (app.Uid < 0 || app.Name == null || app.Name.Length > 1024 || app.IconPng?.Length > 131072)
                 throw new ArgumentException("Invalid cached app metadata.");
         }
     }

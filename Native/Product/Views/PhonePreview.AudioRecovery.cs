@@ -151,7 +151,7 @@ internal sealed partial class PhonePreview
                 {
                     await previous.ConfigureAwait(false);
                     if (!lifetime.IsCancellationRequested)
-                        await AndroidMdnsDiscovery.WatchConnectionsAsync(s => OnWirelessAdvertisement(s, lifetime.Token), lifetime.Token)
+                        await adbDiscovery.WatchSavedAsync(s => OnWirelessAdvertisement(s, lifetime.Token), lifetime.Token)
                             .ConfigureAwait(false);
                 }
                 catch (Exception error) { ExceptionDiagnostics.Record("NativePhone.RecoveryDiscovery", error); }

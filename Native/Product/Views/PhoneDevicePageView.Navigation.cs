@@ -56,7 +56,8 @@ internal sealed partial class PhoneDevicePageView
         var phone = _actions.Host.Phone;
         var profile = _deviceProfiles[index];
         var device = phone.Connections.Get(profile.LastDevice!).Device;
-        string status = L10n.T(device == null ? "Phone.Disconnected" : device.IsWifi ? "Phone.WifiConnected" : "Phone.UsbConnected");
+        string status = L10n.T(device == null ? "Phone.Disconnected" : device.IsApp ? "Phone.SrapConnected"
+            : device.IsWifi ? "Phone.WifiConnected" : "Phone.UsbConnected");
         bool selected = phone.Store.Profile.Id == profile.Id;
         return new UiDockRail.Item(DeviceProfilePrefix + profile.Id, phone.Store.GetProfileDisplayName(profile),
             new UiItemIcon(null, UiIcon.Phone, GlyphInset: 0.05f), selected, selected, device == null, status);
@@ -78,6 +79,7 @@ internal sealed partial class PhoneDevicePageView
     {
         _showConnection = false;
         _airPlayConnectionChoice = false;
+        _appConnectionChoice = false;
         _scroll.Offset = 0f;
     }
 }

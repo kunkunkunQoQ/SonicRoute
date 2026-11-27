@@ -267,6 +267,19 @@ public sealed class AdbClient : IDisposable, IAsyncDisposable
         return (new AdbClient(RuntimeDirectory, transport), fingerprint);
     }
 
+    internal static bool SupportsAliasForward(AndroidDevice device) => !device.IsApp && device.HardwareId != null
+        && device.ConnectionTarget is { } target && AdbTransportTarget.TryParse(target, out bool direct, out _) && direct;
+
+    internal async Task<SrapAdbAttachment> CaptureAliasAttachmentAsync(AndroidDevice device, CancellationToken token)
+    {
+        if (!SupportsAliasForward(device)) throw new SrapException("unsupported");
+        var transport = await ResolveTransportAsync(token).ConfigureAwait(false);
+        if (transport is ArbitratedAdbTransport arbiter)
+            transport = await arbiter.SelectDeviceAsync(device.ConnectionTarget!, token).ConfigureAwait(false);
+        if (transport is not DirectAdbTransport direct) throw new SrapException("unsupported");
+        return await direct.CaptureAliasAttachmentAsync(device.ConnectionTarget!, token).ConfigureAwait(false);
+    }
+
     private async Task<string> DispatchTransportCommandAsync(IAdbTransport transport, string[] arguments, CancellationToken token)
     {
         if (arguments.Length is 1 or 2 && arguments[0] == "devices")

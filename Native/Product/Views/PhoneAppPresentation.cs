@@ -5,6 +5,15 @@ namespace SonicRoute.Native.Product.Views;
 
 internal static class PhoneAppPresentation
 {
+    internal static string OutputLabel(AndroidOutputSink sink, string phoneName) => sink.Kind switch
+    {
+        AndroidOutputSinkKind.Current => L10n.T("Phone.NativeAudioOutput"),
+        AndroidOutputSinkKind.Speaker => string.Format(L10n.T("Phone.PcDropSpeakerTitle"), phoneName),
+        AndroidOutputSinkKind.Bluetooth => string.Format(L10n.T("Phone.BluetoothOutputFormat"),
+            sink.Name == "蓝牙音频设备" ? L10n.T("Phone.BluetoothAudioDevice") : sink.Name, phoneName),
+        _ => $"{sink.Name} · {phoneName}"
+    };
+
     private static int PlatformCategory(AndroidApp app) => app.PlatformCategory >= 0 ? app.PlatformCategory : app.Package switch
     {
         "cn.wenyu.bodian" or "com.netease.cloudmusic" or "com.tencent.qqmusic" => 1,

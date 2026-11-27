@@ -6,7 +6,10 @@ using System.Text.RegularExpressions;
 
 namespace SonicRoute.AndroidAudio;
 
-public sealed record AndroidMdnsService(string Name, string Type, string Address);
+public sealed record AndroidMdnsService(string Name, string Type, string Address)
+{
+    internal SrapAdvertisement? App { get; init; }
+}
 public sealed record AndroidPairingResult(string Address, string? Guid);
 public sealed record AndroidConnectionResult(AndroidDevice Device, IReadOnlyList<AndroidDevice> Devices)
 {

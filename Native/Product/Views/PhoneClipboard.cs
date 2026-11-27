@@ -27,7 +27,7 @@ internal sealed partial class PhoneClipboard : IDisposable
         "keeperpasswordmanager", "dashlane", "lastpass", "identities", "robotaskbaricon"
     };
 
-    private readonly AdbClient _adb;
+    private readonly Func<IAndroidClipboardClient> _openClipboard;
     private readonly NativeApplicationWindow _window;
     private readonly IMainThread _owner;
     private readonly string? _settingsPath;
@@ -57,7 +57,7 @@ internal sealed partial class PhoneClipboard : IDisposable
     internal event Action? Changed;
 
     internal PhoneClipboard(
-        AdbClient adb,
+        Func<IAndroidClipboardClient> openClipboard,
         NativeApplicationWindow window,
         IMainThread owner,
         string? settingsPath = null,
@@ -65,7 +65,7 @@ internal sealed partial class PhoneClipboard : IDisposable
         Func<AndroidDevice, AndroidDevice?>? resolveOnline = null,
         Func<AndroidDevice, AndroidDevice?>? findSaved = null)
     {
-        _adb = adb;
+        _openClipboard = openClipboard;
         _window = window;
         _owner = owner;
         _settingsPath = settingsPath;
@@ -253,7 +253,7 @@ internal sealed partial class PhoneClipboard : IDisposable
             SingleReader = true,
             SingleWriter = false
         });
-        var client = new AndroidClipboardClient(_adb);
+        var client = _openClipboard();
         _device = device;
         _client = client;
         _lifetime = lifetime;

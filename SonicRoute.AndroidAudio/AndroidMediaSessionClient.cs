@@ -67,7 +67,7 @@ public sealed record AndroidMediaState(string Package, string Title, string Arti
 }
 
 /// <summary>One event stream for the selected phone, alive only while its panel is visible.</summary>
-public sealed class AndroidMediaSessionClient(AdbClient adb)
+public sealed class AndroidMediaSessionClient(AdbClient adb) : IPhoneMediaSession
 {
     private static readonly Encoding Utf8NoBom = new UTF8Encoding(false);
     private IAdbShellSession? _session;

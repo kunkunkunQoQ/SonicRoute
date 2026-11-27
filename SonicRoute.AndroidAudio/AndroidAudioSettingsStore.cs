@@ -142,7 +142,10 @@ public sealed partial class AndroidAudioSettingsStore
 
     // Explicitly verified rebind. Keep the original keys (and a durable recovery
     // copy), so failure in either configuration file never destroys preferences.
-    internal Action? MigrateConnectionPreferences(AndroidDevice previous, AndroidDevice verified)
+    internal Action? MigrateConnectionPreferences(AndroidDevice previous, AndroidDevice verified) =>
+        MigrateConnectionPreferences(previous, verified, false);
+
+    internal Action? MigrateConnectionPreferences(AndroidDevice previous, AndroidDevice verified, bool keepExisting)
     {
         string oldKey = AndroidDeviceIdentity.Key(previous), newKey = AndroidDeviceIdentity.Key(verified);
         if (oldKey == newKey) return null;
@@ -152,12 +155,14 @@ public sealed partial class AndroidAudioSettingsStore
             var apps = new Dictionary<string, AndroidAppAudioSettings>(_apps, StringComparer.Ordinal);
             var streams = new Dictionary<string, AndroidStreamSettings>(_streams, StringComparer.Ordinal);
             bool changed = false;
-            if (streams.TryGetValue(oldKey, out var stream) && !Equals(streams.GetValueOrDefault(newKey), stream))
+            if (streams.TryGetValue(oldKey, out var stream) && (!keepExisting || !streams.ContainsKey(newKey))
+                && !Equals(streams.GetValueOrDefault(newKey), stream))
             { streams[newKey] = stream; changed = true; }
             foreach (var (key, value) in _apps.Where(e => e.Key.StartsWith(oldKey + "\n", StringComparison.Ordinal)))
             {
                 string nextKey = newKey + key[oldKey.Length..];
                 var archived = apps.GetValueOrDefault(nextKey);
+                if (keepExisting && archived != null) continue;
                 string? output = value.OutputId;
                 if (AndroidOutputIdentity.TryParseDeviceId(output, out string phone, out string sink) && phone == oldKey)
                     output = AndroidOutputIdentity.FormatDeviceId(newKey, sink);

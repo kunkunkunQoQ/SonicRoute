@@ -26,7 +26,7 @@ internal sealed class AndroidFileTransfers
             : _recent is { } previous && previous.Id == id ? previous.State : null;
     }
 
-    internal bool TryStart(string id, AndroidFileTransfer transfer, IReadOnlyList<string> paths, string destination,
+    internal bool TryStart(string id, IPhoneFileOperations transfer, IReadOnlyList<string> paths, string destination,
         string? pullFrom, Func<bool> currentTransport, CancellationToken device, out Task completion)
     {
         completion = Task.CompletedTask;
@@ -46,7 +46,7 @@ internal sealed class AndroidFileTransfers
         return true;
     }
 
-    private async Task TransferAsync(Job job, string id, AndroidFileTransfer transfer, string[] paths,
+    private async Task TransferAsync(Job job, string id, IPhoneFileOperations transfer, string[] paths,
         string destination, string? pullFrom, Func<bool> currentTransport)
     {
         AndroidFileProgress state = job.Progress;

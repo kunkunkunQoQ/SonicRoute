@@ -2,7 +2,7 @@ using System.Text.Json;
 
 namespace SonicRoute.AndroidAudio;
 
-public enum AndroidOutputSinkKind { Speaker, Bluetooth, Current }
+public enum AndroidOutputSinkKind { Speaker, Bluetooth, Current, Wired, Usb }
 
 public sealed record AndroidOutputSink(
     string Key,
@@ -23,31 +23,41 @@ public sealed record AndroidOutputSink(
             foreach (var item in element.EnumerateArray().Take(16))
             {
                 if (item.ValueKind != JsonValueKind.Object) continue;
-                string key = item.TryGetProperty("key", out var k) ? (k.GetString() ?? "").Trim() : "";
+                string key = Text(item, "key");
                 if (key.Length is 0 or > 128) continue;
                 if (string.Equals(key, Current.Key, StringComparison.OrdinalIgnoreCase)) continue;
-                string kindText = item.TryGetProperty("kind", out var kd) ? (kd.GetString() ?? "").Trim() : "";
-                var kind = string.Equals(kindText, "bluetooth", StringComparison.OrdinalIgnoreCase)
-                    || key.StartsWith("bt:", StringComparison.OrdinalIgnoreCase)
-                    ? AndroidOutputSinkKind.Bluetooth
-                    : AndroidOutputSinkKind.Speaker;
-                if (kind == AndroidOutputSinkKind.Speaker) key = "speaker";
-                int id = item.TryGetProperty("id", out var idProp) && idProp.TryGetInt32(out int parsedId) ? parsedId : 0;
-                int type = item.TryGetProperty("type", out var typeProp) && typeProp.TryGetInt32(out int parsedType) ? parsedType : (kind == AndroidOutputSinkKind.Speaker ? 2 : 8);
-                string rawName = item.TryGetProperty("name", out var n) ? (n.GetString() ?? "").Trim() : "";
-                if (rawName.Length > 96) rawName = rawName[..96];
-                string name = kind == AndroidOutputSinkKind.Speaker
-                    ? "手机扬声器"
-                    : (string.IsNullOrWhiteSpace(rawName) ? "蓝牙音频设备" : rawName);
-                string? address = item.TryGetProperty("address", out var addr) ? (addr.GetString() ?? "").Trim() : null;
-                if (string.IsNullOrEmpty(address) || string.Equals(address, "00:00:00:00:00:00", StringComparison.OrdinalIgnoreCase))
-                    address = null;
-                else if (address.Length > 64)
-                    address = address[..64];
-                raw.Add(new AndroidOutputSink(key, kind, id, type, name, address));
+                string kindText = Text(item, "kind");
+                var kind = IdentifyKind(key, kindText);
+                if (kind is not { } recognized) continue;
+                int type = Number(item, "type", recognized switch
+                {
+                    AndroidOutputSinkKind.Speaker => 2,
+                    AndroidOutputSinkKind.Bluetooth => 8,
+                    _ => 0
+                });
+                string name = recognized == AndroidOutputSinkKind.Speaker ? DefaultSpeaker.Name : Text(item, "name");
+                raw.Add(new(key, recognized, Number(item, "id", 0), type, name, Text(item, "address")));
             }
         }
         return NormalizeList(raw);
+    }
+
+    private static string Text(JsonElement item, string key) =>
+        item.TryGetProperty(key, out var value) && value.ValueKind == JsonValueKind.String ? value.GetString()!.Trim() : "";
+
+    private static int Number(JsonElement item, string key, int fallback) =>
+        item.TryGetProperty(key, out var value) && value.ValueKind == JsonValueKind.Number
+            && value.TryGetInt32(out int number) ? number : fallback;
+
+    private static AndroidOutputSinkKind? IdentifyKind(string key, string kind)
+    {
+        if (key.StartsWith("wired:", StringComparison.OrdinalIgnoreCase)) return AndroidOutputSinkKind.Wired;
+        if (key.StartsWith("usb:", StringComparison.OrdinalIgnoreCase)) return AndroidOutputSinkKind.Usb;
+        if (key.StartsWith("bt:", StringComparison.OrdinalIgnoreCase) || kind.Equals("bluetooth", StringComparison.OrdinalIgnoreCase))
+            return AndroidOutputSinkKind.Bluetooth;
+        if (key.Equals("speaker", StringComparison.OrdinalIgnoreCase) || kind.Equals("speaker", StringComparison.OrdinalIgnoreCase))
+            return AndroidOutputSinkKind.Speaker;
+        return null;
     }
 
     public static IReadOnlyList<AndroidOutputSink> NormalizeList(IEnumerable<AndroidOutputSink>? outputs)
@@ -58,18 +68,31 @@ public sealed record AndroidOutputSink(
             foreach (var sink in outputs)
             {
                 if (sink == null || sink.Kind == AndroidOutputSinkKind.Current || string.IsNullOrWhiteSpace(sink.Key)) continue;
-                string? address = string.IsNullOrWhiteSpace(sink.Address)
-                    || string.Equals(sink.Address.Trim(), "00:00:00:00:00:00", StringComparison.OrdinalIgnoreCase)
-                    ? null
-                    : sink.Address.Trim();
-                var normalized = sink.Kind == AndroidOutputSinkKind.Speaker
-                    ? sink with { Key = "speaker", Name = string.IsNullOrWhiteSpace(sink.Name) ? "手机扬声器" : sink.Name.Trim(), Address = null }
-                    : sink with
+                string key = sink.Key.Trim();
+                if (key.Length > 128 || (sink.Kind switch
                     {
-                        Key = sink.Key.Trim(),
-                        Name = string.IsNullOrWhiteSpace(sink.Name) ? "蓝牙音频设备" : sink.Name.Trim(),
-                        Address = address
+                        AndroidOutputSinkKind.Wired => !key.StartsWith("wired:", StringComparison.OrdinalIgnoreCase) || key.Length == 6,
+                        AndroidOutputSinkKind.Usb => !key.StartsWith("usb:", StringComparison.OrdinalIgnoreCase) || key.Length == 4,
+                        _ => false
+                    })) continue;
+                if (key.Equals("current", StringComparison.OrdinalIgnoreCase)) continue;
+                string? address = sink.Address?.Trim();
+                if (string.IsNullOrEmpty(address) || address.Equals("00:00:00:00:00:00", StringComparison.OrdinalIgnoreCase))
+                    address = null;
+                else if (address.Length > 64) address = address[..64];
+                string name = (sink.Name ?? "").Trim();
+                if (name.Length > 96) name = name[..96];
+                if (name.Length == 0)
+                    name = sink.Kind switch
+                    {
+                        AndroidOutputSinkKind.Speaker => DefaultSpeaker.Name,
+                        AndroidOutputSinkKind.Wired => "有线音频设备",
+                        AndroidOutputSinkKind.Usb => "USB 音频设备",
+                        _ => "蓝牙音频设备"
                     };
+                var normalized = sink.Kind == AndroidOutputSinkKind.Speaker
+                    ? sink with { Key = "speaker", Name = name, Address = null }
+                    : sink with { Key = key, Name = name, Address = address };
 
                 if (normalized.Kind == AndroidOutputSinkKind.Speaker)
                 {
@@ -79,15 +102,16 @@ public sealed record AndroidOutputSink(
                 }
 
                 int existingIdx = list.FindIndex(s =>
-                    s.Kind == AndroidOutputSinkKind.Bluetooth &&
+                    s.Kind == normalized.Kind &&
                     (string.Equals(s.Key, normalized.Key, StringComparison.OrdinalIgnoreCase) ||
+                     normalized.Kind == AndroidOutputSinkKind.Bluetooth &&
                      string.Equals(s.Name, normalized.Name, StringComparison.OrdinalIgnoreCase)));
                 if (existingIdx >= 0)
                 {
                     var existing = list[existingIdx];
                     bool preferNew = (existing.AndroidDeviceType == 7 && normalized.AndroidDeviceType != 7)
                         || (existing.Address == null && normalized.Address != null && normalized.AndroidDeviceType != 7);
-                    if (preferNew)
+                    if (normalized.Kind == AndroidOutputSinkKind.Bluetooth && preferNew)
                         list[existingIdx] = normalized;
                     continue;
                 }
@@ -103,12 +127,17 @@ public sealed record AndroidOutputSink(
 public static class AndroidOutputIdentity
 {
     public const string Prefix = "android-out:";
+    private static readonly string[] TokenPrefixes = [":bt:", ":wired:", ":usb:"];
 
     public static bool IsPhoneOutput(string? deviceId) =>
         !string.IsNullOrEmpty(deviceId) && deviceId.StartsWith(Prefix, StringComparison.OrdinalIgnoreCase);
 
     public static bool IsPhoneBluetoothOutput(string? deviceId) =>
         TryParseDeviceId(deviceId, out _, out string sinkKey) && sinkKey.StartsWith("bt:", StringComparison.OrdinalIgnoreCase);
+
+    internal static bool IsPhoneAccessoryOutput(string? deviceId) =>
+        TryParseDeviceId(deviceId, out _, out string sinkKey) && TokenPrefixes.Any(prefix =>
+            sinkKey.AsSpan().StartsWith(prefix.AsSpan(1), StringComparison.OrdinalIgnoreCase));
 
     public static bool IsPhoneCurrentOutput(string? deviceId) =>
         TryParseDeviceId(deviceId, out _, out string sinkKey) && string.Equals(sinkKey, AndroidOutputSink.Current.Key, StringComparison.OrdinalIgnoreCase);
@@ -122,41 +151,55 @@ public static class AndroidOutputIdentity
         sinkKey = "";
         if (!IsPhoneOutput(deviceId)) return false;
         string rest = deviceId![Prefix.Length..];
-        if (rest.EndsWith(":speaker", StringComparison.OrdinalIgnoreCase) && rest.Length > 8)
+        // The colon in "device:<serial>" is not a sink separator, even when the
+        // hardware serial happens to be "bt", "wired" or "usb".
+        int searchOffset = rest.StartsWith("device:", StringComparison.OrdinalIgnoreCase) ? "device:".Length : 0;
+        int tokenIndex = rest.Length;
+        int tokenStart = 0;
+        foreach (string prefix in TokenPrefixes)
         {
-            phoneKey = rest[..^8];
-            sinkKey = "speaker";
-            return true;
+            int index = rest.IndexOf(prefix, searchOffset, StringComparison.OrdinalIgnoreCase);
+            if (index > 0 && index < tokenIndex)
+            {
+                tokenIndex = index;
+                tokenStart = index + prefix.Length;
+            }
         }
-        int btIndex = rest.IndexOf(":bt:", StringComparison.OrdinalIgnoreCase);
-        if (btIndex > 0 && btIndex + 4 < rest.Length)
+        if (tokenIndex < rest.Length)
         {
-            phoneKey = rest[..btIndex];
-            sinkKey = rest[(btIndex + 1)..];
+            if (tokenStart == rest.Length) return false;
+            phoneKey = rest[..tokenIndex];
+            sinkKey = rest[(tokenIndex + 1)..];
             return true;
         }
         int lastColon = rest.LastIndexOf(':');
         if (lastColon <= 0 || lastColon >= rest.Length - 1) return false;
         phoneKey = rest[..lastColon];
         sinkKey = rest[(lastColon + 1)..];
+        if (sinkKey.Equals("speaker", StringComparison.OrdinalIgnoreCase)) sinkKey = "speaker";
         return true;
     }
 }
 
 public sealed record AndroidDevice(string Serial, string Name, string State, bool IsWifi, string? HardwareId = null, string? TransportId = null)
 {
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault)]
+    public bool IsApp { get; init; }
     // Secondary evidence distinguishes devices that report the same hardware serial.
     public string? IdentityFingerprint { get; init; }
     // A process-local transport selector, never persisted or reconstructed from a saved profile.
     [System.Text.Json.Serialization.JsonIgnore]
     public string? ConnectionTarget { get; init; }
+    // Set only on an authenticated App attachment after a successful dual-channel bind.
+    [System.Text.Json.Serialization.JsonIgnore]
+    internal string? BoundAdbKey { get; init; }
     // Windows PnP identifies an attachment by its interface path, independently of the ADB serial.
     [System.Text.Json.Serialization.JsonIgnore]
     internal string? UsbInterfacePath { get; init; }
     [System.Text.Json.Serialization.JsonIgnore]
     public string CommandTarget => ConnectionTarget ?? Serial;
     public override string ToString() => State is "device" or "unauthorized"
-        ? $"{Name} · {(IsWifi ? "Wi-Fi" : "USB")}" + (State == "unauthorized" ? " · 待授权" : "")
+        ? $"{Name} · {(IsApp ? "SonicRoute App" : IsWifi ? "Wi-Fi" : "USB")}" + (State == "unauthorized" ? " · 待授权" : "")
         : $"{Name} · 未连接";
 }
 
@@ -169,6 +212,7 @@ public static class AndroidDeviceIdentity
     // Wireless endpoint ports and discovery suffixes may change. Never identify a phone by its model or IP.
     public static string Key(AndroidDevice device)
     {
+        if (device.IsApp) return device.BoundAdbKey ?? "app:" + device.Serial;
         if (!string.IsNullOrWhiteSpace(device.HardwareId)) return "device:" + device.HardwareId;
         string serial = device.Serial;
         int suffix = serial.IndexOf("._adb-tls-connect._tcp", StringComparison.OrdinalIgnoreCase);
@@ -185,6 +229,7 @@ public static class AndroidDeviceIdentity
     internal static string? StableKey(AndroidDevice? device)
     {
         if (device == null) return null;
+        if (device.IsApp) return "app:" + device.Serial;
         string key = Key(device);
         return key.StartsWith("device:", StringComparison.Ordinal) && key.Length > "device:".Length ? key : null;
     }
@@ -198,13 +243,13 @@ public static class AndroidDeviceIdentity
         && !ConflictingEvidence(left, right);
 
     internal static bool SameTransport(AndroidDevice? left, AndroidDevice? right) => left != null && right != null
-        && left.Serial == right.Serial && left.TransportId == right.TransportId
+        && left.IsApp == right.IsApp && left.Serial == right.Serial && left.TransportId == right.TransportId
         && !ConflictingEvidence(left, right)
         && (left.ConnectionTarget == null || right.ConnectionTarget == null || left.ConnectionTarget == right.ConnectionTarget);
 
     internal static bool MatchesSavedDevice(AndroidDevice? saved, AndroidDevice device)
     {
-        if (saved == null || ConflictingEvidence(saved, device)) return false;
+        if (saved == null || saved.IsApp != device.IsApp || ConflictingEvidence(saved, device)) return false;
         string? savedKey = StableKey(saved), currentKey = StableKey(device);
         return savedKey != null && currentKey != null ? savedKey == currentKey : saved.Serial == device.Serial;
     }

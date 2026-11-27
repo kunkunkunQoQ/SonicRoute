@@ -24,6 +24,14 @@ internal static partial class Program
         if (fileLog != null) { Console.SetOut(fileLog); Console.SetError(fileLog); }
         try
         {
+            if (args is ["--srap-stage2a", var fixtureDirectory]) { await SrapStage2ACheckAsync(fixtureDirectory); return 0; }
+            if (args is ["--srap-live", var liveDirectory]) { await SrapLiveAsync(liveDirectory); return 0; }
+            if (args is ["--srap-live-revoke", var revokeDirectory]) { await SrapLiveRevokeAsync(revokeDirectory); return 0; }
+            if (args is ["--gemini-android-contract", var output, var vectors])
+            {
+                await GeminiAndroidContractAsync(output, vectors);
+                return 0;
+            }
             if (args.Length > 0 && args[0] == "--airplay-listen") { await AirPlayLoopbackAsync(args.Contains("--prefer-hevc"), args.Contains("--require-code")); return 0; }
             if (args.Length > 0 && args[0] == "--airplay-phone-output") { await AirPlayPhoneOutputAsync(args[1]); return 0; }
             if (args.Length > 0 && args[0] == "--airplay-eld-decode") { AirPlayEldFixture(args[1], args[2]); return 0; }

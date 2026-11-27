@@ -10,12 +10,16 @@ using System.Text;
 
 namespace SonicRoute.AndroidAudio;
 
+internal sealed record SrapAdvertisement(string Instance, bool Pairing);
+
 /// <summary>Short-lived DNS-SD queries for an explicit connect operation, independent of the shared ADB cache.</summary>
 public static class AndroidMdnsDiscovery
 {
     private const string PairingType = "_adb-tls-pairing._tcp";
     private const string ConnectType = AndroidWirelessConnection.ConnectType;
     private static readonly string[] AdbTypes = [PairingType, ConnectType];
+    internal const string AppType = "_sonicroute._tcp";
+    private static readonly string[] SupportedTypes = [PairingType, ConnectType, AppType];
     private static readonly IPAddress MulticastV4 = IPAddress.Parse("224.0.0.251");
     private static readonly byte[] MulticastV6 = IPAddress.Parse("ff02::fb").GetAddressBytes();
 
@@ -47,6 +51,12 @@ public static class AndroidMdnsDiscovery
 
     internal static Task<IReadOnlyList<AndroidMdnsService>> DiscoverAllAsync(TimeSpan duration, CancellationToken token) =>
         CollectAsync(AdbTypes, duration, settleOnFirst: true, token);
+
+    internal static Task<IReadOnlyList<AndroidMdnsService>> DiscoverAppsAsync(CancellationToken token) =>
+        CollectAsync([AppType], TimeSpan.FromSeconds(2), settleOnFirst: false, token);
+
+    internal static IAsyncEnumerable<bool> WatchAppsAsync(CancellationToken token) =>
+        WindowsServiceBrowse.WatchAsync(AppType + ".local", token);
 
     // Keep the long-lived browse in the Windows DNS client. The app only sends
     // short-lived queries for endpoints after a browse notification.
@@ -173,6 +183,8 @@ public static class AndroidMdnsDiscovery
 
         byte[][] queries = types.Select(t => BuildQuery(t, name)).ToArray();
         var work = addresses.Select(a => QueryInterfaceAsync(a, queries, types, onService, lifetime.Token)).ToList();
+        if (types.Length == 1 && types[0] == AppType)
+            work.AddRange(addresses.Select(a => QueryInterfaceAsync(a, queries, types, onService, lifetime.Token, multicastReply: true)));
         try
         {
             await Task.WhenAll(work).ConfigureAwait(false);
@@ -260,13 +272,27 @@ public static class AndroidMdnsDiscovery
     }
 
     private static async Task QueryInterfaceAsync(IPAddress local, byte[][] queries, string[] types,
-        Func<AndroidMdnsService, IPAddress, bool> onService, CancellationToken token)
+        Func<AndroidMdnsService, IPAddress, bool> onService, CancellationToken token, bool multicastReply = false)
     {
         try
         {
             using var socket = new Socket(local.AddressFamily, SocketType.Dgram, ProtocolType.Udp);
-            socket.Bind(new IPEndPoint(local, 0)); // A one-shot query receives a unicast reply on this ephemeral port.
             bool ipv6 = local.AddressFamily == AddressFamily.InterNetworkV6;
+            var endpoint = new IPEndPoint(ipv6 ? new IPAddress(MulticastV6, local.ScopeId) : MulticastV4, 5353);
+            if (multicastReply)
+            {
+                // Some responders only emit normal multicast replies. Query and
+                // listen briefly on the group without changing the ADB query path.
+                socket.ExclusiveAddressUse = false;
+                socket.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
+                socket.Bind(new IPEndPoint(ipv6 ? IPAddress.IPv6Any : IPAddress.Any, 5353));
+                if (ipv6)
+                    socket.SetSocketOption(SocketOptionLevel.IPv6, SocketOptionName.AddMembership,
+                        new IPv6MulticastOption(new IPAddress(MulticastV6), local.ScopeId));
+                else
+                    socket.SetSocketOption(SocketOptionLevel.IP, SocketOptionName.AddMembership, new MulticastOption(MulticastV4, local));
+            }
+            else socket.Bind(new IPEndPoint(local, 0));
             if (ipv6)
             {
                 socket.SetSocketOption(SocketOptionLevel.IPv6, SocketOptionName.MulticastInterface, (int)local.ScopeId);
@@ -277,7 +303,6 @@ public static class AndroidMdnsDiscovery
                 socket.SetSocketOption(SocketOptionLevel.IP, SocketOptionName.MulticastInterface, local.GetAddressBytes());
                 socket.SetSocketOption(SocketOptionLevel.IP, SocketOptionName.MulticastTimeToLive, 255);
             }
-            var endpoint = new IPEndPoint(ipv6 ? new IPAddress(MulticastV6, local.ScopeId) : MulticastV4, 5353);
             await QueryServicesAsync(socket, endpoint, queries, types, onService, token).ConfigureAwait(false);
         }
         catch (OperationCanceledException) { }
@@ -289,10 +314,12 @@ public static class AndroidMdnsDiscovery
         Func<AndroidMdnsService, IPAddress, bool> onService, CancellationToken token)
     {
         bool ipv6 = socket.AddressFamily == AddressFamily.InterNetworkV6;
-        long scope = ipv6 ? ((IPEndPoint)socket.LocalEndPoint!).Address.ScopeId : 0;
+        long scope = ipv6 ? endpoint.Address.ScopeId : 0;
         byte[] buffer = new byte[4096];
         var remoteTemplate = new IPEndPoint(ipv6 ? IPAddress.IPv6Any : IPAddress.Any, 0);
         var requestedInstances = new HashSet<ServiceInstance>();
+        var appRecords = new Dictionary<ServiceInstance, (ServiceRecord Record, IPAddress Address)>();
+        var appText = new Dictionary<ServiceInstance, SrapAdvertisement>();
         Task<SocketReceiveFromResult>? receive = null;
         int probeDelayMs = 1000;
         while (true)
@@ -310,10 +337,27 @@ public static class AndroidMdnsDiscovery
                 // Local mDNS relays can return the one-shot reply from a different UDP port.
                 var response = ReadResponse(buffer.AsSpan(0, packet.ReceivedBytes));
                 if (response == null) continue;
+                foreach (var (instance, info) in response.AppText)
+                {
+                    if (appText.Count < 32 || appText.ContainsKey(instance)) appText[instance] = info;
+                    if (appRecords.TryGetValue(instance, out var cached)
+                        && onService(cached.Record.ToService(cached.Address) with { App = info }, cached.Address)) return;
+                }
                 foreach (var record in response.Services)
                 {
                     if (!types.Contains(record.Instance.Type, StringComparer.OrdinalIgnoreCase)) continue;
                     var address = response.GetAddress(record.Target, source.Address, scope);
+                    if (record.Instance.Type == AppType)
+                    {
+                        if (appRecords.Count < 32 || appRecords.ContainsKey(record.Instance)) appRecords[record.Instance] = (record, address);
+                        if (appText.TryGetValue(record.Instance, out var info))
+                        {
+                            if (onService(record.ToService(address) with { App = info }, address)) return;
+                        }
+                        else if (requestedInstances.Count < 32 && requestedInstances.Add(record.Instance))
+                            await socket.SendToAsync(BuildQuery(AppType, record.Instance.Name, txt: true), SocketFlags.None, endpoint, token).ConfigureAwait(false);
+                        continue;
+                    }
                     if (onService(record.ToService(address), address)) return;
                 }
                 foreach (var instance in response.Instances)
@@ -321,12 +365,16 @@ public static class AndroidMdnsDiscovery
                     if (requestedInstances.Count >= 32 || !types.Contains(instance.Type, StringComparer.OrdinalIgnoreCase)
                         || response.Services.Any(s => s.Instance == instance) || !requestedInstances.Add(instance)) continue;
                     await socket.SendToAsync(BuildQuery(instance.Type, instance.Name), SocketFlags.None, endpoint, token).ConfigureAwait(false);
+                    if (instance.Type == AppType)
+                        await socket.SendToAsync(BuildQuery(instance.Type, instance.Name, txt: true), SocketFlags.None, endpoint, token).ConfigureAwait(false);
                 }
             }
             token.ThrowIfCancellationRequested();
         }
     }
-    public static byte[] BuildQuery(string type, string? name)
+    public static byte[] BuildQuery(string type, string? name) => BuildQuery(type, name, txt: false);
+
+    private static byte[] BuildQuery(string type, string? name, bool txt)
     {
         using var stream = new MemoryStream();
         stream.Write(new byte[] { 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0 });
@@ -338,7 +386,7 @@ public static class AndroidMdnsDiscovery
             if (bytes.Length is 0 or > 63) throw new ArgumentException("Invalid DNS label.");
             stream.WriteByte((byte)bytes.Length); stream.Write(bytes);
         }
-        stream.WriteByte(0); stream.WriteByte(0); stream.WriteByte(name == null ? (byte)12 : (byte)33);
+        stream.WriteByte(0); stream.WriteByte(0); stream.WriteByte(name == null ? (byte)12 : txt ? (byte)16 : (byte)33);
         // RFC 6762 legacy one-shot queries use class IN; the non-5353 source port requests a unicast response.
         stream.WriteByte(0); stream.WriteByte(1);
         return stream.ToArray();
@@ -348,7 +396,8 @@ public static class AndroidMdnsDiscovery
         var response = ReadResponse(packet);
         if (response == null) return [];
         long scope = source.AddressFamily == AddressFamily.InterNetworkV6 ? source.ScopeId : 0;
-        return response.Services.Select(s => s.ToService(response.GetAddress(s.Target, source, scope))).ToArray();
+        return response.Services.Where(s => s.Instance.Type != AppType || response.AppText.ContainsKey(s.Instance))
+            .Select(s => s.ToService(response.GetAddress(s.Target, source, scope)) with { App = response.AppText.GetValueOrDefault(s.Instance) }).ToArray();
     }
 
     private readonly record struct ServiceInstance(string Name, string Type);
@@ -362,6 +411,7 @@ public static class AndroidMdnsDiscovery
         internal readonly List<ServiceInstance> Instances = [];
         internal readonly List<ServiceRecord> Services = [];
         internal readonly List<(string Host, IPAddress Address)> Addresses = [];
+        internal readonly Dictionary<ServiceInstance, SrapAdvertisement> AppText = new();
 
         internal IPAddress GetAddress(string target, IPAddress source, long scope)
         {
@@ -413,6 +463,9 @@ public static class AndroidMdnsDiscovery
                     if (port > 0 && ReadName(packet, ref next) is { Length: > 0 } target && next == end)
                         response.Services.Add(new(service, target, port));
                 }
+                else if (type == 16 && TryReadInstance(owner) is { Type: AppType } app
+                    && ReadAppText(app.Name, packet.Slice(offset, length)) is { } advertisement)
+                    response.AppText.TryAdd(app, advertisement);
                 else if ((type == 1 && length == 4) || (type == 28 && length == 16))
                 {
                     var address = new IPAddress(packet.Slice(offset, length));
@@ -425,11 +478,33 @@ public static class AndroidMdnsDiscovery
         return response;
     }
 
-    private static bool IsBrowseName(string owner) => AdbTypes.Any(type => owner.Equals(type + ".local", StringComparison.OrdinalIgnoreCase));
+    private static SrapAdvertisement? ReadAppText(string name, ReadOnlySpan<byte> data)
+    {
+        if (!name.StartsWith("sr-", StringComparison.Ordinal) || name.Length != 11 || !LowerHex(name[3..])) return null;
+        var fields = new Dictionary<string, string>(StringComparer.Ordinal);
+        while (!data.IsEmpty)
+        {
+            int length = data[0];
+            if (length == 0 || length >= data.Length) return null;
+            var field = data.Slice(1, length);
+            int split = field.IndexOf((byte)'=');
+            if (split < 1) return null;
+            string key = Encoding.ASCII.GetString(field[..split]);
+            if (key is "v" or "inst" or "pair" && !fields.TryAdd(key, Encoding.ASCII.GetString(field[(split + 1)..]))) return null;
+            data = data[(length + 1)..];
+        }
+        var pair = fields.GetValueOrDefault("pair");
+        return fields.GetValueOrDefault("v") == "1" && fields.GetValueOrDefault("inst") is { Length: 16 } inst
+            && LowerHex(inst) && pair is "0" or "1" ? new(inst, pair == "1") : null;
+    }
+
+    private static bool LowerHex(string value) => value.All(c => char.IsAsciiDigit(c) || c is >= 'a' and <= 'f');
+
+    private static bool IsBrowseName(string owner) => SupportedTypes.Any(type => owner.Equals(type + ".local", StringComparison.OrdinalIgnoreCase));
 
     private static ServiceInstance? TryReadInstance(string owner)
     {
-        foreach (string type in AdbTypes)
+        foreach (string type in SupportedTypes)
         {
             string suffix = "." + type + ".local";
             if (!owner.EndsWith(suffix, StringComparison.OrdinalIgnoreCase)) continue;

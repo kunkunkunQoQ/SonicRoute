@@ -15,6 +15,10 @@ public sealed record AndroidPhoneProfile(string Name, AndroidDevice? LastDevice,
     public IReadOnlyList<AndroidOutputSink> OutputSinks { get; init; } = [AndroidOutputSink.DefaultSpeaker];
     public bool ManuallyDisconnected { get; init; }
     public string? LastWirelessAddress { get; init; }
+    internal string? AppPublicKeySha256 { get; init; }
+    internal string? LastAppAddress { get; init; }
+    internal bool AppTrustRevoked { get; init; }
+    internal bool PreferAppTransport { get; init; }
 
     internal static string? WirelessAddress(string? serial) =>
         serial != null && IPEndPoint.TryParse(serial, out var endpoint) && endpoint.Port > 0 ? endpoint.ToString() : null;
@@ -30,6 +34,7 @@ public sealed record AndroidPhoneProfile(string Name, AndroidDevice? LastDevice,
     // handshake, including when an old USB-only record must rely on mDNS.
     internal AndroidDevice? WirelessReconnectTarget(bool discoverFromUsb)
     {
+        if (LastDevice?.IsApp == true) return null;
         if (LastDevice is not { } saved || saved.IsWifi) return LastDevice;
         if ((!discoverFromUsb && LastWirelessAddress == null) || AndroidDeviceIdentity.StableKey(saved) == null) return null;
         return saved with { IsWifi = true, Serial = LastWirelessAddress ?? "",
@@ -55,6 +60,7 @@ public sealed class AndroidPhoneStore
     private bool _loadedSafely = true;
     private bool _legacyFormat;
     internal long ManagementRevision { get { lock (_gate) return _managementRevision; } }
+    internal long LibraryRevision { get { lock (_gate) return _revision; } }
     internal bool HasUnresolvedRemovals { get { lock (_gate) return _state.RemovedDevices?.Any(d => AndroidDeviceIdentity.StableKey(d) == null) == true; } }
     public string FilePath { get; }
     public event Action? Changed;
@@ -149,6 +155,9 @@ public sealed class AndroidPhoneStore
     private static AndroidPhoneProfile LoadProfile(SavedPhone saved)
     {
         if (saved == null || string.IsNullOrEmpty(saved.Id) || saved.Id.Length > 128 || saved.Apps == null) throw new ArgumentException("Invalid phone library.");
+        string? appFingerprint = NormalizeAppFingerprint(saved.AppPublicKeySha256);
+        if (saved.Device is { IsApp: true } savedApp && (appFingerprint == null || savedApp.Serial != appFingerprint))
+            throw new ArgumentException("Conflicting App identity in phone library.");
         var apps = saved.Apps.Take(1000).Where(a => a != null).DistinctBy(a => a.Package).ToArray();
         foreach (var app in apps) ValidateApp(app);
         var packages = apps.Select(a => a.Package).ToHashSet(StringComparer.Ordinal);
@@ -156,6 +165,11 @@ public sealed class AndroidPhoneStore
         {
             Id = saved.Id,
             AdditionalFields = saved.AdditionalFields,
+            AppPublicKeySha256 = appFingerprint,
+            LastAppAddress = saved.LastAppAddress != null && System.Net.IPEndPoint.TryParse(saved.LastAppAddress, out var appAddress) && appAddress.Port > 0
+                ? appAddress.ToString() : null,
+            AppTrustRevoked = saved.AppTrustRevoked,
+            PreferAppTransport = saved.PreferAppTransport,
             ManuallyDisconnected = saved.ManuallyDisconnected,
             LastWirelessAddress = AndroidPhoneProfile.WirelessAddress(saved.LastWirelessAddress)
                 ?? (saved.Device is { IsWifi: true } wifi ? AndroidPhoneProfile.WirelessAddress(wifi.Serial) : null),
@@ -167,10 +181,28 @@ public sealed class AndroidPhoneStore
     private static void ValidateApp(AndroidApp app)
     {
         AdbClient.ValidatePackage(app.Package);
-        if (app.IconPng?.Length > 131072 || app.Name == null || app.Name.Length > 1024 || app.Uid <= 0) throw new ArgumentException("Invalid phone application.");
+        if (app.IconPng?.Length > 131072 || app.Name == null || app.Name.Length > 1024 || app.Uid < 0) throw new ArgumentException("Invalid phone application.");
     }
     public AndroidPhoneProfile? FindProfile(AndroidDevice device)
-    { lock (_gate) return _state.Profiles.FirstOrDefault(p => AndroidDeviceIdentity.MatchesSavedDevice(p.LastDevice, device)); }
+    {
+        lock (_gate)
+        {
+            var matches = _state.Profiles.Where(p => OwnsDevice(p, device)).Take(2).ToArray();
+            return matches.Length == 1 ? matches[0] : null;
+        }
+    }
+    internal static bool OwnsDevice(AndroidPhoneProfile profile, AndroidDevice device) => device.IsApp
+        ? profile.AppPublicKeySha256 == device.Serial && (device.BoundAdbKey == null ||
+            profile.LastDevice is { IsApp: false } adb && AndroidDeviceIdentity.Key(adb) == device.BoundAdbKey)
+        : AndroidDeviceIdentity.MatchesSavedDevice(profile.LastDevice, device);
+
+    internal bool HasUniqueAppOwner(string profileId, string fingerprint)
+    {
+        lock (_gate) return _state.Profiles.Any(p => p.Id == profileId && p.AppPublicKeySha256 == fingerprint)
+            && !_state.Profiles.Any(p => p.Id != profileId && p.AppPublicKeySha256 == fingerprint)
+            && !(_state.RemovedProfiles ?? []).Any(p => p.AppPublicKeySha256 == fingerprint)
+            && !(_state.RemovedDevices ?? []).Any(d => d.IsApp && d.Serial == fingerprint);
+    }
     public string GetProfileDisplayName(AndroidPhoneProfile profile) => profile.Name.Length != 0
         ? profile.Name : _defaultName?.Invoke() ?? profile.LastDevice?.Name ?? "Android";
     public string GetDisplayName(AndroidDevice device) => FindProfile(device) is { } profile ? GetProfileDisplayName(profile) : device.Name;
@@ -221,7 +253,7 @@ public sealed class AndroidPhoneStore
         lock (_gate)
         {
             var profile = device != null
-                ? _state.Profiles.FirstOrDefault(p => AndroidDeviceIdentity.MatchesSavedDevice(p.LastDevice, device))
+                ? FindProfile(device)
                 : _state.Profiles.FirstOrDefault(p => p.Id == _state.SelectedId);
             return profile == null || !profile.DisabledSmartVolumeApps.Contains(package, StringComparer.Ordinal);
         }
@@ -254,6 +286,114 @@ public sealed class AndroidPhoneStore
             && (AndroidDeviceIdentity.ConflictingEvidence(saved, device)
                 || saved.IdentityFingerprint != null && device.IdentityFingerprint == null));
     }
+
+    internal void MergeVerifiedAppAlias(string adbId, string appId, string fingerprint, long revision, bool keepAdbSettings,
+        Action validate, Func<AndroidDevice, AndroidDevice, bool, Action?>? migrate)
+    {
+        Action? rollback = null;
+        try { Change(state =>
+        {
+            validate();
+            if (_revision != revision) throw new SrapException("stale_session");
+            var target = state.Profiles.FirstOrDefault(p => p.Id == adbId);
+            var source = state.Profiles.FirstOrDefault(p => p.Id == appId);
+            if (target?.LastDevice is not { IsApp: false } adb || source?.LastDevice is not { IsApp: true } app
+                || target.ManuallyDisconnected || source.ManuallyDisconnected) throw new SrapException("stale_session");
+            if (source.AppTrustRevoked) throw new SrapException("permission_lost");
+            if (!SrapInvite.IsFingerprint(fingerprint) || NormalizeAppFingerprint(fingerprint) != fingerprint || target.AppPublicKeySha256 != null
+                || source.AppPublicKeySha256 != fingerprint || app.Serial != fingerprint || adb.HardwareId == null
+                || IsRemoved(state, adb) || IsRemoved(state, app)
+                || state.Profiles.Where(p => p.Id != adbId && p.Id != appId).Concat(state.RemovedProfiles ?? [])
+                    .Any(p => p.AppPublicKeySha256 == fingerprint || AndroidDeviceIdentity.MatchesSavedDevice(p.LastDevice, adb)))
+                throw new SrapException("identity_conflict");
+            var apps = target.RetainedApps.Concat(source.RetainedApps).DistinctBy(a => a.Package).ToArray();
+            if (apps.Length > 1000) throw new SrapException("identity_conflict");
+            var first = keepAdbSettings ? target : source;
+            var second = keepAdbSettings ? source : target;
+            var firstPackages = first.RetainedApps.Select(a => a.Package).ToHashSet(StringComparer.Ordinal);
+            var disabled = first.DisabledSmartVolumeApps.Concat(second.DisabledSmartVolumeApps.Where(p => !firstPackages.Contains(p))).ToArray();
+            var extensions = new Dictionary<string, JsonElement>(second.AdditionalFields ?? []);
+            foreach (var entry in first.AdditionalFields ?? []) extensions[entry.Key] = entry.Value;
+            var merged = WithQuickPanelApps(target with
+            {
+                AppPublicKeySha256 = fingerprint, LastAppAddress = source.LastAppAddress, AppTrustRevoked = false,
+                RetainedApps = Array.AsReadOnly(apps), DisabledSmartVolumeApps = Array.AsReadOnly(disabled),
+                ReceiveFolder = first.ReceiveFolder != AndroidFileTransfer.Downloads ? first.ReceiveFolder : second.ReceiveFolder,
+                AdditionalFields = extensions.Count == 0 ? null : extensions
+            });
+            rollback = migrate?.Invoke(app, adb, keepAdbSettings);
+            validate();
+            return state with { Profiles = Array.AsReadOnly(state.Profiles.Where(p => p.Id != appId)
+                    .Select(p => p.Id == adbId ? merged : p).ToArray()),
+                SelectedId = state.SelectedId == appId ? adbId : state.SelectedId };
+        }, durable: true, management: true); }
+        catch { rollback?.Invoke(); throw; }
+    }
+
+    // A paired App may have its own profile until a dual-channel proof permits migration
+    // into an existing ADB profile. Endpoint, model and name are never identity evidence.
+    internal AndroidPhoneProfile RegisterApp(string fingerprint, System.Net.IPEndPoint endpoint, long revision)
+    {
+        fingerprint = NormalizeAppFingerprint(fingerprint) ?? throw new SrapException("identity_conflict");
+        AndroidPhoneProfile? added = null;
+        Change(state =>
+        {
+            if (_managementRevision != revision) return state;
+            var active = state.Profiles.Where(p => p.AppPublicKeySha256 == fingerprint).ToArray();
+            var archived = (state.RemovedProfiles ?? []).Where(p => p.AppPublicKeySha256 == fingerprint).ToArray();
+            if (active.Length + archived.Length > 1 || archived.Any(p => p.LastDevice?.IsApp != true)) return state;
+            var previous = active.FirstOrDefault() ?? archived.FirstOrDefault() ?? state.Profiles.FirstOrDefault(p => p.LastDevice == null);
+            if (state.Profiles.Count >= 32 && (previous == null || !state.Profiles.Contains(previous)))
+                throw AndroidError.WithCode(new InvalidOperationException("Too many phones."), AndroidErrorCode.MaxSavedPhones);
+            var saved = new AndroidDevice(fingerprint, "SonicRoute", "offline", true) { IsApp = true };
+            var current = (previous ?? new("", null, [])) with
+            {
+                LastDevice = previous?.LastDevice is { IsApp: false } bound ? bound : saved,
+                AppPublicKeySha256 = fingerprint, LastAppAddress = endpoint.ToString(),
+                ManuallyDisconnected = false, AppTrustRevoked = false
+            };
+            var phones = state.Profiles.Contains(previous!)
+                ? state.Profiles.Select(p => p.Id == current.Id ? current : p).ToArray()
+                : state.Profiles.Append(current).ToArray();
+            added = current;
+            return state with
+            {
+                Profiles = Array.AsReadOnly(phones), SelectedId = current.Id,
+                RemovedDevices = Array.AsReadOnly((state.RemovedDevices ?? []).Where(d => !AndroidDeviceIdentity.MatchesSavedDevice(saved, d)).ToArray()),
+                RemovedProfiles = Array.AsReadOnly((state.RemovedProfiles ?? []).Where(p => p.Id != current.Id).ToArray())
+            };
+        }, durable: true, management: true);
+        return added ?? throw new SrapException("identity_conflict");
+    }
+
+    internal void RememberAppAddress(string id, string fingerprint, System.Net.IPEndPoint endpoint)
+    {
+        string address = endpoint.ToString();
+        ChangeProfile(id, p => p.AppPublicKeySha256 == fingerprint && !p.AppTrustRevoked && !p.ManuallyDisconnected
+            && p.LastAppAddress != address ? p with { LastAppAddress = address } : p);
+    }
+
+    internal void RevokeAppTrust(string id, string fingerprint) => Change(state =>
+    {
+        var phones = state.Profiles.Select(p => p.Id == id && p.AppPublicKeySha256 == fingerprint && !p.AppTrustRevoked
+            ? p with { AppTrustRevoked = true, LastAppAddress = null, ManuallyDisconnected = p.LastDevice?.IsApp == true || p.ManuallyDisconnected } : p).ToArray();
+        return phones.SequenceEqual(state.Profiles) ? state : state with { Profiles = Array.AsReadOnly(phones) };
+    }, durable: true, management: true);
+
+    internal void SetAppTransportPreference(string id, string fingerprint, bool? preferApp) => Change(state =>
+    {
+        var profile = state.Profiles.FirstOrDefault(p => p.Id == id);
+        if (profile?.LastDevice is not { IsApp: false } || profile.AppPublicKeySha256 != fingerprint)
+            throw new SrapException("stale_session");
+        var next = preferApp is { } prefer
+            ? profile with { PreferAppTransport = prefer }
+            : profile with { AppPublicKeySha256 = null, LastAppAddress = null, AppTrustRevoked = false, PreferAppTransport = false };
+        return next == profile ? state : state with { Profiles = Array.AsReadOnly(state.Profiles.Select(p => p.Id == id ? next : p).ToArray()) };
+    }, durable: true, management: true);
+
+    private static string? NormalizeAppFingerprint(string? fingerprint) =>
+        fingerprint?.Length == 64 && fingerprint.All(char.IsAsciiHexDigit) ? fingerprint.ToUpperInvariant() : null;
+
     // Only an explicit connection/add can restore a removed device. Discovery never does.
     public void RememberDevice(AndroidDevice device) => BindExplicit(device, null, null);
 
@@ -295,13 +435,16 @@ public sealed class AndroidPhoneStore
                 ?? preserved.FirstOrDefault() ?? state.Profiles.FirstOrDefault(p => p.LastDevice == null)
                 ?? new AndroidPhoneProfile("", null, []);
             if (active.Length >= 32 && matching.Length == 0) throw AndroidError.WithCode(new InvalidOperationException("最多可保存 32 台手机。"), AndroidErrorCode.MaxSavedPhones);
+            var combined = new[] { primary }.Concat(matching).Concat(preserved).DistinctBy(p => p.Id).ToArray();
+            var appAliases = combined.Select(p => p.AppPublicKeySha256).OfType<string>().Distinct(StringComparer.Ordinal).ToArray();
+            if (appAliases.Length > 1) return state;
             if (primary.LastDevice is { } prior && AndroidDeviceIdentity.Key(prior) != AndroidDeviceIdentity.Key(device))
                 Migrate(prior);
             foreach (var secondary in matching.Concat(preserved).Where(p => p.Id != primary.Id))
                 if (secondary.LastDevice is { } alternate && AndroidDeviceIdentity.Key(alternate) != AndroidDeviceIdentity.Key(device)) Migrate(alternate);
-            var combined = new[] { primary }.Concat(matching).Concat(preserved).DistinctBy(p => p.Id).ToArray();
             var connected = primary.WithDevice(device, wirelessAddress);
             var merged = WithQuickPanelApps(connected with {
+                AppPublicKeySha256 = appAliases.FirstOrDefault(),
                 Name = primary.Name.Length != 0 ? primary.Name : combined.FirstOrDefault(p => p.Name.Length != 0)?.Name ?? "",
                 LastWirelessAddress = connected.LastWirelessAddress ?? combined.Select(p => p.LastWirelessAddress).FirstOrDefault(a => a != null),
                 ManuallyDisconnected = false,
@@ -330,7 +473,7 @@ public sealed class AndroidPhoneStore
 
     internal void SetDisconnected(AndroidDevice device, bool disconnected) => Change(state =>
     {
-        var profiles = state.Profiles.Select(p => AndroidDeviceIdentity.MatchesSavedDevice(p.LastDevice, device)
+        var profiles = state.Profiles.Select(p => OwnsDevice(p, device)
             && p.ManuallyDisconnected != disconnected ? p with { ManuallyDisconnected = disconnected } : p).ToArray();
         return profiles.SequenceEqual(state.Profiles) ? state : state with { Profiles = Array.AsReadOnly(profiles) };
     }, durable: true, management: true);
@@ -487,7 +630,7 @@ public sealed class AndroidPhoneStore
         bool updated = false;
         lock (_gate)
         {
-            int index = _state.Profiles.ToList().FindIndex(p => AndroidDeviceIdentity.MatchesSavedDevice(p.LastDevice, device));
+            int index = _state.Profiles.ToList().FindIndex(p => OwnsDevice(p, device));
             if (index < 0) return false;
             var previous = _state.Profiles[index];
             if (previous.OutputSinks.SequenceEqual(normalized)) return false;
@@ -606,7 +749,11 @@ public sealed class AndroidPhoneStore
         _legacyFormat = false;
     }
     private static SavedPhone SaveProfile(AndroidPhoneProfile profile) => new(profile.Id, profile.Name, profile.LastDevice,
-        profile.RetainedApps.ToArray(), profile.DisabledSmartVolumeApps.ToArray(), profile.ReceiveFolder, profile.ManuallyDisconnected, profile.LastWirelessAddress) { AdditionalFields = profile.AdditionalFields };
+        profile.RetainedApps.ToArray(), profile.DisabledSmartVolumeApps.ToArray(), profile.ReceiveFolder, profile.ManuallyDisconnected, profile.LastWirelessAddress)
+        {
+            AdditionalFields = profile.AdditionalFields, AppPublicKeySha256 = profile.AppPublicKeySha256,
+            LastAppAddress = profile.LastAppAddress, AppTrustRevoked = profile.AppTrustRevoked, PreferAppTransport = profile.PreferAppTransport
+        };
     internal sealed record LegacyFile(int Version, string Name, AndroidDevice? Device, AndroidApp[] Apps, string[]? DisabledSmartVolumePackages = null)
     {
         [System.Text.Json.Serialization.JsonExtensionData]
@@ -614,6 +761,14 @@ public sealed class AndroidPhoneStore
     }
     internal sealed record SavedPhone(string Id, string Name, AndroidDevice? Device, AndroidApp[] Apps, string[]? DisabledSmartVolumePackages = null, string? ReceiveFolder = null, bool ManuallyDisconnected = false, string? LastWirelessAddress = null)
     {
+        [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+        public string? AppPublicKeySha256 { get; set; }
+        [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+        public string? LastAppAddress { get; set; }
+        [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault)]
+        public bool AppTrustRevoked { get; set; }
+        [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault)]
+        public bool PreferAppTransport { get; set; }
         [System.Text.Json.Serialization.JsonExtensionData]
         public Dictionary<string, JsonElement>? AdditionalFields { get; set; }
     }

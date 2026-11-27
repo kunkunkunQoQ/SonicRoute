@@ -119,7 +119,7 @@ internal sealed partial class PhonePreview
                 if (profile?.LastDevice == null || profile.ManuallyDisconnected) return;
                 var online = Connections.Resolve(profile.LastDevice);
                 if (online != null && sinks.All(id => PcRoutingApi.ResolvePersistentOutputId(id) != null)) return;
-                // Current and speaker wake on connection changes. A missing Bluetooth accessory
+                // Current and speaker wake on connection changes. A missing accessory
                 // additionally needs Android's audio-device notification while its phone is online.
                 if (!Equals(online, listening))
                 {
@@ -128,7 +128,7 @@ internal sealed partial class PhonePreview
                     listener?.Dispose();
                     listener = null;
                     listening = online;
-                    if (online != null && sinks.Any(AndroidOutputIdentity.IsPhoneBluetoothOutput))
+                    if (online != null && sinks.Any(AndroidOutputIdentity.IsPhoneAccessoryOutput))
                     {
                         listener = CancellationTokenSource.CreateLinkedTokenSource(cancel, Connections.OperationToken(online));
                         watch = WatchSavedSinksAsync(online, listener.Token);
@@ -151,13 +151,14 @@ internal sealed partial class PhonePreview
     {
         try
         {
-            await new AndroidMediaSessionClient(Adb).WatchAsync(device, state =>
+            if (device.IsApp) return;
+            await Operations.OpenMediaSession(device).WatchAsync(device, state =>
             {
                 if (Connections.IsCurrent(device)) Store.UpdateOutputs(device, state.Outputs);
             }, cancel, measureLatency: false).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (cancel.IsCancellationRequested) { }
-        catch (Exception error) { ExceptionDiagnostics.Record("PlaybackRestore.Bluetooth", error); }
+        catch (Exception error) { ExceptionDiagnostics.Record("PlaybackRestore.PhoneAccessory", error); }
     }
 }
 

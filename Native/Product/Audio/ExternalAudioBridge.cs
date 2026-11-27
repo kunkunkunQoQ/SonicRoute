@@ -11,6 +11,7 @@ using SonicRoute.Core;
 using SonicRoute.Core.Interop;
 using SonicRoute.Core.Models;
 using SonicRoute.Native.Audio;
+using SonicRoute.Native.Product.Views;
 
 namespace SonicRoute.Native.Product;
 
@@ -359,7 +360,7 @@ internal sealed class ExternalAudioBridge : IDisposable
         if (phone == null) return [];
         var source = menuTarget?.ExternalSourceId is { } sourceId ? phone.Sources.FindSource(sourceId) : null;
         if (menuTarget is { IsExternal: true } && source == null && _tryGetAirPlay()?.Source?.Id != menuTarget.ExternalSourceId) return [];
-        var devices = phone.Connections.OnlineDevices;
+        var devices = phone.Connections.OnlineDevices.Where(d => !d.IsApp).ToArray();
         var list = new List<Endpoint>();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var aliases = menuTarget != null || includeCurrent ? ConfigService.Load().DeviceNames : null;
@@ -368,7 +369,7 @@ internal sealed class ExternalAudioBridge : IDisposable
             string current = AndroidOutputIdentity.FormatDeviceId(key, AndroidOutputSink.Current.Key);
             string? alias = aliases?.GetValueOrDefault(current);
             string name = string.IsNullOrWhiteSpace(alias) ? L10n.T("Phone.NativeAudioOutput") : alias;
-            if (string.IsNullOrWhiteSpace(alias) && devices.Count > 1 && !own) name += " · " + phoneName;
+            if (string.IsNullOrWhiteSpace(alias) && devices.Length > 1 && !own) name += " · " + phoneName;
             list.Add(new(own ? AndroidAudioSession.SourcePhoneOutputId : current, name, VisibilityId: own ? current : null));
         }
         void AddDevice(AndroidDevice online)
@@ -390,10 +391,7 @@ internal sealed class ExternalAudioBridge : IDisposable
             {
                 if (sink.Kind == AndroidOutputSinkKind.Current) continue;
                 string devId = AndroidOutputIdentity.FormatDeviceId(key, sink.Key);
-                string label = sink.Kind == AndroidOutputSinkKind.Speaker
-                    ? string.Format(L10n.T("Phone.PcDropSpeakerTitle"), phoneName)
-                    : string.Format(L10n.T("Phone.BluetoothOutputFormat"),
-                        sink.Name == "蓝牙音频设备" ? L10n.T("Phone.BluetoothAudioDevice") : sink.Name, phoneName);
+                string label = PhoneAppPresentation.OutputLabel(sink, phoneName);
                 list.Add(new Endpoint(devId, label));
             }
         }
@@ -414,7 +412,7 @@ internal sealed class ExternalAudioBridge : IDisposable
             return (false, -1, L10n.T("Phone.Err.InvalidPhoneOutputDevice"));
         var phone = _getPhone();
         var connected = phone.Connections.ResolveKey(phoneKey);
-        if (connected == null)
+        if (connected == null || connected.IsApp)
             return (false, -1, L10n.T("Phone.Err.PhoneOffline"));
         var result = phone.Pc.RouteProcess(pid, targetDeviceId, connected, silenceLocal);
         if (result.Success) _onChanged();

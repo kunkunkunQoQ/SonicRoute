@@ -87,7 +87,7 @@ internal sealed partial class PhoneDevicePageView : IViewPage, IViewDockPage
     private bool _hevcLoadStarted;
 
     private bool IsConnectionPage => _showConnection;
-    private bool CanShowQr => _active && !_busy && IsConnectionPage && !_airPlayConnectionChoice;
+    private bool CanShowQr => _active && !_busy && IsConnectionPage && !_airPlayConnectionChoice && !_appConnectionChoice;
     private bool UseHevc => _streamSettings.VideoDecoder == AndroidStreamSettings.WindowsHevcDecoder;
     public bool NeedsContentAnimationTick => _pinnedOrder.NeedsScrollTick(_scroll, _visibleDeviceRect);
     public bool NeedsAnimationTick => NeedsContentAnimationTick || Dock.NeedsAnimationTick;
@@ -128,6 +128,8 @@ internal sealed partial class PhoneDevicePageView : IViewPage, IViewDockPage
         CloseAndroidPicker();
         _showConnection = connection;
         _airPlayConnectionChoice = airPlay;
+        _appConnectionChoice = false;
+        _selectedAppCandidate = null;
         if (switchProfile) store.SelectProfile(profileId!);
         _scroll.Offset = 0f;
         CancelEncoderRead();
@@ -211,7 +213,7 @@ internal sealed partial class PhoneDevicePageView : IViewPage, IViewDockPage
         var cached = phone.Discovery.CurrentDevices ?? [];
         _restorableUsb = IsConnectionPage ? cached.Where(device => !device.IsWifi && device.State == "device" &&
             phone.Connections.Resolve(device) == null && !AndroidConnectionManager.IsAmbiguous(device, cached)).ToArray() : [];
-        RefreshStreamingSettings(IsConnectionPage ? null : online ?? profile.LastDevice);
+        RefreshStreamingSettings(IsConnectionPage || (online ?? profile.LastDevice)?.IsApp == true ? null : online ?? profile.LastDevice);
         if (!_hevcLoadStarted && _active && !IsConnectionPage && profile.LastDevice != null)
         {
             _hevcLoadStarted = true;
@@ -318,7 +320,8 @@ internal sealed partial class PhoneDevicePageView : IViewPage, IViewDockPage
         UiPrimitives.DrawGhostIconButton(g, t, _hit, "phone.rename", new UiRect(renameX + 4f, _renameRect.Y, 26f, 26f),
             UiIcon.Edit, 13f, tooltip: L10n.T("Phone.RenamePhoneAutomation"));
 
-        string connection = online == null ? L10n.T("Phone.Disconnected")
+        string connection = online == null ? L10n.T(_actions.Host.Phone.Store.Profile is { AppTrustRevoked: true, LastDevice.IsApp: true } ? "Phone.Srap.not_paired" : "Phone.Disconnected")
+            : online.IsApp ? L10n.T("Phone.SrapConnected")
             : $"{(online.IsWifi ? "Wi-Fi" : "USB")} · {L10n.T("Phone.ConnectedStatus")}";
         g.FillEllipse(nameX + 4f, y + 46f, 3.5f, 3.5f, online == null ? t.TextSecondary : t.Success);
         g.DrawText(connection, new UiRect(nameX + 14f, y + 37f, MathF.Max(1f, nameAreaW - 14f), 18f), t.TextSecondary, 11.5f);
@@ -337,6 +340,11 @@ internal sealed partial class PhoneDevicePageView : IViewPage, IViewDockPage
         var online = _activeDevice;
         var detail = profile.LastDevice;
         y = RenderDeviceHeader(g, t, x, y, w, phone.Store.GetProfileDisplayName(profile), online);
+        if ((online ?? detail)?.IsApp == true)
+        {
+            y = RenderAppControls(g, t, x, y, w, online);
+            return RenderQuickPanelApps(g, t, x, y, w, phone, profile, online != null && phone.Operations.CanListApps(online));
+        }
         y = RenderStreamingCard(g, t, x, y, w, detail != null);
         y = RenderQuickPanelApps(g, t, x, y, w, phone, profile, online != null);
         y = RenderFileTransferCard(g, t, x, y, w, phone, profile, online);
@@ -438,7 +446,8 @@ internal sealed partial class PhoneDevicePageView : IViewPage, IViewDockPage
             if (apps.Count > 1)
             {
                 string grip = PinnedAppGrip + app.Package;
-                _hit.Add(grip, icon.Deflate(-3f), UiCursorKind.Hand, L10n.T("Phone.DragAppOrder"));
+                var dragArea = new UiRect(row.X, row.Y, pinX - row.X, row.Height);
+                _hit.Add(grip, dragArea, UiCursorKind.Hand, L10n.T("Phone.DragAppOrder"));
                 if (dragged || _hit.IsHover(grip))
                 {
                     var badge = new UiRect(icon.Right - 10f, icon.Bottom - 10f, 13f, 13f);
@@ -469,20 +478,21 @@ internal sealed partial class PhoneDevicePageView : IViewPage, IViewDockPage
 
         bool opus = enabled && _streamSettings.AudioDecoder != AndroidStreamSettings.RawPcmDecoder;
         string? videoEncoder = UseHevc ? _streamSettings.HevcEncoder : _streamSettings.VideoEncoder;
-        ReadOnlySpan<(string Id, string Label, string Value, bool Enabled)> fields =
+        ReadOnlySpan<(string Id, string Label, (string Text, string? Tooltip) Value, bool Enabled)> fields =
         [
             ("phone.stream.audioenc", L10n.T("Phone.StreamEncoder"), GetEncoderSelectedLabel(_streamSettings.AudioEncoder), opus),
-            ("phone.stream.audiodec", L10n.T("Phone.StreamDecoder"), GetAudioDecoderLabel(_streamSettings.AudioDecoder), enabled),
-            ("phone.stream.audiobr", L10n.T("Phone.StreamBitRate"), (_streamSettings.AudioBitRate / 1000.0).ToString("0.##", CultureInfo.InvariantCulture) + " Kbps", opus),
-            ("phone.stream.audiolat", L10n.T("Phone.StreamAudioLatency"), GetLatencyLabel(_streamSettings.AudioLatencyMode ?? AndroidStreamSettings.LatencyModeBalanced), enabled),
+            ("phone.stream.audiodec", L10n.T("Phone.StreamDecoder"), (GetAudioDecoderLabel(_streamSettings.AudioDecoder), null), enabled),
+            ("phone.stream.audiobr", L10n.T("Phone.StreamBitRate"), ((_streamSettings.AudioBitRate / 1000.0).ToString("0.##", CultureInfo.InvariantCulture) + " Kbps", null), opus),
+            ("phone.stream.audiolat", L10n.T("Phone.StreamAudioLatency"), (GetLatencyLabel(_streamSettings.AudioLatencyMode ?? AndroidStreamSettings.LatencyModeBalanced), null), enabled),
             ("phone.stream.videoenc", L10n.T("Phone.StreamEncoder"), GetEncoderSelectedLabel(videoEncoder), enabled),
-            ("phone.stream.videodec", L10n.T("Phone.StreamDecoder"), GetVideoDecoderLabel(_streamSettings.VideoDecoder), enabled),
-            ("phone.stream.videobr", L10n.T("Phone.StreamBitRate"), (_streamSettings.VideoBitRate / 1000000.0).ToString("0.##", CultureInfo.InvariantCulture) + " Mbps", enabled),
-            ("phone.stream.videofps", L10n.T("Phone.StreamFps"), _streamSettings.MaxFps.ToString(CultureInfo.InvariantCulture) + " fps", enabled),
+            ("phone.stream.videodec", L10n.T("Phone.StreamDecoder"), (GetVideoDecoderLabel(_streamSettings.VideoDecoder), null), enabled),
+            ("phone.stream.videobr", L10n.T("Phone.StreamBitRate"), ((_streamSettings.VideoBitRate / 1000000.0).ToString("0.##", CultureInfo.InvariantCulture) + " Mbps", null), enabled),
+            ("phone.stream.videofps", L10n.T("Phone.StreamFps"), (_streamSettings.MaxFps.ToString(CultureInfo.InvariantCulture) + " fps", null), enabled),
         ];
 
         Span<UiRect> labels = stackalloc UiRect[8];
         Span<UiRect> controls = stackalloc UiRect[8];
+        Span<float> rowLabelHeights = stackalloc float[2];
         float cy = y + DeviceCardPadding;
         float audioY = cy, videoY = 0f;
         for (int i = 0; i < fields.Length; i += columns)
@@ -493,25 +503,29 @@ internal sealed partial class PhoneDevicePageView : IViewPage, IViewDockPage
                 videoY = cy;
             }
             if (i is 0 or 4) cy += 24f;
-            float labelH = 16f;
-            float controlH = DeviceControlHeight;
-            for (int col = 0; col < columns; col++)
+            int row = i % 4 / columns;
+            if (i < 4)
             {
-                var field = fields[i + col];
-                float width = available * shares[col];
-                labelH = MathF.Max(labelH, PhoneTextHeight(field.Label, width, labelSize));
-                controlH = MathF.Max(controlH, MathF.Min(48f, PhoneTextHeight(field.Value, width - 32f, valueSize) + 8f));
+                float height = 16f;
+                for (int col = 0; col < columns; col++)
+                {
+                    float width = available * shares[col];
+                    height = MathF.Max(height, PhoneTextHeight(fields[i + col].Label, width, labelSize));
+                    height = MathF.Max(height, PhoneTextHeight(fields[i + col + 4].Label, width, labelSize));
+                }
+                rowLabelHeights[row] = height;
             }
 
+            float labelH = rowLabelHeights[row];
             float left = cx;
             for (int col = 0; col < columns; col++)
             {
                 float width = available * shares[col];
                 labels[i + col] = new UiRect(left, cy, width, labelH);
-                controls[i + col] = new UiRect(left, cy + labelH + 3f, width, controlH);
+                controls[i + col] = new UiRect(left, cy + labelH + 3f, width, DeviceControlHeight);
                 left += width + gap;
             }
-            cy += labelH + 3f + controlH + 7f;
+            cy += labelH + 3f + DeviceControlHeight + 7f;
         }
 
         var card = new UiRect(x, y, w, cy - y - 7f + DeviceCardPadding);
@@ -523,8 +537,8 @@ internal sealed partial class PhoneDevicePageView : IViewPage, IViewDockPage
         {
             var field = fields[i];
             g.DrawText(field.Label, labels[i], t.TextSecondary, labelSize, wrap: true);
-            UiPrimitives.DrawComboBox(g, t, _hit, field.Id, controls[i], field.Value, fontSize: valueSize,
-                enabled: field.Enabled, wrapText: true);
+            UiPrimitives.DrawComboBox(g, t, _hit, field.Id, controls[i], field.Value.Text, fontSize: valueSize,
+                enabled: field.Enabled, tooltip: field.Value.Tooltip);
         }
         return card.Bottom + DeviceCardGap;
     }
@@ -795,6 +809,7 @@ internal sealed partial class PhoneDevicePageView : IViewPage, IViewDockPage
 
         if (HandleDeviceNavigation(id)) return true;
         if (_airPlay.HandleClick(id, hit.Value.Bounds)) return true;
+        if (HandleAppDeviceAction(id, hit.Value.Bounds)) return true;
 
         var phone = _actions.Host.Phone;
         var profile = phone.Store.Profile;
@@ -802,10 +817,11 @@ internal sealed partial class PhoneDevicePageView : IViewPage, IViewDockPage
 
         if (id == "phone.connchoice.android")
         {
-            if (_airPlayConnectionChoice)
+            if (_airPlayConnectionChoice || _appConnectionChoice)
             {
                 _actions.CloseInlineEdit(commit: false);
                 _airPlayConnectionChoice = false;
+                _appConnectionChoice = false;
                 UpdateQrPairing();
                 _actions.Invalidate();
             }
@@ -817,6 +833,7 @@ internal sealed partial class PhoneDevicePageView : IViewPage, IViewDockPage
             {
                 _actions.CloseInlineEdit(commit: false);
                 _airPlayConnectionChoice = true;
+                _appConnectionChoice = false;
                 UpdateQrPairing();
                 _actions.Invalidate();
             }
@@ -1282,7 +1299,7 @@ internal sealed partial class PhoneDevicePageView : IViewPage, IViewDockPage
         CancellationToken token = cts.Token;
         try
         {
-            var encoders = await Task.Run(() => _actions.Host.Phone.Adb.EncodersAsync(device, token), token).ConfigureAwait(false);
+            var encoders = await Task.Run(() => _actions.Host.Phone.Operations.EncodersAsync(device, token), token).ConfigureAwait(false);
             _actions.Host.TryPost(() =>
             {
                 if (!_active || token.IsCancellationRequested || !ReferenceEquals(_encoderCts, cts) || _streamDeviceKey != key)
@@ -1479,7 +1496,7 @@ internal sealed partial class PhoneDevicePageView : IViewPage, IViewDockPage
                 var (_, fallbackKind) = ClassifyEncoder(name);
                 var effective = reported != AndroidEncoderKind.Unknown ? reported : fallbackKind;
                 int rank = effective switch { AndroidEncoderKind.Hardware => 0, AndroidEncoderKind.Software => 1, _ => 2 };
-                return (Name: name, Label: FormatEncoderLabel(name, reported), Rank: rank);
+                return (Name: name, Label: FormatEncoderLabels(name, reported).Full, Rank: rank);
             })
             .OrderBy(item => item.Rank)
             .ThenBy(item => item.Name, StringComparer.Ordinal);
@@ -1496,12 +1513,13 @@ internal sealed partial class PhoneDevicePageView : IViewPage, IViewDockPage
             (value / (double)divisor).ToString("0.##", CultureInfo.InvariantCulture) + unit)).ToList();
     }
 
-    private string GetEncoderSelectedLabel(string? selected)
+    private (string Text, string? Tooltip) GetEncoderSelectedLabel(string? selected)
     {
-        if (string.IsNullOrEmpty(selected)) return L10n.T("Phone.StreamAutomatic");
+        if (string.IsNullOrEmpty(selected)) return (L10n.T("Phone.StreamAutomatic"), null);
         var kind = _streamEncoders?.Kinds != null && _streamEncoders.Kinds.TryGetValue(selected, out var k)
             ? k : AndroidEncoderKind.Unknown;
-        return FormatEncoderLabel(selected, kind);
+        var labels = FormatEncoderLabels(selected, kind);
+        return labels.Compact != null ? (labels.Compact, labels.Full) : (labels.Full, null);
     }
 
     private static string GetAudioDecoderLabel(string? decoder) => decoder switch
@@ -1543,7 +1561,7 @@ internal sealed partial class PhoneDevicePageView : IViewPage, IViewDockPage
             prefixes.Any(prefix => value.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
     }
 
-    private static string FormatEncoderLabel(string name, AndroidEncoderKind reportedKind)
+    private static (string Full, string? Compact) FormatEncoderLabels(string name, AndroidEncoderKind reportedKind)
     {
         var (vendorKey, fallbackKind) = ClassifyEncoder(name);
         var effectiveKind = reportedKind != AndroidEncoderKind.Unknown ? reportedKind : fallbackKind;
@@ -1553,15 +1571,24 @@ internal sealed partial class PhoneDevicePageView : IViewPage, IViewDockPage
             AndroidEncoderKind.Software => L10n.T("Phone.StreamEncoderSoftware"),
             _ => L10n.T("Phone.StreamEncoderCustom")
         };
+        string? compact = null;
         if (name.Contains(".hevc", StringComparison.OrdinalIgnoreCase) || name.Contains(".h265", StringComparison.OrdinalIgnoreCase))
         {
-            string format = name.EndsWith(".cq", StringComparison.OrdinalIgnoreCase) ? L10n.T("Phone.StreamEncoderHevcCq")
-                : name.EndsWith(".hdr", StringComparison.OrdinalIgnoreCase) ? L10n.T("Phone.StreamEncoderHevcHdr") : "H.265";
+            compact = name.EndsWith(".cq", StringComparison.OrdinalIgnoreCase) ? "H.265 CQ"
+                : name.EndsWith(".hdr", StringComparison.OrdinalIgnoreCase) ? "H.265 HDR" : null;
+            string format = compact switch
+            {
+                "H.265 CQ" => L10n.T("Phone.StreamEncoderHevcCq"),
+                "H.265 HDR" => L10n.T("Phone.StreamEncoderHevcHdr"),
+                _ => "H.265"
+            };
             kindText = format + " · " + kindText;
         }
-        return vendorKey != null && effectiveKind != AndroidEncoderKind.Unknown
-            ? string.Format(L10n.T("Phone.StreamEncoderVendorFormat"), L10n.T(vendorKey), kindText, name)
+        string? vendor = vendorKey != null && effectiveKind != AndroidEncoderKind.Unknown ? L10n.T(vendorKey) : null;
+        string full = vendor != null
+            ? string.Format(L10n.T("Phone.StreamEncoderVendorFormat"), vendor, kindText, name)
             : string.Format(L10n.T("Phone.StreamEncoderFormat"), kindText, name);
+        return (full, compact != null && vendor != null ? $"{compact} · {vendor}" : compact);
     }
 
     private static string? NullIfEmpty(string value) => string.IsNullOrEmpty(value) ? null : value;
@@ -1588,13 +1615,16 @@ internal sealed partial class PhoneDevicePageView : IViewPage, IViewDockPage
         }
         var phone = _actions.Host.Phone;
         if (IsConnectionPage)
-            RunBusy(ct => phone.RefreshAsync().WaitAsync(ct));
+        {
+            if (_appConnectionChoice) SearchAppCandidates();
+            else RunBusy(ct => phone.RefreshAsync().WaitAsync(ct));
+        }
         else
         {
             if (_activeDevice is { } online)
             {
                 CancelEncoderRead();
-                phone.Adb.InvalidateEncoders(online);
+                phone.Operations.InvalidateEncoders(online);
                 _streamDeviceKey = null;
             }
             RunBusy(ct => phone.RefreshSelectedDeviceAsync(ct));
@@ -1609,13 +1639,16 @@ internal sealed partial class PhoneDevicePageView : IViewPage, IViewDockPage
             RunDeviceCommand(action);
         }
 
-        _actions.ShowMenu(anchor,
+        List<UiMenuItem> items =
         [
             new UiMenuItem { Text = L10n.T("Phone.Reconnect"), Icon = UiIcon.Refresh, Click = () => Execute("phone.connect") },
-            new UiMenuItem { Text = L10n.T("Phone.Unpair"), Icon = UiIcon.Link, Click = () => Execute("phone.unpair") },
-            UiMenuItem.Separator(),
-            new UiMenuItem { Text = L10n.T("Phone.DeleteDevice"), Icon = UiIcon.Delete, Click = () => Execute("phone.remove") },
-        ]);
+        ];
+        AddAppBindingMenu(items, _actions.Host.Phone.Store.Profile);
+        if (_activeDevice?.IsApp != true || _actions.Host.Phone.Store.Profile.LastDevice?.IsApp == true)
+            items.Add(new UiMenuItem { Text = L10n.T("Phone.Unpair"), Icon = UiIcon.Link, Click = () => Execute("phone.unpair") });
+        items.Add(UiMenuItem.Separator());
+        items.Add(new UiMenuItem { Text = L10n.T("Phone.DeleteDevice"), Icon = UiIcon.Delete, Click = () => Execute("phone.remove") });
+        _actions.ShowMenu(anchor, items);
     }
 
     private void RunDeviceCommand(string action)
@@ -1627,6 +1660,11 @@ internal sealed partial class PhoneDevicePageView : IViewPage, IViewDockPage
 
         switch (action)
         {
+            case "phone.connect" when profile.LastDevice.IsApp && profile.AppTrustRevoked:
+                ShowConnectionPage();
+                HandleAppDeviceAction("phone.connchoice.app", default);
+                SetStatus(L10n.T("Phone.Srap.not_paired"), false);
+                break;
             case "phone.connect":
                 RunBusy(ct => phone.ReconnectSelectedDeviceAsync(ct));
                 break;
@@ -1634,7 +1672,9 @@ internal sealed partial class PhoneDevicePageView : IViewPage, IViewDockPage
                 RunBusy(_ => phone.DisconnectAsync(online, unpair: false), online.IsWifi ? "Phone.StatusWifiDisconnectedSaved" : "Phone.StatusUsbStoppedUnplug");
                 break;
             case "phone.unpair":
-                if (online == null)
+                if (profile.LastDevice.IsApp)
+                    RunBusy(_ => phone.DisconnectAsync(profile.LastDevice, unpair: true), "Phone.SrapUnpairedLocally");
+                else if (online == null)
                     SetStatus(PhonePreview.TranslateError(AndroidError.WithCode(new IOException(), AndroidErrorCode.UnpairPhoneOffline)), true);
                 else
                     RunBusy(_ => phone.DisconnectAsync(online, unpair: true), "Phone.StatusUnpairRequested");
@@ -1654,12 +1694,13 @@ internal sealed partial class PhoneDevicePageView : IViewPage, IViewDockPage
         _statusMessage = null;
     }
 
-    private void RunBusy(Func<CancellationToken, Task> op, string? successKey = null, bool openDevice = false, Action<Exception>? failed = null)
+    private void RunBusy(Func<CancellationToken, Task> op, string? successKey = null, bool openDevice = false, Action<Exception>? failed = null,
+        int timeoutSeconds = 25)
     {
         if (_busy || !_active) return;
         _busy = true;
         var cts = CancellationTokenSource.CreateLinkedTokenSource(_actions.Host.Phone.Lifetime);
-        cts.CancelAfter(TimeSpan.FromSeconds(25));
+        cts.CancelAfter(TimeSpan.FromSeconds(timeoutSeconds));
         _operation = cts;
         CancelCts(ref _searchSaved);
         _manualSearch = false;
@@ -1741,7 +1782,7 @@ internal sealed partial class PhoneDevicePageView : IViewPage, IViewDockPage
             IReadOnlyList<AndroidSavedConnection> found = [];
             try
             {
-                var services = await AndroidMdnsDiscovery.DiscoverConnectionsAsync(token).ConfigureAwait(false);
+                var services = await phone.DiscoverSavedConnectionsAsync(token).ConfigureAwait(false);
                 var candidates = phone.Store.FindWirelessConnectionCandidates(services, phone.Discovery.CurrentDevices ?? []);
                 found = await AndroidWirelessConnection.VerifySavedConnectionsAsync(candidates, token).ConfigureAwait(false);
             }
@@ -1938,7 +1979,7 @@ internal sealed partial class PhoneDevicePageView : IViewPage, IViewDockPage
         CancelCts(ref _catalogCts);
         var phone = _actions.Host.Phone;
         var cache = _catalogCache ??= new AndroidAppCatalogCache(Path.Combine(_actions.Host.DataDirectory, "phone-app-catalog.json"),
-            (target, token) => phone.Adb.AppsAsync(target, token));
+            (target, token) => phone.Operations.AppsAsync(target, token));
         var cts = CancellationTokenSource.CreateLinkedTokenSource(phone.Lifetime, phone.Connections.OperationToken(device));
         cts.CancelAfter(TimeSpan.FromSeconds(18));
         var token = cts.Token;
@@ -1998,7 +2039,7 @@ internal sealed partial class PhoneDevicePageView : IViewPage, IViewDockPage
         {
             try
             {
-                var list = await new AndroidFileTransfer(phone.Adb, device.CommandTarget).ListAsync(folder, cts.Token).ConfigureAwait(false);
+                var list = await phone.Operations.OpenFiles(device).ListAsync(folder, cts.Token).ConfigureAwait(false);
                 cts.Token.ThrowIfCancellationRequested();
                 _actions.Host.TryPost(() =>
                 {

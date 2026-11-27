@@ -67,7 +67,7 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
     private string? _selectedPackage;
     private string? _pressAirPlayId;
     private int _seekKey;
-    private AndroidMediaSessionClient? _mediaClient;
+    private IPhoneMediaSession? _mediaClient;
     private AndroidMediaState? _mediaState;
     private AndroidConnectionQuality? _connectionQuality;
     private CancellationTokenSource? _mediaCts;
@@ -234,9 +234,13 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
             _connectionQuality = null;
             RestartMediaWatch(online);
         }
-        else if (online != null && _mediaCts == null && IsVisible)
+        else if (online != null && phone.Operations.CanWatchMedia(online) && _mediaCts == null && IsVisible)
         {
             RestartMediaWatch(online);
+        }
+        else if (online is { IsApp: true } && _mediaCts != null && !phone.Operations.CanWatchMedia(online))
+        {
+            StopMediaWatch();
         }
 
         RebuildDropZones(WidthDip, HeightDip);
@@ -500,11 +504,11 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
     private void RestartMediaWatch(AndroidDevice? device)
     {
         StopMediaWatch();
-        if (device == null || !IsVisible || _airPlaySelected) return;
+        if (device == null || !_host.Phone.Operations.CanWatchMedia(device) || !IsVisible || _airPlaySelected) return;
 
         var cts = CancellationTokenSource.CreateLinkedTokenSource(_host.Phone.Lifetime, _host.Phone.Connections.OperationToken(device));
         _mediaCts = cts;
-        var client = new AndroidMediaSessionClient(_host.Phone.Adb);
+        var client = _host.Phone.Operations.OpenMediaSession(device);
         _mediaClient = client;
 
         client.ConnectionQualityChanged += quality =>
@@ -664,12 +668,7 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
         for (int i = 0; i < entries.Count; i++)
         {
             var (sink, deviceId) = entries[i];
-            string sinkName = sink.Name == "蓝牙音频设备" ? L10n.T("Phone.BluetoothAudioDevice") : sink.Name;
-            string targetName = sink.Kind == AndroidOutputSinkKind.Current
-                ? L10n.T("Phone.NativeAudioOutput")
-                : sink.Kind == AndroidOutputSinkKind.Speaker
-                    ? string.Format(L10n.T("Phone.PcDropSpeakerTitle"), phoneName)
-                    : string.Format(L10n.T("Phone.BluetoothOutputFormat"), sinkName, phoneName);
+            string targetName = PhoneAppPresentation.OutputLabel(sink, phoneName);
             string title = sink.Kind == AndroidOutputSinkKind.Speaker
                 ? string.Format(L10n.T("Phone.PcDropOnlyOnSpeakerTitle"), targetName)
                 : string.Format(L10n.T("Phone.PcDropOnlyOnTargetTitle"), targetName);
@@ -939,7 +938,7 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
             g.DrawRoundedRect(zone.Bounds, 6f, cellBorder, hovered ? 1.8f : 1f);
 
             var iconBox = new UiRect(zone.Bounds.X + 10f, zone.Bounds.CenterY - 9f, 18f, 18f);
-            g.DrawIcon(zone.Kind == AndroidOutputSinkKind.Bluetooth ? UiIcon.Headphones : UiIcon.Speaker,
+            g.DrawIcon(zone.Kind is AndroidOutputSinkKind.Bluetooth or AndroidOutputSinkKind.Wired ? UiIcon.Headphones : UiIcon.Speaker,
                 iconBox, hovered ? _theme.Accent : _theme.TextPrimary, 1.7f);
 
             float tx = iconBox.Right + 8f;
@@ -986,7 +985,7 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
         g.DrawText(name, new UiRect(card.X + 28f, card.Y, MathF.Max(1f, statusX - card.X - 30f), footerH),
             _theme.TextPrimary, 11f, 700);
         float labelLeft = statusX;
-        if (!_airPlaySelected && online != null)
+        if (!_airPlaySelected && online is { IsApp: false })
         {
             var signal = new UiRect(statusX, card.CenterY - 6f, 14f, 12f);
             if (online.IsWifi)
@@ -1093,7 +1092,7 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
             _pressX = e.X;
             _pressY = e.Y;
         }
-        if (hit is { } row && row.Id.StartsWith(AppPrefix, StringComparison.Ordinal) && _activeDevice != null)
+        if (hit is { } row && row.Id.StartsWith(AppPrefix, StringComparison.Ordinal) && _activeDevice is { IsApp: false })
         {
             string package = row.Id[AppPrefix.Length..];
             _pressApp = GetFilteredApps().FirstOrDefault(a => a.Package == package);
@@ -1318,9 +1317,9 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
             refresh.Token.ThrowIfCancellationRequested();
             var current = phone.Store.Profile;
             if (current.Id != selected.Id || current.QuickPanelApps.Count == 0 ||
-                phone.Connections.Resolve(current.LastDevice) is not { } device) return;
+                phone.Connections.Resolve(current.LastDevice) is not { } device || !phone.Operations.CanListApps(device)) return;
             using var read = CancellationTokenSource.CreateLinkedTokenSource(refresh.Token, phone.Connections.OperationToken(device));
-            var apps = await phone.Adb.AppsAsync(device, read.Token, current.QuickPanelApps.Select(a => a.Package).ToArray()).ConfigureAwait(false);
+            var apps = await phone.Operations.AppsAsync(device, read.Token, current.QuickPanelApps.Select(a => a.Package).ToArray()).ConfigureAwait(false);
             read.Token.ThrowIfCancellationRequested();
             if (phone.Store.Profile.Id == selected.Id && phone.Connections.IsCurrent(device))
                 phone.Store.UpdateMetadata(device, apps);

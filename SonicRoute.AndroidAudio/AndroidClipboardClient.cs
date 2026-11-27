@@ -24,7 +24,7 @@ public sealed class AndroidClipboardClient(AdbClient adb) : IAndroidClipboardCli
     private long _revision;
     public long Revision => Interlocked.Read(ref _revision);
     public static bool IsSupported(string? text) => text != null && text.Length <= MaxTextBytes
-        && Encoding.UTF8.GetByteCount(text) <= MaxTextBytes;
+        && !SrapInvite.ContainsInvitation(text) && Encoding.UTF8.GetByteCount(text) <= MaxTextBytes;
     public static bool IsOwnedCommand(string command, string id) => Regex.IsMatch(id, @"\A[0-9a-f]{32}\z")
         && command.Split(' ', StringSplitOptions.RemoveEmptyEntries).Contains("org.sonicroute.android.ClipboardBridge")
         && command.Split(' ', StringSplitOptions.RemoveEmptyEntries).Contains(id);
