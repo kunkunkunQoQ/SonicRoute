@@ -33,7 +33,7 @@ try {
     & $Dotnet publish Native/Product/Product.csproj -c Release -r "win-$Architecture" `
         "-p:SonicRouteEdition=$Edition" "-p:ArtifactsPath=$build" -p:IlcUseEnvironmentalTools=true -o $publish *> $log
     if ($LASTEXITCODE) { Get-Content $log -Tail 20 | Write-Host; throw "Publish failed ($LASTEXITCODE). See $log." }
-    if (Select-String -Path $log -Pattern '\b(?:warning|警告) IL[23]\d{3}\b' -Quiet) {
+    if (Select-String -LiteralPath $log -Pattern '\bIL[23]\d{3}\s*:' -Quiet) {
         throw "Review AOT or trimming diagnostics in $log."
     }
     Get-FileHash -Algorithm SHA256 -LiteralPath (Join-Path $publish 'SonicRoute.exe')

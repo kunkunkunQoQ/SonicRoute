@@ -202,6 +202,7 @@ jobs:
           retention-days: 14
           path: |
             ${{ env.CANDIDATE_DIRECTORY }}/assets/*
+            ${{ env.CANDIDATE_DIRECTORY }}/build/*/publish.log
             ${{ env.CANDIDATE_DIRECTORY }}/build-receipt.json
             ${{ env.CANDIDATE_DIRECTORY }}/CHANGELOG.md
             ${{ env.CANDIDATE_DIRECTORY }}/harness-results.json
