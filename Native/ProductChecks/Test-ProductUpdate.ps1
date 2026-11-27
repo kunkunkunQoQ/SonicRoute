@@ -16,6 +16,7 @@ $updates=Join-Path $data 'Updates'
 $target=Join-Path $instanceRoot 'install/SonicRoute.exe'
 $offlineManifest=Join-Path $updates 'SonicRoute-update.json'
 $updateResult=Join-Path $updates 'last-result.json'
+$observedProcesses=[Collections.Generic.List[Diagnostics.Process]]::new()
 [IO.Directory]::CreateDirectory((Split-Path -Parent $target)) | Out-Null
 [IO.Directory]::CreateDirectory((Join-Path $updates 'downloads')) | Out-Null
 Copy-Item -LiteralPath $binary -Destination $target
@@ -68,7 +69,20 @@ function Get-LiveStatus([int]$previous=0){
                 if($status.Edition -cne $Edition -or $status.Packaged -ne $false -or $status.NativeAot -ne $true -or $status.ReflectionJson -ne $false){
                     throw 'Unexpected Native AOT product identity.'
                 }
-                return $status
+                $live=Get-Process -Id $status.Pid -ErrorAction SilentlyContinue
+                if($live){
+                    try {
+                        # Keep the original handle across the handoff even if Windows reuses its PID.
+                        $null=$live.Handle
+                        if(!$live.HasExited){
+                            $observedProcesses.Add($live)
+                            return $live
+                        }
+                    } catch [InvalidOperationException], [ComponentModel.Win32Exception] {
+                        # The process exited after serving the status request.
+                    }
+                    $live.Dispose()
+                }
             }
         }
         Start-Sleep -Milliseconds 125
@@ -76,13 +90,8 @@ function Get-LiveStatus([int]$previous=0){
     throw "Could not find replacement candidate PID (last $($r | ConvertTo-Json -Compress))."
 }
 
-function Wait-CandidateExit([int]$candidatePid){
-    $live=Get-Process -Id $candidatePid -ErrorAction SilentlyContinue
-    if($null -eq $live){return}
-    try{
-        if($live.Path -ne $target){throw 'Candidate PID was reused by a different path.'}
-        if(!$live.WaitForExit(15000)){throw "Candidate PID $candidatePid is still running."}
-    }finally{$live.Dispose()}
+function Wait-CandidateExit([Diagnostics.Process]$process){
+    if(!$process.WaitForExit(15000)){throw "Candidate PID $($process.Id) is still running."}
 }
 
 function Wait-Outcome([string]$value){
@@ -106,21 +115,21 @@ try{
     $old=Get-LiveStatus
     $restart=Invoke-Control @('restart')
     if($restart.Text -ne 'ok'){throw "Restart returned $($restart.Text)"}
-    $restarted=Get-LiveStatus $old.Pid
-    Wait-CandidateExit $old.Pid
+    $restarted=Get-LiveStatus $old.Id
+    Wait-CandidateExit $old
     $wrong=Invoke-Control @('install',(Join-Path $evidence 'outside.json'))
     if($wrong.Code -eq 0){throw 'External manifest was accepted.'}
     $install=Invoke-Control @('install',$offlineManifest)
     if($install.Text -ne 'ok'){throw "Installer returned $($install.Text)"}
-    $updated=Get-LiveStatus $restarted.Pid
-    Wait-CandidateExit $restarted.Pid
+    $updated=Get-LiveStatus $restarted.Id
+    Wait-CandidateExit $restarted
     $during=Invoke-Control @('exit')
     if($during.Code -eq 0 -or $during.Text -ne 'error: update_in_progress'){throw "No active-worker protection: $($during | ConvertTo-Json -Compress)"}
     $commit=Wait-Outcome 'committed'
     if((Get-FileHash $target).Hash -ne $payloadHash){throw 'Committed target hash mismatch.'}
     $exit=Invoke-Control @('exit')
     if($exit.Text -ne 'ok'){throw 'Updated host failed to exit.'}
-    Wait-CandidateExit $updated.Pid
+    Wait-CandidateExit $updated
 
     # Reconstruct the on-disk post-Apply/pre-ack state from the real journal and
     # hash-verified backup. Only the interrupted journal is injected. Recovery,
@@ -136,24 +145,28 @@ try{
     $bootstrap=Start-Candidate $target @()
     try { if(!$bootstrap.WaitForExit(10000)){throw 'Recovery bootstrap failed to hand off.'} } finally { $bootstrap.Dispose() }
     $rollback=Wait-Outcome 'rolledBack'
-    $restored=Get-LiveStatus $updated.Pid
+    $restored=Get-LiveStatus $updated.Id
     if((Get-FileHash -LiteralPath $target).Hash -ne $initialHash){throw 'Restored executable differs from the original.'}
     $exit=Invoke-Control @('exit')
     if($exit.Text -ne 'ok'){throw 'Restored instance failed to exit.'}
-    Wait-CandidateExit $restored.Pid
+    Wait-CandidateExit $restored
     $receipt=[ordered]@{
         edition=$Edition;runtime='net10';protocol=2;version=$version;testIdentity=$profile;privateData=$data
-        pids=@($old.Pid,$restarted.Pid,$updated.Pid,$restored.Pid);committed=$commit;rolledBack=$rollback
+        pids=@($old.Id,$restarted.Id,$updated.Id,$restored.Id);committed=$commit;rolledBack=$rollback
         oldSha256=$initialHash;newSha256=$payloadHash;restoredSha256=(Get-FileHash -LiteralPath $target).Hash
         restart='ready event -> previous PID exit -> replacement accepts IPC'
         inProgressExit=$during;externalManifest=$wrong;noRecoveryMarker=!(Test-Path (Join-Path (Split-Path $target) '.sonicroute-update.pending'))
         recoveryFixture='interrupted starting journal reconstructed after positive commit; old PE differs by test-only overlay'
-        remainingProcess=(Get-Process -Id $restored.Pid -ErrorAction SilentlyContinue) -ne $null
+        remainingProcess=!$restored.HasExited
     }
     $receipt | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $evidence 'receipt.json') -Encoding utf8NoBOM
     $receipt | ConvertTo-Json -Depth 8
 }finally{
-    $hostProcess.Dispose()
-    # On assertion failure release only this explicitly scoped candidate if it is listening.
-    $null=Invoke-Control @('exit')
+    try{
+        # On assertion failure release only this explicitly scoped candidate if it is listening.
+        $null=Invoke-Control @('exit')
+    }finally{
+        $hostProcess.Dispose()
+        foreach($process in $observedProcesses){$process.Dispose()}
+    }
 }
