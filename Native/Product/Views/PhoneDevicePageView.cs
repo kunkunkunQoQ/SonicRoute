@@ -15,8 +15,7 @@ using SonicRoute.Native.Ui;
 namespace SonicRoute.Native.Product.Views;
 
 /// <summary>
-/// Full Phone &amp; AirPlay device management page implementing IViewPage.
-/// Supports both Connected Phone Device view and Add Device / Connection view.
+/// Device configuration and Android / AirPlay connection page.
 /// </summary>
 internal sealed partial class PhoneDevicePageView : IViewPage
 {
@@ -87,10 +86,9 @@ internal sealed partial class PhoneDevicePageView : IViewPage
     private bool? _windowsHevcAvailable;
     private bool _hevcLoadStarted;
 
-    internal bool IsConnectionPage => _showConnection || _actions.Host.Phone.Store.Profile.LastDevice == null;
+    private bool IsConnectionPage => _showConnection;
     private bool CanShowQr => _active && !_busy && IsConnectionPage && !_airPlayConnectionChoice;
     private bool UseHevc => _streamSettings.VideoDecoder == AndroidStreamSettings.WindowsHevcDecoder;
-    internal bool IsReorderingPinnedApp => _pinnedOrder.Pressed;
     public bool NeedsAnimationTick => _pinnedOrder.NeedsScrollTick(_scroll, _visibleDeviceRect);
 
     public void TickAnimation() => _pinnedOrder.TickScroll(_scroll, _visibleDeviceRect);
@@ -103,31 +101,27 @@ internal sealed partial class PhoneDevicePageView : IViewPage
         _airPlay = new AirPlayReceiverViewControl(actions, "phonepage.airplay");
     }
 
-    internal void ShowConnectionPage()
+    internal void ShowConnectionPage(bool airPlay = false) => SwitchSection(connection: true, airPlay: airPlay);
+
+    internal void ShowConfigurationPage(string? profileId = null) => SwitchSection(connection: false, profileId: profileId);
+
+    private void SwitchSection(bool connection, bool airPlay = false, string? profileId = null)
     {
-        FinishPinnedOrder(commit: false);
+        var store = _actions.Host.Phone.Store;
+        bool switchProfile = profileId != null && store.Profile.Id != profileId;
+        if (_showConnection == connection && _airPlayConnectionChoice == airPlay && !switchProfile) return;
+
+        OnCaptureLost();
         CancelViewOperation();
-        _actions.CloseInlineEdit(commit: false);
+        if (_active) _actions.CloseInlineEdit(commit: false);
         CloseCatalog();
-        _showConnection = true;
+        CloseAndroidPicker();
+        _showConnection = connection;
+        _airPlayConnectionChoice = airPlay;
+        if (switchProfile) store.SelectProfile(profileId!);
         _scroll.Offset = 0f;
         CancelEncoderRead();
-        UpdateQrPairing();
-        _actions.Invalidate();
-    }
-
-    internal void ShowProfile(string profileId)
-    {
-        FinishPinnedOrder(commit: false);
-        CancelViewOperation();
-        _actions.CloseInlineEdit(commit: false);
-        CloseCatalog();
-        _showConnection = false;
-        _airPlayConnectionChoice = false;
-        _actions.Host.Phone.Store.SelectProfile(profileId);
-        _scroll.Offset = 0f;
-        StopQrPairing();
-        RefreshData();
+        if (_active) RefreshData();
     }
 
     public void OnActivated()
@@ -139,8 +133,7 @@ internal sealed partial class PhoneDevicePageView : IViewPage
 
         phone.StartTracking();
 
-        UpdateQrPairing();
-        if (phone.Discovery.CurrentDevices == null && (!IsConnectionPage || !_airPlayConnectionChoice))
+        if (phone.Discovery.CurrentDevices == null && (IsConnectionPage ? !_airPlayConnectionChoice : phone.Store.Profile.LastDevice != null))
             _ = phone.RefreshAsync();
         RefreshData();
     }
@@ -157,6 +150,7 @@ internal sealed partial class PhoneDevicePageView : IViewPage
 
         _airPlay.Detach();
         _appIcons.Clear();
+        _deviceProfiles = [];
         StopQrPairing();
         ResetSavedSearch();
         _pairCode = "";
@@ -167,9 +161,10 @@ internal sealed partial class PhoneDevicePageView : IViewPage
 
     public void OnCaptureLost()
     {
-        bool changed = _fileScroll.Dragging || _scroll.Dragging || _pinnedOrder.Pressed;
+        bool changed = _fileScroll.Dragging || _scroll.Dragging || _deviceListScroll.Dragging || _pinnedOrder.Pressed;
         FinishPinnedOrder(commit: false);
         _fileScroll.EndDrag();
+        _deviceListScroll.EndDrag();
         _scroll.EndDrag();
         if (changed) _actions.Invalidate();
     }
@@ -186,6 +181,7 @@ internal sealed partial class PhoneDevicePageView : IViewPage
     {
         var phone = _actions.Host.Phone;
         var profile = phone.Store.Profile;
+        _deviceProfiles = IsConnectionPage ? [] : phone.Store.Profiles.Where(p => p.LastDevice != null).ToArray();
         if (_pinnedOrder.Pressed && _pinnedOrderProfile != profile.Id) FinishPinnedOrder(commit: false);
         _appIcons.SetProfile(profile.Id);
         var online = profile.LastDevice is { } last ? phone.Connections.Get(last).Device : null;
@@ -206,7 +202,7 @@ internal sealed partial class PhoneDevicePageView : IViewPage
         _restorableUsb = IsConnectionPage ? cached.Where(device => !device.IsWifi && device.State == "device" &&
             phone.Connections.Resolve(device) == null && !AndroidConnectionManager.IsAmbiguous(device, cached)).ToArray() : [];
         RefreshStreamingSettings(IsConnectionPage ? null : online ?? profile.LastDevice);
-        if (!_hevcLoadStarted && _active && !IsConnectionPage)
+        if (!_hevcLoadStarted && _active && !IsConnectionPage && profile.LastDevice != null)
         {
             _hevcLoadStarted = true;
             _ = LoadWindowsHevcAsync();
@@ -234,6 +230,11 @@ internal sealed partial class PhoneDevicePageView : IViewPage
     {
         _hit = hit;
         _pinnedOrder.ClearRows();
+        contentRect = RenderDeviceTabs(g, t, contentRect);
+        _deviceListRect = default;
+        if (!IsConnectionPage)
+            contentRect = RenderDeviceList(g, t, contentRect);
+
         string? status = IsConnectionPage && _airPlayConnectionChoice ? null : _statusMessage;
         if (!string.IsNullOrEmpty(status))
         {
@@ -244,6 +245,13 @@ internal sealed partial class PhoneDevicePageView : IViewPage
             contentRect = new UiRect(contentRect.X, contentRect.Y, contentRect.Width, MathF.Max(1f, contentRect.Height - height - 8f));
         }
         _visibleDeviceRect = contentRect;
+        if (!IsConnectionPage && _actions.Host.Phone.Store.Profile.LastDevice == null)
+        {
+            UiPrimitives.DrawCard(g, t, new UiRect(contentRect.X, contentRect.Y, contentRect.Width, 68f));
+            g.DrawText(L10n.T("Phone.DetailConnectPhoneFirst"), new UiRect(contentRect.X + 14f, contentRect.Y, contentRect.Width - 28f, 68f),
+                t.TextSecondary, 13f, wrap: true);
+            return;
+        }
         if (_showCatalog)
         {
             RenderCatalog(g, t, contentRect);
@@ -660,6 +668,7 @@ internal sealed partial class PhoneDevicePageView : IViewPage
             return true;
         }
         if (leftDown && _fileScroll.DragMove(y)) { _actions.Invalidate(); return true; }
+        if (leftDown && _deviceListScroll.DragMove(y)) { _actions.Invalidate(); return true; }
         if (leftDown && _scroll.DragMove(y)) { _actions.Invalidate(); return true; }
         bool changed = _hit.UpdateHover(x, y);
         if (changed)
@@ -678,6 +687,7 @@ internal sealed partial class PhoneDevicePageView : IViewPage
             return true;
         }
         if (e.Button != UiMouseButton.Left) return false;
+        if (targetId == DeviceListScroll && _deviceListScroll.BeginDrag(e.Y)) return true;
         if (targetId?.StartsWith(PinnedAppGrip, StringComparison.Ordinal) == true)
         {
             _pinnedOrderProfile = _actions.Host.Phone.Store.Profile.Id;
@@ -715,6 +725,12 @@ internal sealed partial class PhoneDevicePageView : IViewPage
             _actions.Invalidate();
             return true;
         }
+        if (_deviceListScroll.Dragging)
+        {
+            _deviceListScroll.EndDrag();
+            _actions.Invalidate();
+            return true;
+        }
         if (_scroll.Dragging)
         {
             _scroll.EndDrag();
@@ -726,6 +742,7 @@ internal sealed partial class PhoneDevicePageView : IViewPage
         if (hit is null || hit.Value.Id != clickId) { _actions.Invalidate(); return false; }
         string id = hit.Value.Id;
 
+        if (HandleDeviceNavigation(id)) return true;
         if (_airPlay.HandleClick(id, hit.Value.Bounds)) return true;
 
         var phone = _actions.Host.Phone;
@@ -1022,6 +1039,13 @@ internal sealed partial class PhoneDevicePageView : IViewPage
 
     public bool OnMouseWheel(float x, float y, float delta, bool horizontal)
     {
+        if (_deviceListRect.Contains(x, y) && !_pinnedOrder.Pressed)
+        {
+            _deviceListScroll.OnWheel(delta);
+            _actions.Invalidate();
+            return true;
+        }
+        if (!_visibleDeviceRect.Contains(x, y) && !_pinnedOrder.Pressed) return false;
         _actions.CloseInlineEdit(commit: true);
         if (_showFileBrowser && _fileBrowserListRect.Contains(x, y))
         {
@@ -1591,7 +1615,7 @@ internal sealed partial class PhoneDevicePageView : IViewPage
                     }
                     else
                     {
-                        if (openDevice) _showConnection = false;
+                        if (openDevice) CompleteDeviceConnection();
                         SetStatus(successKey == null ? "" : L10n.T(successKey), false);
                     }
                     RefreshData();
@@ -1774,7 +1798,7 @@ internal sealed partial class PhoneDevicePageView : IViewPage
                         _qrCts = null;
                         _qrBgra = null;
                         CloseCatalog();
-                        _showConnection = false;
+                        CompleteDeviceConnection();
                         SetStatus(L10n.T("Phone.ConnectedStatus"), false);
                         RefreshData();
                     });

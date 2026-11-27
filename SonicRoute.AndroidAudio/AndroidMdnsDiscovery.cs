@@ -1,4 +1,8 @@
 using System.Buffers.Binary;
+using System.Collections.Concurrent;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
+using System.Threading.Channels;
 using System.Net;
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
@@ -44,55 +48,100 @@ public static class AndroidMdnsDiscovery
     internal static Task<IReadOnlyList<AndroidMdnsService>> DiscoverAllAsync(TimeSpan duration, CancellationToken token) =>
         CollectAsync(AdbTypes, duration, settleOnFirst: true, token);
 
-    // A known offline phone can announce a new TLS port after reboot. Listen for
-    // unsolicited advertisements while recovery is pending, without sending probes.
-    internal static Task WatchConnectionsAsync(Func<AndroidMdnsService, Task> onService, CancellationToken token)
+    // Keep the long-lived browse in the Windows DNS client. The app only sends
+    // short-lived queries for endpoints after a browse notification.
+    internal static async Task WatchConnectionsAsync(Func<AndroidMdnsService, Task> onService, CancellationToken token)
     {
-        var addresses = SelectCandidateAddresses(null);
-        return Task.WhenAll(WatchFamilyAsync(addresses, ipv6: false, onService, token),
-            WatchFamilyAsync(addresses, ipv6: true, onService, token));
-    }
-
-    private static async Task WatchFamilyAsync(IPAddress[] addresses, bool ipv6, Func<AndroidMdnsService, Task> onService, CancellationToken token)
-    {
-        var family = ipv6 ? AddressFamily.InterNetworkV6 : AddressFamily.InterNetwork;
-        var any = ipv6 ? IPAddress.IPv6Any : IPAddress.Any;
-        var locals = addresses.Where(a => a.AddressFamily == family).ToArray();
-        if (locals.Length == 0) return;
-        try
+        await foreach (var _ in WindowsServiceBrowse.WatchAsync(ConnectType + ".local", token).ConfigureAwait(false))
         {
-            using var socket = new Socket(family, SocketType.Dgram, ProtocolType.Udp);
-            socket.ExclusiveAddressUse = false;
-            socket.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
-            socket.Bind(new IPEndPoint(any, 5353));
-            bool joined = false;
-            foreach (var local in locals)
+            var services = await DiscoverConnectionsAsync(token).ConfigureAwait(false);
+            foreach (var service in services)
             {
-                try
-                {
-                    if (ipv6)
-                        socket.SetSocketOption(SocketOptionLevel.IPv6, SocketOptionName.AddMembership, new IPv6MulticastOption(new IPAddress(MulticastV6), local.ScopeId));
-                    else socket.SetSocketOption(SocketOptionLevel.IP, SocketOptionName.AddMembership, new MulticastOption(MulticastV4, local));
-                    joined = true;
-                }
-                catch (SocketException) { }
-            }
-            if (!joined) return;
-            byte[] buffer = new byte[4096];
-            var remote = new IPEndPoint(any, 0);
-            while (!token.IsCancellationRequested)
-            {
-                SocketReceiveFromResult packet;
-                try { packet = await socket.ReceiveFromAsync(buffer, SocketFlags.None, remote, token).ConfigureAwait(false); }
-                catch (SocketException error) when (error.SocketErrorCode == SocketError.MessageSize) { continue; }
-                var peer = (IPEndPoint)packet.RemoteEndPoint;
-                if (peer.Port != 5353 || buffer.AsSpan(0, packet.ReceivedBytes).IndexOf("_adb-tls-connect"u8) < 0) continue;
-                foreach (var service in ParseResponse(buffer.AsSpan(0, packet.ReceivedBytes), peer.Address))
-                    if (service.Type == ConnectType) await onService(service).ConfigureAwait(false);
+                token.ThrowIfCancellationRequested();
+                await onService(service).ConfigureAwait(false);
             }
         }
-        catch (OperationCanceledException) when (token.IsCancellationRequested) { }
-        catch (SocketException) { }
+    }
+
+    private static class WindowsServiceBrowse
+    {
+        private const int RequestPending = 9506;
+        private const int FreeRecordList = 1;
+        private static long nextContext;
+        private static readonly ConcurrentDictionary<nint, ChannelWriter<bool>> Callbacks = new();
+
+        internal static async IAsyncEnumerable<bool> WatchAsync(string queryName, [EnumeratorCancellation] CancellationToken token)
+        {
+            token.ThrowIfCancellationRequested();
+            var changes = Channel.CreateBounded<bool>(new BoundedChannelOptions(1)
+            {
+                FullMode = BoundedChannelFullMode.DropWrite,
+                SingleReader = true
+            });
+            nint context = (nint)Interlocked.Increment(ref nextContext);
+            nint name = Marshal.StringToHGlobalUni(queryName);
+            nint cancel = Marshal.AllocHGlobal(IntPtr.Size);
+            Marshal.WriteIntPtr(cancel, 0);
+            Callbacks.TryAdd(context, changes.Writer);
+            bool started = false;
+            try
+            {
+                int status = Start(name, context, cancel);
+                started = status == RequestPending;
+                if (!started)
+                {
+                    System.Diagnostics.Trace.WriteLine($"Windows DNS-SD browse failed ({status}).");
+                    yield break;
+                }
+
+                await foreach (bool changed in changes.Reader.ReadAllAsync(token).ConfigureAwait(false))
+                    yield return changed;
+            }
+            finally
+            {
+                Callbacks.TryRemove(context, out _);
+                if (started) _ = DnsServiceBrowseCancel(cancel);
+                Marshal.FreeHGlobal(cancel);
+                Marshal.FreeHGlobal(name);
+            }
+        }
+
+        private static unsafe int Start(nint name, nint context, nint cancel)
+        {
+            var request = new BrowseRequest { Version = 1, QueryName = name, Callback = (nint)(delegate* unmanaged[Stdcall]<int, nint, nint, void>)&OnBrowse, Context = context };
+            return DnsServiceBrowse(in request, cancel);
+        }
+
+        [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
+        private static void OnBrowse(int status, nint context, nint records)
+        {
+            if (records == 0) return;
+            try
+            {
+                if (status == 0 && Callbacks.TryGetValue(context, out var writer))
+                    writer.TryWrite(true);
+            }
+            finally { DnsFree(records, FreeRecordList); }
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct BrowseRequest
+        {
+            internal uint Version;
+            internal uint InterfaceIndex;
+            internal nint QueryName;
+            internal nint Callback;
+            internal nint Context;
+        }
+
+        [DllImport("dnsapi.dll")]
+        private static extern int DnsServiceBrowse(in BrowseRequest request, nint cancel);
+
+        [DllImport("dnsapi.dll")]
+        private static extern int DnsServiceBrowseCancel(nint cancel);
+
+        [DllImport("dnsapi.dll")]
+        private static extern void DnsFree(nint data, int freeType);
     }
 
     private static async Task<IReadOnlyList<AndroidMdnsService>> CollectAsync(string[] types, TimeSpan duration, bool settleOnFirst,

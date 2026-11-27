@@ -11,6 +11,9 @@ namespace SonicRoute.Core
     // for this closed set of config/rule types on NET10.
     [JsonSourceGenerationOptions(WriteIndented = true)]
     [JsonSerializable(typeof(Dictionary<string, string>), TypeInfoPropertyName = "StringMap")]
+    [JsonSerializable(typeof(CanvasPoint))]
+    [JsonSerializable(typeof(AppCanvasLayout))]
+    [JsonSerializable(typeof(Dictionary<string, AppCanvasLayout>))]
     [JsonSerializable(typeof(AppConfig))]
     [JsonSerializable(typeof(AutoRule))]
     [JsonSerializable(typeof(List<AutoRule>))]

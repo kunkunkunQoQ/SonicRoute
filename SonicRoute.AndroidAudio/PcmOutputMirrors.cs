@@ -7,12 +7,35 @@ internal sealed class PcmOutputMirrors(Func<Predicate<IPcmPlayer>, Task> removeF
     private static readonly StringComparer Ids = StringComparer.OrdinalIgnoreCase;
     private readonly object _gate = new();
     private Output[] _outputs = [], _audible = [];
+    private readonly Dictionary<string, (int VolumePercent, bool Muted)> _gains = new(Ids);
     private float _volume = 1;
     private float _headerGain = 1;
     private bool _smart;
     private AudioLatencyMode _latencyMode = AudioLatencyMode.Balanced;
     private string? _primaryDevice;
     internal string[] IdsSnapshot() => Volatile.Read(ref _outputs).Select(output => output.Id).ToArray();
+    private float EffectiveVolumeLocked(string id)
+    {
+        if (!_gains.TryGetValue(id, out var gain)) return _volume;
+        return gain.Muted ? 0f : _volume * (gain.VolumePercent / 100f);
+    }
+    internal (int VolumePercent, bool Muted) GetGain(string id)
+    {
+        lock (_gate) return _gains.TryGetValue(id, out var gain) ? gain : (100, false);
+    }
+    internal (int VolumePercent, bool Muted) SetGain(string id, int? volumePercent = null, bool? muted = null, bool toggleMute = false)
+    {
+        lock (_gate)
+        {
+            var prev = _gains.TryGetValue(id, out var existing) ? existing : (VolumePercent: 100, Muted: false);
+            var next = (VolumePercent: Math.Clamp(volumePercent ?? prev.VolumePercent, 0, 100), Muted: toggleMute ? !prev.Muted : (muted ?? prev.Muted));
+            _gains[id] = next;
+            float effective = next.Muted ? 0f : _volume * (next.VolumePercent / 100f);
+            foreach (var output in _outputs)
+                if (Ids.Equals(output.Id, id)) output.Pcm.Volume = effective;
+            return next;
+        }
+    }
     internal static (string? Primary, string[] Extras) Select(IReadOnlyList<string?> selection, string? current)
     {
         var distinct = selection.Distinct(Ids).ToArray();
@@ -24,7 +47,7 @@ internal sealed class PcmOutputMirrors(Func<Predicate<IPcmPlayer>, Task> removeF
         lock (_gate)
         {
             _volume = volume; _smart = smart;
-            foreach (var output in _outputs) { output.Pcm.Volume = volume; output.Pcm.SmartVolume = smart; }
+            foreach (var output in _outputs) { output.Pcm.Volume = EffectiveVolumeLocked(output.Id); output.Pcm.SmartVolume = smart; }
         }
     }
     internal void SetHeaderGain(float gain)
@@ -88,7 +111,7 @@ internal sealed class PcmOutputMirrors(Func<Predicate<IPcmPlayer>, Task> removeF
                     lock (_gate)
                     {
                         latencyMode = _latencyMode;
-                        volume = _volume;
+                        volume = EffectiveVolumeLocked(id);
                         smart = _smart;
                         headerGain = _headerGain;
                     }
@@ -133,15 +156,18 @@ internal sealed class PcmOutputMirrors(Func<Predicate<IPcmPlayer>, Task> removeF
         Replace(next);
         return true;
     }
-    internal void Clear() => Replace([]);
-    private void Replace(Output[] next)
+    internal void Clear() => Replace([], clearGains: true);
+
+    private void Replace(Output[] next, bool clearGains = false)
     {
-        var previous = _outputs;
+        Output[] previous;
         lock (_gate)
         {
+            previous = _outputs;
+            if (clearGains) _gains.Clear();
             foreach (var output in next)
             {
-                output.Pcm.Volume = _volume;
+                output.Pcm.Volume = EffectiveVolumeLocked(output.Id);
                 output.Pcm.SmartVolume = _smart;
                 output.Pcm.LatencyMode = _latencyMode;
                 output.Pcm.HeaderGain = _headerGain;

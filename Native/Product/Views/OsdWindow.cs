@@ -286,7 +286,7 @@ internal sealed class OsdWindow : LayeredWindow
         float iconSize = MathF.Min(18f * s, iconW / 1.3f);
         var iconBox = new UiRect(padX, volTop + (rowH - iconSize) * 0.5f, iconSize, iconSize);
         UiColor accentInk = _theme.Accent.WithAlphaFraction(alphaFrac);
-        g.DrawIcon(_muted ? UiIcon.VolumeMutedSlash : UiIcon.Speaker, iconBox, accentInk, 1.8f);
+        g.DrawIcon(_muted ? UiIcon.SpeakerMuted : UiIcon.Speaker, iconBox, accentInk, 1.8f);
 
         float numSize = MathF.Min(18f * s, MathF.Max(10f, (contentW - iconW) / 3.5f));
         float numColW = 3.1f * numSize;

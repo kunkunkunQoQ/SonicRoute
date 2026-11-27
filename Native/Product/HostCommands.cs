@@ -7,11 +7,17 @@ namespace SonicRoute.Native.Product;
 
 internal sealed partial class ApplicationHost
 {
+    private readonly record struct EndpointVolumeKey(Flow Flow, string Id)
+    {
+        public bool Equals(EndpointVolumeKey other) => Flow == other.Flow && string.Equals(Id, other.Id, StringComparison.OrdinalIgnoreCase);
+        public override int GetHashCode() => HashCode.Combine(Flow, StringComparer.OrdinalIgnoreCase.GetHashCode(Id));
+    }
+
     private readonly ProductAudio _audio = new();
     internal ProductCurrentApp CurrentApp { get; private set; } = null!;
     private ProductAutomation _automation = null!;
     private CoalescedVolumeWriter _volumeWriter = null!;
-    private CoalescedVolumeWriter<string> _endpointVolumeWriter = null!;
+    private CoalescedVolumeWriter<EndpointVolumeKey> _endpointVolumeWriter = null!;
 #if SONICROUTE_PHONE
     private CoalescedVolumeWriter<string> _externalVolumeWriter = null!;
 #endif
@@ -27,9 +33,9 @@ internal sealed partial class ApplicationHost
             var state = _audio.Volume(Flow.Render, null, pid, level: percent);
             return (state.Count > 0, state.Percent);
         });
-        _endpointVolumeWriter = new(PostContinuation, ScheduleOnce, (id, percent) =>
+        _endpointVolumeWriter = new(PostContinuation, ScheduleOnce, (key, percent) =>
         {
-            var actual = _audio.Volume(Flow.Render, id, level: percent);
+            var actual = _audio.Volume(key.Flow, key.Id, level: percent);
             return (actual.Count > 0, actual.Percent);
         });
         _audio.AudioChanged += NotifyAudioVisualChanged;

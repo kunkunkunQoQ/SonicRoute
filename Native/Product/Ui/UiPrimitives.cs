@@ -9,15 +9,51 @@ internal readonly record struct UiHitItem(
     UiCursorKind Cursor = UiCursorKind.Hand,
     string? Tooltip = null);
 
+internal readonly record struct UiRotatedRect(UiRect Rect, UiPoint Pivot, float Radians, float CornerRadius)
+{
+    public D2dMatrix3x2 Transform => D2dMatrix3x2.RotateAt(Radians, Pivot.X, Pivot.Y);
+
+    public UiRect Bounds
+    {
+        get
+        {
+            var m = Transform;
+            float halfWidth = (MathF.Abs(m.M11) * Rect.Width + MathF.Abs(m.M21) * Rect.Height) * 0.5f;
+            float halfHeight = (MathF.Abs(m.M12) * Rect.Width + MathF.Abs(m.M22) * Rect.Height) * 0.5f;
+            float centerX = Rect.CenterX * m.M11 + Rect.CenterY * m.M21 + m.Dx;
+            float centerY = Rect.CenterX * m.M12 + Rect.CenterY * m.M22 + m.Dy;
+            return new UiRect(centerX - halfWidth, centerY - halfHeight, halfWidth * 2f, halfHeight * 2f);
+        }
+    }
+
+    public bool Contains(float x, float y)
+    {
+        (float sin, float cos) = MathF.SinCos(Radians);
+        float dx = x - Pivot.X, dy = y - Pivot.Y;
+        float localX = Pivot.X + dx * cos + dy * sin;
+        float localY = Pivot.Y - dx * sin + dy * cos;
+        if (!Rect.Contains(localX, localY)) return false;
+        float cornerX = localX - Math.Clamp(localX, Rect.X + CornerRadius, Rect.Right - CornerRadius);
+        float cornerY = localY - Math.Clamp(localY, Rect.Y + CornerRadius, Rect.Bottom - CornerRadius);
+        return cornerX * cornerX + cornerY * cornerY <= CornerRadius * CornerRadius;
+    }
+}
+
 /// <summary>
 /// Per-frame hit-test registry populated during rendering in Z-order (last item added wins on overlap).
 /// </summary>
 internal sealed class UiHitMap
 {
-    private readonly List<(UiHitItem Item, UiRect Visible)> _items = new(64);
+    private readonly List<(UiHitItem Item, UiRect Visible, int ShapeIndex)> _items = new(64);
+    private List<UiRotatedRect>? _rotatedItems;
     private readonly Stack<UiRect> _clips = new();
     private readonly List<(UiScrollState State, UiRect View)> _scrollViews = new();
+    private bool _hasTransform;
+    private float _txScale = 1f;
+    private float _txOffX;
+    private float _txOffY;
     private UiScrollState? _keyboardScroll;
+    private (UiHitItem Item, UiRotatedRect Shape)? _overlay;
     public UiHitItem? Hovered { get; private set; }
     public string? ActiveId { get; set; }
     public string? FocusId { get; private set; }
@@ -34,7 +70,7 @@ internal sealed class UiHitMap
 
     private bool IsTabStop(int index)
     {
-        var (item, visible) = _items[index];
+        var (item, visible, _) = _items[index];
         return item.Cursor is UiCursorKind.Hand or UiCursorKind.IBeam &&
             HitTest(visible.CenterX, visible.CenterY)?.Id == item.Id;
     }
@@ -45,7 +81,7 @@ internal sealed class UiHitMap
         var order = new List<string>();
         for (int i = 0; i < _items.Count; i++)
         {
-            var (item, rect) = _items[i];
+            var (item, rect, _) = _items[i];
             if (within is UiRect region && !region.Contains(rect.CenterX, rect.CenterY)) continue;
             if (IsTabStop(i) && seen.Add(item.Id)) order.Add(item.Id);
         }
@@ -88,7 +124,7 @@ internal sealed class UiHitMap
         {
             if (_items[i].Item.Id == FocusId && IsTabStop(i))
             {
-                (target, visible) = _items[i];
+                (target, visible, _) = _items[i];
                 return true;
             }
         }
@@ -99,10 +135,38 @@ internal sealed class UiHitMap
 
     public void Clear()
     {
+        _overlay = null;
         _items.Clear();
+        _rotatedItems?.Clear();
         _clips.Clear();
         _scrollViews.Clear();
+        _hasTransform = false;
+        _txScale = 1f;
+        _txOffX = 0f;
+        _txOffY = 0f;
     }
+
+    public void PushTransform(float scale, float offsetX, float offsetY)
+    {
+        _hasTransform = true;
+        _txScale = scale;
+        _txOffX = offsetX;
+        _txOffY = offsetY;
+    }
+
+    public void PopTransform()
+    {
+        _hasTransform = false;
+        _txScale = 1f;
+        _txOffX = 0f;
+        _txOffY = 0f;
+    }
+
+    internal float TransformScale => _hasTransform ? _txScale : 1f;
+
+    internal UiRect MapRect(UiRect bounds) => _hasTransform
+        ? new UiRect(bounds.X * _txScale + _txOffX, bounds.Y * _txScale + _txOffY, bounds.Width * _txScale, bounds.Height * _txScale)
+        : bounds;
 
     public void RegisterScroll(UiScrollState state, UiRect view)
     {
@@ -134,7 +198,11 @@ internal sealed class UiHitMap
 
     public void PopClip() => _clips.Pop();
 
-    internal UiRect VisiblePart(UiRect bounds) => _clips.TryPeek(out var clip) ? Intersect(bounds, clip) : bounds;
+    internal UiRect VisiblePart(UiRect bounds)
+    {
+        var mapped = MapRect(bounds);
+        return _clips.TryPeek(out var clip) ? Intersect(mapped, clip) : mapped;
+    }
 
     internal static UiRect Intersect(UiRect a, UiRect b)
     {
@@ -145,16 +213,38 @@ internal sealed class UiHitMap
 
     public void Add(string id, UiRect bounds, UiCursorKind cursor = UiCursorKind.Hand, string? tooltip = null)
     {
-        var visible = _clips.TryPeek(out var clip) ? Intersect(bounds, clip) : bounds;
-        if (!visible.IsEmpty) _items.Add((new UiHitItem(id, bounds, cursor, tooltip), visible));
+        var mapped = MapRect(bounds);
+        var visible = _clips.TryPeek(out var clip) ? Intersect(mapped, clip) : mapped;
+        if (!visible.IsEmpty) _items.Add((new UiHitItem(id, mapped, cursor, tooltip), visible, -1));
     }
+
+    // Rotated controls are registered in window coordinates.
+    public void AddRotated(string id, UiRotatedRect shape)
+    {
+        var bounds = shape.Bounds;
+        var visible = _clips.TryPeek(out var clip) ? Intersect(bounds, clip) : bounds;
+        if (visible.IsEmpty) return;
+        var shapes = _rotatedItems ??= new(12);
+        _items.Add((new UiHitItem(id, bounds), visible, shapes.Count));
+        shapes.Add(shape);
+    }
+
+    public void SetRotatedOverlay(string id, UiRotatedRect shape, UiRect clip) =>
+        _overlay = (new UiHitItem(id, Intersect(shape.Bounds, clip)), shape);
+
+    public void ClearOverlay() => _overlay = null;
+
+    public bool IsOverlayAt(float x, float y) =>
+        _overlay is { } overlay && overlay.Item.Bounds.Contains(x, y) && overlay.Shape.Contains(x, y);
 
     public UiHitItem? HitTest(float x, float y)
     {
+        if (IsOverlayAt(x, y)) return _overlay?.Item;
         for (int i = _items.Count - 1; i >= 0; i--)
         {
-            if (_items[i].Visible.Contains(x, y))
-                return _items[i].Item;
+            var (item, visible, index) = _items[i];
+            if (item.Id == _overlay?.Item.Id || !visible.Contains(x, y)) continue;
+            if (index < 0 || _rotatedItems![index].Contains(x, y)) return item;
         }
         return null;
     }
@@ -579,7 +669,13 @@ internal static class UiPrimitives
         var textBox = rect.Deflate(search ? 36f : 11f, 2f, 11f, 2f);
         if (focused && g.Editor is { } editor)
         {
-            editor.SetLayout(rect, textBox, hit.VisiblePart(rect), fontSize, mono, placeholder);
+            editor.SetLayout(
+                hit.MapRect(rect),
+                hit.MapRect(textBox),
+                hit.VisiblePart(rect),
+                Math.Clamp(fontSize * hit.TransformScale, 9f, 24f),
+                mono,
+                placeholder);
             return;
         }
         bool empty = string.IsNullOrEmpty(value);

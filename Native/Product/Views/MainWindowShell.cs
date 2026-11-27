@@ -101,6 +101,7 @@ internal sealed partial class MainWindowShell : LayeredWindow, IViewHostActions
     public bool HasOpenModal =>
         _activeMenu is { IsVisible: true } ||
         _activeCombo is { IsVisible: true } ||
+        _activePage is { HasOpenModal: true } ||
         _inlineEdit.IsOpen || _licenseViewer is { IsOpen: true };
     public string? ActiveInlineEditTag => _inlineEdit.ActiveTag;
     public UiRect ActiveInlineEditRect => _inlineEdit.FieldBounds.IsEmpty ? _inlineRectDip : _inlineEdit.FieldBounds;
@@ -124,20 +125,29 @@ internal sealed partial class MainWindowShell : LayeredWindow, IViewHostActions
         ActivateCurrentPage();
     }
 
-    public void OpenPhoneDevice(string? profileId = null)
-    {
-        ShowMain(0);
-        NavigateTo(MainNavTab.Apps);
 #if SONICROUTE_PHONE
-        if (_pages.TryGetValue(MainNavTab.Apps, out var page) && page is AppsPageView apps)
-            apps.OpenPhoneDevice(profileId);
-#endif
+    internal void OpenPhoneDevice(string? profileId, bool airPlay)
+    {
+        var devices = (PhoneDevicePageView)GetPage(MainNavTab.Devices);
+        if (profileId == null)
+            devices.ShowConnectionPage(airPlay);
+        else
+            devices.ShowConfigurationPage(profileId);
+        NavigateTo(MainNavTab.Devices);
+        ShowMain(0);
     }
+#endif
 
     internal void ConfirmAppVolume(string identity, int actual)
     {
         if (!IsDisposed && IsVisible && _activePage is AppsPageView apps)
             apps.ConfirmAppVolume(identity, actual);
+    }
+
+    internal void ConfirmEndpointVolume(SonicRoute.Native.Audio.Flow flow, string endpointId, int actual)
+    {
+        if (!IsDisposed && IsVisible && _activePage is AppsPageView apps)
+            apps.ConfirmEndpointVolume(flow, endpointId, actual);
     }
 
     public void ExternalRefresh()
@@ -152,6 +162,12 @@ internal sealed partial class MainWindowShell : LayeredWindow, IViewHostActions
         }
     }
 
+    internal void ApplySettings()
+    {
+        if (IsVisible && _activePage is AppsPageView apps) apps.RefreshSettings();
+        InvalidateTheme();
+    }
+
     public void InvalidateTheme() => ApplyTheme(UiThemePalette.Resolve(_config));
 
     internal override void ApplyTheme(UiThemePalette theme)
@@ -159,6 +175,7 @@ internal sealed partial class MainWindowShell : LayeredWindow, IViewHostActions
         _theme = theme;
         _historyViewer?.UpdateTheme();
         _licenseViewer?.UpdateTheme();
+        _activePage?.OnThemeChanged(theme);
         if (_inlineEdit.IsOpen)
             _inlineEdit.SetTheme(_inlineEdit.ReadOnlyMultiline ? _theme.SurfaceAlt : _theme.SurfaceBg, _theme.TextPrimary);
         if (IsVisible) Invalidate();
@@ -400,6 +417,7 @@ internal sealed partial class MainWindowShell : LayeredWindow, IViewHostActions
 
     protected override void OnTickAnimation()
     {
+        bool fullFrame = _modeAnimating || _sidebarAnimating;
         bool anyAnim = TickThemeSwitch();
         if (_sidebarAnimating)
         {
@@ -418,14 +436,15 @@ internal sealed partial class MainWindowShell : LayeredWindow, IViewHostActions
             }
         }
 
-        if (_activePage is { NeedsAnimationTick: true })
+        if (_activePage is { NeedsAnimationTick: true } page)
         {
-            _activePage.TickAnimation();
-            if (_activePage.NeedsAnimationTick) anyAnim = true;
+            page.TickAnimation();
+            anyAnim |= page.NeedsAnimationTick;
+            if (!fullFrame) fullFrame = page is not AppsPageView || !RefreshRenderOverlay();
         }
 
         if (!anyAnim) StopAnimationTimer();
-        Invalidate();
+        if (fullFrame) Invalidate();
     }
 
     private void SyncPageAnimationTimer()
@@ -453,23 +472,18 @@ internal sealed partial class MainWindowShell : LayeredWindow, IViewHostActions
         float bodyH = MathF.Max(0f, heightDip - bodyY);
 
         var navClip = new UiRect(0f, bodyY, _sidebarWidth, bodyH);
-        if (navClip.Width > 0.5f)
-        {
-            g.PushClip(navClip);
-            _hit.PushClip(navClip);
-            RenderNavRail(g, navClip);
-            _hit.PopClip();
-            g.PopClip();
-            g.DrawLine(navClip.Right - 0.5f, bodyY, navClip.Right - 0.5f, heightDip, _theme.Border, 1f, roundCaps: false);
-        }
-
         _pageViewport = new UiRect(navClip.Right, bodyY, MathF.Max(0f, widthDip - navClip.Right), bodyH);
-        float padBottom = _currentTab == MainNavTab.Apps ? 8f : 20f;
+        bool isApps = _currentTab == MainNavTab.Apps;
+        if (!isApps) DrawNavigation(g, navClip);
+        const float padLeft = 9f;
+        float padRight = isApps ? 14f : 26f;
+        float padTop = isApps ? 10f : 20f;
+        float padBottom = isApps ? 10f : 20f;
         var contentRect = new UiRect(
-            _pageViewport.X + 26f,
-            bodyY + 20f,
-            MathF.Max(40f, _pageViewport.Width - 52f),
-            MathF.Max(40f, bodyH - 20f - padBottom)).Deflate(1f);
+            _pageViewport.X + padLeft,
+            bodyY + padTop,
+            MathF.Max(40f, _pageViewport.Width - padLeft - padRight),
+            MathF.Max(40f, bodyH - padTop - padBottom)).Deflate(1f);
         // The frozen RootBorder reserves 1 DIP on every side of the content presenter.
 
         if (_activePage != null)
@@ -481,6 +495,11 @@ internal sealed partial class MainWindowShell : LayeredWindow, IViewHostActions
             g.PopClip();
         }
 
+        if (_activePage is AppsPageView apps)
+            apps.RenderAppDock(g, _theme, _hit, navClip.Right);
+
+        if (isApps) DrawNavigation(g, navClip);
+
         if (!string.IsNullOrEmpty(_noticeText))
             RenderNoticeToast(g, widthDip, heightDip, _noticeText);
 
@@ -489,6 +508,33 @@ internal sealed partial class MainWindowShell : LayeredWindow, IViewHostActions
         g.DrawRoundedRect(new UiRect(0.5f, 0.5f, widthDip - 1f, heightDip - 1f), radius, _theme.Border, 1f);
     }
 
+    private void DrawNavigation(D2dTarget g, UiRect bounds)
+    {
+        if (bounds.Width <= 0.5f) return;
+        g.PushClip(bounds);
+        _hit.PushClip(bounds);
+        RenderNavRail(g, bounds);
+        _hit.PopClip();
+        g.PopClip();
+        float edge = bounds.Right - 0.5f;
+        g.DrawLine(edge, bounds.Y, edge, bounds.Bottom, _theme.Border, 1f, roundCaps: false);
+    }
+
+    protected override UiRect RenderOverlayBounds =>
+        (_activePage as AppsPageView)?.DockOverlayBounds ?? default;
+
+    protected override string? RenderOverlayFocusId =>
+        (_activePage as AppsPageView)?.DockOverlayFocusId;
+
+    protected override void OnRenderOverlay(D2dTarget g)
+    {
+        if (_activePage is AppsPageView apps)
+        {
+            apps.RenderDockOverlay(g, _theme);
+            if (_noticeText is { Length: > 0 } notice)
+                RenderNoticeToast(g, WidthDip, HeightDip, notice);
+        }
+    }
     private void RenderTitleBar(D2dTarget g, UiRect rect)
     {
         float textW = D2dSharedContext.Instance.MeasureText(WindowTitle, UiMetrics.FontFamily, 13.5f, 600, 200f, 32f, false).Width;
@@ -565,6 +611,10 @@ internal sealed partial class MainWindowShell : LayeredWindow, IViewHostActions
 
         DrawNavItem(g, MainNavTab.Apps, L10n.T("Nav.Apps"), UiIcon.Apps, new UiRect(x, y, itemW, UiMetrics.NavItemHeight));
         y += UiMetrics.NavItemHeight + 4f;
+#if SONICROUTE_PHONE
+        DrawNavItem(g, MainNavTab.Devices, L10n.T("Phone.Title"), UiIcon.Phone, new UiRect(x, y, itemW, UiMetrics.NavItemHeight));
+        y += UiMetrics.NavItemHeight + 4f;
+#endif
         DrawNavItem(g, MainNavTab.Hotkeys, L10n.T("Nav.Hotkeys"), UiIcon.Keyboard, new UiRect(x, y, itemW, UiMetrics.NavItemHeight));
         y += UiMetrics.NavItemHeight + 4f;
         DrawNavItem(g, MainNavTab.Theme, L10n.T("Nav.Theme"), UiIcon.Theme, new UiRect(x, y, itemW, UiMetrics.NavItemHeight));
@@ -579,15 +629,7 @@ internal sealed partial class MainWindowShell : LayeredWindow, IViewHostActions
             DrawNavItem(g, MainNavTab.Experimental, L10n.T("Nav.Experimental"), UiIcon.Experiment, new UiRect(x, y, itemW, UiMetrics.NavItemHeight));
         }
 
-        float switchTop = DrawThemeSwitch(g, navRect);
-        if (_config.MainSidebarCollapsed)
-        {
-            const string id = "shell.expandNavigation";
-            var expand = new UiRect(navRect.X + (UiMetrics.NavCollapsedWidth - UiMetrics.NavItemHeight) * .5f,
-                switchTop - UiMetrics.NavItemHeight - 5f, UiMetrics.NavItemHeight, UiMetrics.NavItemHeight);
-            UiPrimitives.DrawGhostIconButton(g, _theme, _hit, id, expand, UiIcon.ExpandNav, 19f,
-                tooltip: L10n.T("Window.ExpandNavigation"));
-        }
+        DrawThemeSwitch(g, navRect);
     }
 
     private void DrawNavItem(D2dTarget g, MainNavTab tab, string label, UiIcon icon, UiRect rect)
@@ -650,20 +692,38 @@ internal sealed partial class MainWindowShell : LayeredWindow, IViewHostActions
             }
         }
 
+        string? previousHover = _hit.Hovered?.Id;
         bool hoverChanged = _hit.UpdateHover(xDip, yDip);
         if (_hit.Hovered is { } hit) SetCursorKind(hit.Cursor);
         else SetCursorKind(UiCursorKind.Arrow);
 
         bool pageChanged = _activePage?.OnPointerMove(xDip, yDip, leftDown) ?? false;
-        if (_pressedPage != null) SyncPageAnimationTimer();
+        if (_activePage is AppsPageView apps)
+        {
+            if (!leftDown) pageChanged |= apps.UpdateDockHover(HasOpenModal ? null : _hit.Hovered?.Id);
+            if (hoverChanged && IsPlainDockHover(previousHover) && IsPlainDockHover(_hit.Hovered?.Id))
+                hoverChanged = false;
+            SyncPageAnimationTimer();
+        }
+        else if (_pressedPage != null) SyncPageAnimationTimer();
         if (hoverChanged || pageChanged) Invalidate();
     }
 
+    private static bool IsPlainDockHover(string? id) =>
+        id is null or "canvas.bg" || id.StartsWith("apps.item.", StringComparison.Ordinal);
+
     protected override void OnPointerLeave()
     {
+        bool redraw = !IsPlainDockHover(_hit.Hovered?.Id);
         _hit.ClearHover();
         SetCursorKind(UiCursorKind.Arrow);
-        Invalidate();
+        if (_activePage is AppsPageView apps)
+        {
+            redraw |= apps.UpdateDockHover(null);
+            SyncPageAnimationTimer();
+        }
+        else redraw = true;
+        if (redraw) Invalidate();
     }
 
     protected override void OnPointerDown(UiPointerEventArgs e)
@@ -755,12 +815,17 @@ internal sealed partial class MainWindowShell : LayeredWindow, IViewHostActions
         }
         switch (clickId)
         {
-            case "shell.expandNavigation": if (_config.MainSidebarCollapsed) ToggleSidebar(); break;
             case "shell.min": MinimizeWindow(); break;
             case "shell.max": ToggleMaximize(); break;
             case "shell.close": Hide(); break;
             case "shell.updateNotice": OpenUpdateSettings(); break;
             case "nav.Apps": NavigateTo(MainNavTab.Apps); break;
+#if SONICROUTE_PHONE
+            case "nav.Devices":
+                ((PhoneDevicePageView)GetPage(MainNavTab.Devices)).ShowConfigurationPage();
+                NavigateTo(MainNavTab.Devices);
+                break;
+#endif
             case "nav.Hotkeys": NavigateTo(MainNavTab.Hotkeys); break;
             case "nav.Theme": NavigateTo(MainNavTab.Theme); break;
             case "nav.Settings": NavigateTo(MainNavTab.Settings); break;
@@ -825,13 +890,19 @@ internal sealed partial class MainWindowShell : LayeredWindow, IViewHostActions
             SendMessageW(Handle, WmSysCommand, ScMoveCaption, 0);
     }
 
+    private IViewPage GetPage(MainNavTab tab)
+    {
+        if (!_pages.TryGetValue(tab, out var page))
+        {
+            page = _pageFactory(tab, this);
+            _pages[tab] = page;
+        }
+        return page;
+    }
+
     private void ActivateCurrentPage()
     {
-        if (!_pages.TryGetValue(_currentTab, out var page))
-        {
-            page = _pageFactory(_currentTab, this);
-            _pages[_currentTab] = page;
-        }
+        var page = GetPage(_currentTab);
         _activePage = page;
         if (IsVisible) _activePage.OnActivated();
         if (_activePage.NeedsAnimationTick) StartAnimationTimer(16);
@@ -848,6 +919,7 @@ internal sealed partial class MainWindowShell : LayeredWindow, IViewHostActions
         if (_activeMenu is { IsVisible: true }) _activeMenu.CloseWindow();
         _activeMenu = null;
         ComboPopupWindow.Close(ref _activeCombo);
+        _activePage?.ClosePopups();
     }
 
 

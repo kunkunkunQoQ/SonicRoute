@@ -51,6 +51,43 @@ internal static class Program
         await store.AppendAsync(Entry("disposed"));
         Check((await store.ReadRecentAsync()).Count == 0, "disposed history neither appends nor reads");
     }
+    private static void CanvasLayouts()
+    {
+        File.WriteAllText(ConfigService.ConfigPath, "{\"Language\":\"zh-CN\",\"AppNames\":{\"legacy\":\"Alias\"}}");
+        var config = ConfigService.Load();
+        Check(config.AppCanvasLayouts.Count == 0 && config.AppNames["legacy"] == "Alias",
+            "legacy config loads without a canvas layout field");
+
+        var devices = new Dictionary<string, CanvasPoint>(StringComparer.OrdinalIgnoreCase);
+        for (int i = 0; i <= AppCanvasLayout.MaxDevices; i++)
+            devices.Add("render:device-" + i, new CanvasPoint { X = i, Y = 40, Auto = i != 0 });
+        var layout = new AppCanvasLayout { Zoom = 0.85f, AppNode = new CanvasPoint { X = 28, Y = 34 }, Devices = devices };
+        for (int i = 0; i < AppConfig.MaxCanvasLayouts; i++)
+            config.SaveCanvasLayout("proc:app-" + i, new AppCanvasLayout());
+        config.SaveCanvasLayout("proc:new", layout);
+        Check(config.AppCanvasLayouts.Count == AppConfig.MaxCanvasLayouts &&
+            !config.AppCanvasLayouts.ContainsKey("proc:app-0") && config.AppCanvasLayouts.ContainsKey("proc:new"),
+            "a new layout replaces the earliest entry at capacity");
+        Check(config.AppCanvasLayouts["proc:new"].Devices.Count == AppCanvasLayout.MaxDevices &&
+            config.AppCanvasLayouts["proc:new"].Devices["render:device-0"].Auto == false,
+            "live device layout has the same limit and flags as persistence");
+        config.SaveCanvasLayout("PROC:NEW", layout);
+        Check(config.AppCanvasLayouts.Count == AppConfig.MaxCanvasLayouts && config.AppCanvasLayouts.ContainsKey("proc:app-1"),
+            "case-insensitive update at capacity does not evict an unrelated app");
+
+        ConfigService.QueueSave(config);
+        ConfigService.FlushPendingSaves();
+        using var json = JsonDocument.Parse(File.ReadAllText(ConfigService.ConfigPath));
+        var layouts = json.RootElement.GetProperty("AppCanvasLayouts");
+        var current = layouts.GetProperty("proc:new");
+        Check(layouts.EnumerateObject().Count() == config.AppCanvasLayouts.Count &&
+            current.GetProperty("Devices").EnumerateObject().Count() == config.AppCanvasLayouts["proc:new"].Devices.Count &&
+            current.GetProperty("Zoom").GetSingle() == 0.85f,
+            "queued atomic write preserves the newest bounded layout");
+        Check(json.RootElement.GetProperty("AppNames").GetProperty("legacy").GetString() == "Alias",
+            "canvas save preserves legacy settings");
+    }
+
     private static void Languages()
     {
         var special = LanguageFiles.Read("{\"Dup\":\"first\",\"Dup\":\"last\",\"Null\":null,\"Case\":\"UP\",\"case\":\"down\"}")!;
@@ -151,7 +188,12 @@ internal static class Program
             _directory = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "isolated-serialization-" + Guid.NewGuid().ToString("N"));
             Environment.SetEnvironmentVariable("SONICROUTE_DATA_DIRECTORY", _directory);
             Directory.CreateDirectory(_directory);
-            History().GetAwaiter().GetResult(); Languages();
+            CanvasLayouts();
+            if (args.Length == 0 || args[0] != "--canvas-layouts")
+            {
+                History().GetAwaiter().GetResult();
+                Languages();
+            }
             Console.WriteLine($"RESULT passed={_passed} failed=0 runtime={Environment.Version} isolated={_directory} AUDIO_WRITES=NONE");
             return 0;
         }

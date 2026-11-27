@@ -8,6 +8,63 @@ using SonicRoute.Core.Models;
 
 namespace SonicRoute.Core
 {
+    public sealed class CanvasPoint
+    {
+        public float X { get; set; }
+        public float Y { get; set; }
+        public bool Auto { get; set; }
+    }
+
+    public sealed class AppCanvasLayout
+    {
+        public const int MaxDevices = 64;
+
+        public float Zoom { get; set; } = 1f;
+        public float PanX { get; set; }
+        public float PanY { get; set; }
+        public CanvasPoint? AppNode { get; set; }
+        public Dictionary<string, CanvasPoint> Devices { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+
+        public AppCanvasLayout Snapshot()
+        {
+            var copy = new AppCanvasLayout
+            {
+                Zoom = ClampFloat(Zoom, 0.35f, 1.8f, 1f),
+                PanX = ClampFloat(PanX, -10000f, 10000f, 0f),
+                PanY = ClampFloat(PanY, -10000f, 10000f, 0f),
+                AppNode = CopyPoint(AppNode),
+                Devices = new Dictionary<string, CanvasPoint>(StringComparer.OrdinalIgnoreCase),
+            };
+            if (Devices != null)
+            {
+                int count = 0;
+                foreach (var pair in Devices)
+                {
+                    if (count >= MaxDevices) break;
+                    if (string.IsNullOrWhiteSpace(pair.Key)) continue;
+                    var pt = CopyPoint(pair.Value);
+                    if (pt == null) continue;
+                    copy.Devices[pair.Key] = pt;
+                    count++;
+                }
+            }
+            return copy;
+        }
+
+        private static CanvasPoint? CopyPoint(CanvasPoint? pt) =>
+            pt != null && IsFinite(pt.X) && IsFinite(pt.Y)
+                ? new CanvasPoint { X = ClampFloat(pt.X, -10000f, 10000f, 0f), Y = ClampFloat(pt.Y, -10000f, 10000f, 0f), Auto = pt.Auto }
+                : null;
+
+        private static bool IsFinite(float v) => !float.IsNaN(v) && !float.IsInfinity(v);
+
+        private static float ClampFloat(float v, float min, float max, float fallback)
+        {
+            if (!IsFinite(v)) return fallback;
+            return v < min ? min : (v > max ? max : v);
+        }
+    }
+
     /// <summary>应用配置（持久化到 %LocalAppData%\SonicRoute\config.json）。</summary>
     public sealed class AppConfig
     {
@@ -65,6 +122,9 @@ namespace SonicRoute.Core
         /// <summary>应用自定义图标：进程名 → Icons 目录中的受管 PNG 文件名。</summary>
         public Dictionary<string, string> AppIcons { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 
+        /// <summary>应用路由画布布局：稳定应用标识 → 缩放、偏移及节点坐标（仅保存用户调整过的应用）。</summary>
+        public Dictionary<string, AppCanvasLayout> AppCanvasLayouts { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+
         /// <summary>禁用自动切换的应用（进程名列表）：这些应用不会被自动选为"当前应用"（前台跟随/最近使用等），但仍可手动选择。</summary>
         public List<string> DisabledAutoSwitchApps { get; set; } = new();
 
@@ -99,8 +159,8 @@ namespace SonicRoute.Core
         /// <summary>启动时显示快速面板。</summary>
         public bool StartPanelOnStart { get; set; } = false;
 
-        /// <summary>主窗口左侧导航栏是否折叠；启动时恢复上次状态。</summary>
-        public bool MainSidebarCollapsed { get; set; } = false;
+        /// <summary>主窗口左侧导航栏默认折叠；启动时恢复上次保存的状态。</summary>
+        public bool MainSidebarCollapsed { get; set; } = true;
 
         /// <summary>快速面板固定高度（px，350–850，默认 450）：展开/收起不改变；内容超出在应用区域滚动。</summary>
         public int QuickPanelHeight { get; set; } = 450;
@@ -250,6 +310,47 @@ namespace SonicRoute.Core
             DeviceNames = NormalizeMap(DeviceNames);
             AppNames = NormalizeMap(AppNames);
             AppIcons = AppIconFiles.NormalizeMappings(AppIcons);
+            AppCanvasLayouts = NormalizeCanvasLayouts(AppCanvasLayouts);
+        }
+
+        public const int MaxCanvasLayouts = 256;
+
+        public void SaveCanvasLayout(string appKey, AppCanvasLayout layout)
+        {
+            var snapshot = layout.Snapshot();
+            if (AppCanvasLayouts.ContainsKey(appKey))
+            {
+                AppCanvasLayouts[appKey] = snapshot;
+                return;
+            }
+
+            // Preserve insertion order across removals so the earliest layout is evicted first.
+            var updated = new Dictionary<string, AppCanvasLayout>(StringComparer.OrdinalIgnoreCase);
+            int skip = Math.Max(0, AppCanvasLayouts.Count - MaxCanvasLayouts + 1);
+            foreach (var pair in AppCanvasLayouts)
+            {
+                if (skip > 0) { skip--; continue; }
+                updated.Add(pair.Key, pair.Value);
+            }
+            updated.Add(appKey, snapshot);
+            AppCanvasLayouts = updated;
+        }
+
+        private static Dictionary<string, AppCanvasLayout> NormalizeCanvasLayouts(Dictionary<string, AppCanvasLayout>? source)
+        {
+            var result = new Dictionary<string, AppCanvasLayout>(StringComparer.OrdinalIgnoreCase);
+            if (source != null)
+            {
+                int count = 0;
+                foreach (var pair in source)
+                {
+                    if (count >= MaxCanvasLayouts) break;
+                    if (string.IsNullOrWhiteSpace(pair.Key) || pair.Value == null) continue;
+                    result[pair.Key] = pair.Value.Snapshot();
+                    count++;
+                }
+            }
+            return result;
         }
 
         private static List<string> NormalizeList(List<string>? source) =>
@@ -290,6 +391,7 @@ namespace SonicRoute.Core
             copy.DeviceNames = new(DeviceNames ?? new(), DeviceNames?.Comparer ?? StringComparer.Ordinal);
             copy.AppNames = new(AppNames ?? new(), AppNames?.Comparer ?? StringComparer.Ordinal);
             copy.AppIcons = new(AppIcons ?? new(), AppIcons?.Comparer ?? StringComparer.OrdinalIgnoreCase);
+            copy.AppCanvasLayouts = NormalizeCanvasLayouts(AppCanvasLayouts);
             return copy;
         }
     }

@@ -281,7 +281,7 @@ internal static class NativeAppIconService
         return null;
     }
 
-    private static bool TryExtractFileIcon(string path, out IconBitmap result)
+    internal static bool TryExtractFileIcon(string path, out IconBitmap result, bool premultiply = true)
     {
         result = default;
         if (!File.Exists(path)) return false;
@@ -291,7 +291,7 @@ internal static class NativeAppIconService
         if (SHGetFileInfoW(path, 0, ref shfi, (uint)Marshal.SizeOf<ShFileInfo>(), flags) == 0 || shfi.HIcon == 0)
             return false;
 
-        try { return IconToPremultipliedBgra(shfi.HIcon, out result); }
+        try { return TryReadIconPixels(shfi.HIcon, out result, premultiply); }
         finally { DestroyIcon(shfi.HIcon); }
     }
 
@@ -320,7 +320,7 @@ internal static class NativeAppIconService
             hIcon = GetClassLongPtrW(foundHwnd, -14 /*GCLP_HICON*/);
 
         if (hIcon == 0) return false;
-        return IconToPremultipliedBgra(hIcon, out result);
+        return TryReadIconPixels(hIcon, out result);
     }
 
     private static bool IsStockDefaultIcon(IconBitmap bmp)
@@ -342,7 +342,7 @@ internal static class NativeAppIconService
             {
                 try
                 {
-                    if (IconToPremultipliedBgra(large[0], out var sb))
+                    if (TryReadIconPixels(large[0], out var sb))
                         computed = ComputePixelsHash(sb);
                 }
                 finally { DestroyIcon(large[0]); }
@@ -364,7 +364,7 @@ internal static class NativeAppIconService
         return hc.ToHashCode();
     }
 
-    private static unsafe bool IconToPremultipliedBgra(nint hIcon, out IconBitmap result)
+    private static unsafe bool TryReadIconPixels(nint hIcon, out IconBitmap result, bool premultiply = true)
     {
         result = default;
         if (!GetIconInfo(hIcon, out var ii)) return false;
@@ -423,7 +423,7 @@ internal static class NativeAppIconService
                 ReleaseDC(0, hdc);
             }
 
-            UiBitmap.Premultiply(pixels);
+            if (premultiply) UiBitmap.Premultiply(pixels);
             result = new IconBitmap(pixels, w, h);
             return true;
         }

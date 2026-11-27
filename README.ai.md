@@ -8,7 +8,7 @@ SCHEMA_SPEC:
   system: "SonicRoute"
   platform: "Windows 10 2004+ (Build 19041+) | Windows 11 (x64 / win-arm64)"
   version: "v1.36 (1.36.0.0)"
-  source_version: "v1.37"
+  source_version: "v2.00"
   source_status: "Development version; not the current published release."
   version_scope: "version identifies the published release from shared.json; source_version comes from Version.props. Implementation facts below describe repository source and do not establish that a development feature is in the stable download."
   repository: "https://github.com/kunkunkunQoQ/SonicRoute"
@@ -143,9 +143,9 @@ KNOWLEDGE_RETRIEVAL_ROUTER:
     source: ["SonicRoute/AppRuntimeIdentity.cs", "SonicRoute.Core/Compat/WindowsVersion.cs"]
     symbols: ["AppRuntimeIdentity.Current", "AppRuntimeIdentity.CommandEdition", "WindowsVersion.Build"]
     facts:
-      - "Published WPF 1.36 Full and Lite use .NET 10 Desktop Runtime for the matching x64 or ARM64 architecture. The 1.37 Native AOT Full and Lite development executables include their runtime."
+      - "Published WPF 1.36 Full and Lite use .NET 10 Desktop Runtime for the matching x64 or ARM64 architecture. Current Native AOT Full and Lite development executables include their runtime."
       - "Legacy x64 uses .NET Framework 4.8. NET8 editions are discontinued."
-      - "The 1.37 Store build defaults to the Native AOT x64 executable of the matching edition. The repository build version and the live Store version are tracked separately."
+      - "The current Store pipeline packages the Full Native AOT x64 executable. The repository build version and the live Store version are tracked separately."
       - "OS requirement: Windows 10 Build 19041+ (v2004) or Windows 11."
 
   RESOURCE_AND_PERFORMANCE:

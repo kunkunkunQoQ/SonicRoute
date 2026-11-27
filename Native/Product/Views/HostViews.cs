@@ -78,16 +78,19 @@ internal sealed partial class ApplicationHost
     }
 
     internal long EndpointWriteRevision { get; private set; }
-    internal bool EndpointVolumePending(string? id) => id != null && _endpointVolumeWriter.HasPending(id);
-    internal void QueueEndpointVolume(string? id, int level)
+    internal bool EndpointVolumePending(string? id) => EndpointVolumePending(Flow.Render, id);
+    internal bool EndpointVolumePending(Flow flow, string? id) => id != null && _endpointVolumeWriter.HasPending(new(flow, id));
+    internal void QueueEndpointVolume(string? id, int level) => QueueEndpointVolume(Flow.Render, id, level);
+    internal void QueueEndpointVolume(Flow flow, string? id, int level)
     {
         if (id == null) { ReportAudioWriteFailure(); return; }
         ++EndpointWriteRevision;
-        if (_endpointVolumeWriter.Enqueue(id, level, (endpoint, _, applied, actual) =>
+        if (_endpointVolumeWriter.Enqueue(new(flow, id), level, (key, _, applied, actual) =>
         {
             ++EndpointWriteRevision;
             if (!applied) { ReportAudioWriteFailure(); return; }
-            panelView?.ConfirmEndpointVolume(endpoint, actual);
+            if (key.Flow == Flow.Render) panelView?.ConfirmEndpointVolume(key.Id, actual);
+            mainView?.ConfirmEndpointVolume(key.Flow, key.Id, actual);
         }) < 0) ReportAudioWriteFailure();
     }
 
@@ -127,12 +130,14 @@ internal sealed partial class ApplicationHost
     {
         _feedback.Changed += ShowFeedback;
         L10n.Instance.PropertyChanged += RefreshLanguage;
+        ConfigService.SaveCompleted += OnQueuedConfigSaved;
     }
 
     private void StopViews()
     {
         _feedback.Changed -= ShowFeedback;
         L10n.Instance.PropertyChanged -= RefreshLanguage;
+        ConfigService.SaveCompleted -= OnQueuedConfigSaved;
         osdDeadline?.Dispose();
         osdAnimation?.Dispose();
         osdIdleRelease?.Dispose();
@@ -141,6 +146,15 @@ internal sealed partial class ApplicationHost
         mainView?.Dispose();
         panelView?.Dispose();
         osdView?.Dispose();
+    }
+
+    private void OnQueuedConfigSaved(bool saved)
+    {
+        if (!saved)
+            _window.TryPost(() =>
+            {
+                if (mainView is { IsVisible: true }) mainView.ShowNotice(L10n.T("Tray.SaveFailed"));
+            });
     }
 
     private void RefreshLanguage(object? sender, System.ComponentModel.PropertyChangedEventArgs args)
@@ -210,7 +224,7 @@ internal sealed partial class ApplicationHost
     internal void ViewSettingsChanged()
     {
         _automation?.ReloadSettings();
-        mainView?.InvalidateTheme();
+        mainView?.ApplySettings();
         panelView?.ApplyThemeAndSettings();
     }
 
@@ -231,7 +245,9 @@ internal sealed partial class ApplicationHost
     }
 
     internal void OpenProductMain() => _feedback.Publish(FeedbackKind.OpenMain);
-    internal void OpenPhoneManagement(string? profileId = null) => EnsureMainShell().OpenPhoneDevice(profileId);
+#if SONICROUTE_PHONE
+    internal void OpenPhoneManagement(string? profileId, bool airPlay) => EnsureMainShell().OpenPhoneDevice(profileId, airPlay);
+#endif
     internal void PreviewOsd() => _feedback.Publish(FeedbackKind.Osd, "📍", L10n.T("Exp.OsdPreview"));
     internal void PublishOsd(string title, string text, int? volume = null, bool? muted = null, bool? success = null) =>
         _feedback.Publish(FeedbackKind.Osd, title, text, volume, muted, success);
@@ -258,6 +274,9 @@ internal sealed partial class ApplicationHost
     private static IViewPage CreateMainPage(MainNavTab tab, IViewHostActions actions) => tab switch
     {
         MainNavTab.Apps => new AppsPageView(actions),
+#if SONICROUTE_PHONE
+        MainNavTab.Devices => new PhoneDevicePageView(actions),
+#endif
         MainNavTab.Hotkeys => new HotkeysPageView(actions),
         MainNavTab.Theme => new ThemePageView(actions),
         MainNavTab.Settings => new SettingsPageView(actions),

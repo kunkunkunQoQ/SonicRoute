@@ -685,6 +685,7 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
     protected override void OnRender(D2dTarget g, float widthDip, float heightDip)
     {
         _hit.Clear();
+        _scroll.TrackRect = default;
         var outer = new UiRect(0f, 0f, widthDip, heightDip);
         g.FillRoundedRect(outer, UiMetrics.QuickPanelCornerRadius, _theme.WindowBgAlpha);
         g.DrawRoundedRect(outer, UiMetrics.QuickPanelCornerRadius, _theme.Border, 1f);
@@ -855,7 +856,9 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
         }
         else
         {
-            float itemW = _scroll.MaxOffset > 0.5f ? listRect.Width - UiMetrics.ScrollBarWidth - 2f : listRect.Width;
+            const float scrollRightInset = 2f;
+            var scrollViewport = new UiRect(listRect.X, listRect.Y, widthDip - listRect.X - scrollRightInset, listRect.Height);
+            float itemW = _scroll.MaxOffset > 0.5f ? scrollViewport.Width - UiMetrics.ScrollBarWidth - 2f : listRect.Width;
             g.PushClip(listRect);
             _hit.PushClip(listRect);
             for (int i = 0; i < apps.Length; i++)
@@ -908,7 +911,7 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
             _hit.PopClip();
             g.PopClip();
 
-            _scroll.Draw(g, _theme, _hit, "companion.scroll", listRect);
+            _scroll.Draw(g, _theme, _hit, "companion.scroll", scrollViewport);
         }
 
         RenderFooter(g, padX, footerY, contentW, footerH, phone, profile, online);
@@ -1355,10 +1358,11 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
 
     private void OpenPhoneManagementDeepLink()
     {
-        string? profileId = _airPlaySelected ? null : _host.Phone.Store.Profile.Id;
+        var profile = _host.Phone.Store.Profile;
+        string? profileId = _airPlaySelected || profile.LastDevice == null ? null : profile.Id;
         Hide();
         _onDeactivatedCheck?.Invoke();
-        _host.OpenPhoneManagement(profileId);
+        _host.OpenPhoneManagement(profileId, _airPlaySelected);
     }
 
     private void DrawReturnOverlay(D2dTarget g, UiRect bounds, bool hovered, bool airPlay)

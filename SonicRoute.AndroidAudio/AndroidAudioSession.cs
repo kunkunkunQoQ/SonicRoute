@@ -296,6 +296,9 @@ public sealed class AndroidAudioSession : IAsyncDisposable, SonicRoute.AirPlay.I
     private void ChangeSmartVolume(bool enabled) => Update(s => s with { SmartVolume = enabled });
     string?[] IMultiOutputAudioSession.GetOutputs() => [State.OutputId, .. Volatile.Read(ref _extraIds)];
     Task IMultiOutputAudioSession.SetOutputsAsync(IReadOnlyList<string?> outputs) => ApplyOutputsAsync(outputs.ToArray(), true);
+    (int VolumePercent, bool Muted) IMultiOutputAudioSession.GetMirrorGain(string id) => _mirrors.GetGain(id);
+    (int VolumePercent, bool Muted) IMultiOutputAudioSession.SetMirrorGain(string id, int? volumePercent, bool? muted, bool toggleMute) =>
+        _mirrors.SetGain(id, volumePercent, muted, toggleMute);
     public Task SetOutputAsync(string? endpointId) => SetOutputsAsync([endpointId]);
 
     private Task SetOutputsAsync(IReadOnlyList<string?> outputs) => ApplyOutputsAsync(outputs.ToArray());

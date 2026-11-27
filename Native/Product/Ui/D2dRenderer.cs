@@ -30,6 +30,7 @@ internal sealed unsafe class D2dSharedContext : IDisposable
     private nint _write;
     private nint _roundStroke;
     private nint _flatStroke;
+    private nint _dashedStroke;
     private readonly Dictionary<UiIcon, nint> _iconGeometries = new();
     private readonly Dictionary<TextFormatKey, nint> _formats = new();
     private readonly Dictionary<nint, nint> _trimSigns = new();
@@ -46,6 +47,7 @@ internal sealed unsafe class D2dSharedContext : IDisposable
     public nint WriteFactory { get { EnsureInit(); return _write; } }
     public nint RoundStrokeStyle { get { EnsureInit(); return _roundStroke; } }
     public nint FlatStrokeStyle { get { EnsureInit(); return _flatStroke; } }
+    public nint DashedStrokeStyle { get { EnsureInit(); return _dashedStroke; } }
 
     public void EnsureInit()
     {
@@ -82,6 +84,21 @@ internal sealed unsafe class D2dSharedContext : IDisposable
         nint fs = 0;
         Check(((delegate* unmanaged[Stdcall]<nint, D2dStrokeStyleProps*, float*, uint, nint*, int>)Slot(_d2d, 11))(_d2d, &flatProps, null, 0, &fs), "CreateStrokeStyle(flat)");
         _flatStroke = fs;
+
+        var dashProps = new D2dStrokeStyleProps
+        {
+            StartCap = 2, // Round
+            EndCap = 2,
+            DashCap = 2,
+            LineJoin = 2,
+            MiterLimit = 10f,
+            DashStyle = 5, // Custom
+            DashOffset = 0f,
+        };
+        float* dashes = stackalloc float[2] { 3.2f, 2.4f };
+        nint ds = 0;
+        Check(((delegate* unmanaged[Stdcall]<nint, D2dStrokeStyleProps*, float*, uint, nint*, int>)Slot(_d2d, 11))(_d2d, &dashProps, dashes, 2, &ds), "CreateStrokeStyle(dashed)");
+        _dashedStroke = ds;
     }
 
     public nint GetTextFormat(
@@ -207,6 +224,40 @@ internal sealed unsafe class D2dSharedContext : IDisposable
         _iconGeometries[icon] = path;
         return path;
     }
+
+    public nint CreateCubicBezierGeometry(float x0, float y0, float cx1, float cy1, float cx2, float cy2, float x1, float y1)
+    {
+        EnsureInit();
+        nint path = 0;
+        Check(((delegate* unmanaged[Stdcall]<nint, nint*, int>)Slot(_d2d, 10))(_d2d, &path), "CreatePathGeometry");
+        nint sink = 0;
+        try
+        {
+            Check(((delegate* unmanaged[Stdcall]<nint, nint*, int>)Slot(path, 17))(path, &sink), "PathGeometry.Open");
+            ((delegate* unmanaged[Stdcall]<nint, D2dPoint, uint, void>)Slot(sink, 5))(sink, new D2dPoint(x0, y0), 1 /*HOLLOW*/);
+            var seg = new D2dCubicBezier
+            {
+                Point1 = new D2dPoint(cx1, cy1),
+                Point2 = new D2dPoint(cx2, cy2),
+                Point3 = new D2dPoint(x1, y1),
+            };
+            ((delegate* unmanaged[Stdcall]<nint, D2dCubicBezier*, void>)Slot(sink, 11))(sink, &seg);
+            ((delegate* unmanaged[Stdcall]<nint, uint, void>)Slot(sink, 8))(sink, 0 /*OPEN*/);
+            Check(((delegate* unmanaged[Stdcall]<nint, int>)Slot(sink, 9))(sink), "GeometrySink.Close");
+            return path;
+        }
+        catch
+        {
+            Release(ref path);
+            throw;
+        }
+        finally
+        {
+            Release(ref sink);
+        }
+    }
+
+    public static void ReleaseGeometry(ref nint geom) => Release(ref geom);
 
     private static void BuildPathGeometry(nint sink, string data)
     {
@@ -351,6 +402,7 @@ internal sealed unsafe class D2dSharedContext : IDisposable
         _formatOrder.Clear();
         Release(ref _roundStroke);
         Release(ref _flatStroke);
+        Release(ref _dashedStroke);
         Release(ref _write);
         Release(ref _d2d);
     }
@@ -462,12 +514,12 @@ internal sealed unsafe class D2dTarget : IDisposable
 
     public D2dSharedContext Shared => _shared;
 
-    public void BeginDraw(nint hdc, int widthPx, int heightPx, uint dpi)
+    public void BeginDraw(nint hdc, int widthPx, int heightPx, uint dpi, int leftPx = 0, int topPx = 0)
     {
         EnsureTarget();
         float fDpi = dpi;
         ((delegate* unmanaged[Stdcall]<nint, float, float, void>)D2dSharedContext.Slot(_target, 51))(_target, fDpi, fDpi);
-        var rc = new D2dWinRect(0, 0, widthPx, heightPx);
+        var rc = new D2dWinRect(leftPx, topPx, leftPx + widthPx, topPx + heightPx);
         D2dSharedContext.Check(((delegate* unmanaged[Stdcall]<nint, nint, D2dWinRect*, int>)D2dSharedContext.Slot(_target, 57))(_target, hdc, &rc), "BindDC");
         ((delegate* unmanaged[Stdcall]<nint, uint, void>)D2dSharedContext.Slot(_target, 32))(_target, 0 /*PER_PRIMITIVE*/);
         ((delegate* unmanaged[Stdcall]<nint, uint, void>)D2dSharedContext.Slot(_target, 34))(_target, 2 /*GRAYSCALE AA for layered surfaces*/);
@@ -478,15 +530,16 @@ internal sealed unsafe class D2dTarget : IDisposable
         ((delegate* unmanaged[Stdcall]<nint, D2dColorF*, void>)D2dSharedContext.Slot(_target, 47))(_target, &clear);
     }
 
-    public void EndDraw()
+    public bool EndDraw()
     {
-        if (_target == 0) return;
+        if (_target == 0) return false;
         ulong t1 = 0, t2 = 0;
         int hr = ((delegate* unmanaged[Stdcall]<nint, ulong*, ulong*, int>)D2dSharedContext.Slot(_target, 49))(_target, &t1, &t2);
         if (hr == RecreateTarget)
         {
             ReleaseTargetObjects();
         }
+        return hr >= 0;
     }
 
     private void EnsureTarget()
@@ -573,6 +626,21 @@ internal sealed unsafe class D2dTarget : IDisposable
         if (color.A == 0) return;
         ((delegate* unmanaged[Stdcall]<nint, D2dPoint, D2dPoint, nint, float, nint, void>)D2dSharedContext.Slot(_target, 15))
             (_target, new D2dPoint(x1, y1), new D2dPoint(x2, y2), SetBrushColor(color), strokeWidth, roundCaps ? _shared.RoundStrokeStyle : _shared.FlatStrokeStyle);
+    }
+
+    public void DrawGeometry(nint geometry, UiColor color, float strokeWidth = 2f, bool dashed = false)
+    {
+        if (geometry == 0 || color.A == 0) return;
+        ((delegate* unmanaged[Stdcall]<nint, nint, nint, float, nint, void>)D2dSharedContext.Slot(_target, 22))
+            (_target, geometry, SetBrushColor(color), strokeWidth, dashed ? _shared.DashedStrokeStyle : _shared.RoundStrokeStyle);
+    }
+
+    public void DrawCubicBezier(float x0, float y0, float cx1, float cy1, float cx2, float cy2, float x1, float y1, UiColor color, float strokeWidth = 2f, bool dashed = false)
+    {
+        if (color.A == 0) return;
+        nint geom = _shared.CreateCubicBezierGeometry(x0, y0, cx1, cy1, cx2, cy2, x1, y1);
+        try { DrawGeometry(geom, color, strokeWidth, dashed); }
+        finally { D2dSharedContext.ReleaseGeometry(ref geom); }
     }
 
     public void DrawIcon(UiIcon icon, UiRect box, UiColor color, float strokeWidth = 1.8f, float rotationDeg = 0f, bool filled = false)
@@ -667,19 +735,10 @@ internal sealed unsafe class D2dTarget : IDisposable
         if (widthPx <= 0 || heightPx <= 0 || bgraPixels.Length < widthPx * heightPx * 4 || dstRect.IsEmpty) return;
         if (!_bitmaps.TryGetValue(cacheKey, out var entry) || entry.W != widthPx || entry.H != heightPx || entry.Version != version)
         {
-            nint bmp = 0;
-            var props = new D2dBitmapProps
-            {
-                Format = new D2dPixelFormat { Format = 87, AlphaMode = 1 },
-                DpiX = 96f,
-                DpiY = 96f,
-            };
+            nint bmp;
             fixed (byte* pData = bgraPixels)
-            {
-                int hr = ((delegate* unmanaged[Stdcall]<nint, D2dSizeU, nint, uint, D2dBitmapProps*, nint*, int>)D2dSharedContext.Slot(_target, 4))
-                    (_target, new D2dSizeU((uint)widthPx, (uint)heightPx), (nint)pData, (uint)(widthPx * 4), &props, &bmp);
-                if (hr != 0 || bmp == 0) return;
-            }
+                bmp = CreateBgraBitmap((nint)pData, widthPx, heightPx, widthPx * 4);
+            if (bmp == 0) return;
             if (entry.Bitmap != 0)
             {
                 // Replacing a version keeps its one existing eviction entry.
@@ -700,10 +759,30 @@ internal sealed unsafe class D2dTarget : IDisposable
             _bitmaps[cacheKey] = entry;
         }
 
+        DrawBitmap(entry.Bitmap, widthPx, heightPx, dstRect, opacity, nearestNeighbor);
+    }
+
+    internal nint CreateBgraBitmap(nint pixels, int widthPx, int heightPx, int pitch)
+    {
+        if (_target == 0) return 0;
+        nint bitmap = 0;
+        var props = new D2dBitmapProps
+        {
+            Format = new D2dPixelFormat { Format = 87, AlphaMode = 1 },
+            DpiX = 96f,
+            DpiY = 96f,
+        };
+        int hr = ((delegate* unmanaged[Stdcall]<nint, D2dSizeU, nint, uint, D2dBitmapProps*, nint*, int>)D2dSharedContext.Slot(_target, 4))
+            (_target, new D2dSizeU((uint)widthPx, (uint)heightPx), pixels, (uint)pitch, &props, &bitmap);
+        return hr < 0 ? 0 : bitmap;
+    }
+
+    internal void DrawBitmap(nint bitmap, int widthPx, int heightPx, UiRect dstRect, float opacity = 1f, bool nearestNeighbor = false)
+    {
         var dst = new D2dRectF(dstRect.X, dstRect.Y, dstRect.Right, dstRect.Bottom);
         var src = new D2dRectF(0f, 0f, widthPx, heightPx);
         ((delegate* unmanaged[Stdcall]<nint, nint, D2dRectF*, float, uint, D2dRectF*, void>)D2dSharedContext.Slot(_target, 26))
-            (_target, entry.Bitmap, &dst, opacity, nearestNeighbor ? 0u : 1u, &src);
+            (_target, bitmap, &dst, opacity, nearestNeighbor ? 0u : 1u, &src);
     }
 
     public void PushClip(UiRect rect)
@@ -749,8 +828,8 @@ internal sealed unsafe class D2dTarget : IDisposable
     public void PushTransform(D2dMatrix3x2 m)
     {
         _transformStack.Push(_currentTransform);
-        _currentTransform = m;
-        SetTransformDirect(m);
+        _currentTransform = D2dMatrix3x2.Multiply(m, _currentTransform);
+        SetTransformDirect(_currentTransform);
     }
 
     public void PopTransform()
@@ -817,12 +896,26 @@ internal sealed unsafe class D2dTarget : IDisposable
 [StructLayout(LayoutKind.Sequential)] internal readonly struct D2dPoint(float x, float y) { public readonly float X = x, Y = y; }
 [StructLayout(LayoutKind.Sequential)] internal readonly struct D2dSizeF(float w, float h) { public readonly float W = w, H = h; }
 [StructLayout(LayoutKind.Sequential)] internal struct D2dQuadBezier { public D2dPoint Point1, Point2; }
+[StructLayout(LayoutKind.Sequential)] internal struct D2dCubicBezier { public D2dPoint Point1, Point2, Point3; }
 [StructLayout(LayoutKind.Sequential)] internal struct D2dArcSegment { public D2dPoint Point; public D2dSizeF Size; public float RotationAngle; public uint SweepDirection; public uint ArcSize; }
 [StructLayout(LayoutKind.Sequential)] internal struct D2dStrokeStyleProps { public uint StartCap, EndCap, DashCap, LineJoin; public float MiterLimit; public uint DashStyle; public float DashOffset; }
 [StructLayout(LayoutKind.Sequential)] internal readonly struct D2dMatrix3x2(float m11, float m12, float m21, float m22, float dx, float dy)
 {
     public readonly float M11 = m11, M12 = m12, M21 = m21, M22 = m22, Dx = dx, Dy = dy;
     public static D2dMatrix3x2 Identity => new(1f, 0f, 0f, 1f, 0f, 0f);
+    public static D2dMatrix3x2 ScaleTranslate(float scale, float tx, float ty) => new(scale, 0f, 0f, scale, tx, ty);
+    public static D2dMatrix3x2 RotateAt(float radians, float x, float y)
+    {
+        (float sin, float cos) = MathF.SinCos(radians);
+        return new(cos, sin, -sin, cos, x - x * cos + y * sin, y - x * sin - y * cos);
+    }
+    public static D2dMatrix3x2 Multiply(D2dMatrix3x2 a, D2dMatrix3x2 b) => new(
+        a.M11 * b.M11 + a.M12 * b.M21,
+        a.M11 * b.M12 + a.M12 * b.M22,
+        a.M21 * b.M11 + a.M22 * b.M21,
+        a.M21 * b.M12 + a.M22 * b.M22,
+        a.Dx * b.M11 + a.Dy * b.M21 + b.Dx,
+        a.Dx * b.M12 + a.Dy * b.M22 + b.Dy);
 }
 [StructLayout(LayoutKind.Sequential)] internal struct DWriteTrimming { public uint Granularity, Delimiter, DelimiterCount; }
 [StructLayout(LayoutKind.Sequential)] internal struct DWriteTextMetrics

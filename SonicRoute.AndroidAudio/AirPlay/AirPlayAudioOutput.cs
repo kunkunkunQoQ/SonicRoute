@@ -206,6 +206,9 @@ internal sealed class AirPlayAudioOutput : IPhoneAudioSession, IMultiOutputAudio
 
     string?[] IMultiOutputAudioSession.GetOutputs() => [State.OutputId, .. Volatile.Read(ref _extraIds)];
     Task IMultiOutputAudioSession.SetOutputsAsync(IReadOnlyList<string?> outputs) => Task.Run(() => ChangeOutputsAsync(outputs.ToArray()));
+    (int VolumePercent, bool Muted) IMultiOutputAudioSession.GetMirrorGain(string id) => _mirrors.GetGain(id);
+    (int VolumePercent, bool Muted) IMultiOutputAudioSession.SetMirrorGain(string id, int? volumePercent, bool? muted, bool toggleMute) =>
+        _mirrors.SetGain(id, volumePercent, muted, toggleMute);
     public Task SetOutputAsync(string? endpoint) => Task.Run(() => ChangeOutputsAsync([endpoint]));
     internal Task SetActiveOutputsAsync(string?[] outputs, Func<bool> stillActive) => Task.Run(() => ChangeOutputsAsync(outputs, stillActive));
     internal Task RestoreOutputsAsync(string?[] outputs, Func<bool> stillActive) => ChangeOutputsAsync(outputs, stillActive, remember: false);

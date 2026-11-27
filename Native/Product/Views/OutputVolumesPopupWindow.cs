@@ -310,7 +310,7 @@ internal sealed class OutputVolumesPopupWindow : LayeredWindow
             string muteId = $"ov.mute:{row.Id}";
             UiPrimitives.DrawSecondaryButton(g, _theme, _hit, muteId, muteRect, "",
                 enabled: row.Available, radius: 6f,
-                icon: row.Muted ? UiIcon.VolumeMutedSlash : UiIcon.Speaker,
+                icon: row.Muted ? UiIcon.SpeakerMuted : UiIcon.Speaker,
                 active: row.Muted,
                 tooltip: row.Muted ? L10n.T("Qp.Unmute") : L10n.T("Qp.Mute"));
 

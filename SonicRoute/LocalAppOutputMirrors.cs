@@ -95,12 +95,8 @@ internal static partial class LocalAppOutputMirrors
                 try
                 {
                     if (starting) await route.StartAsync(lifetime.Token).ConfigureAwait(false);
-                    await route.UpdateAsync(endpoints, phoneOnly, allowSpeakerMute, lifetime.Token).ConfigureAwait(false);
-                    if (starting)
-                    {
-                        Routes[processId] = route;
-                        _ = RetireAfterCaptureAsync(route);
-                    }
+                    await route.UpdateAsync(endpoints, phoneOnly, allowSpeakerMute, starting, lifetime.Token).ConfigureAwait(false);
+                    if (starting) _ = RetireAfterCaptureAsync(route);
 #if SONICROUTE_PHONE && !SONICROUTE_NATIVE_PC
                     if (HasSystemDefaultMirror()) _defaultWatch ??= DefaultOutputNotifications.Subscribe(QueueRefresh);
 #endif
@@ -371,7 +367,7 @@ internal static partial class LocalAppOutputMirrors
             try { _stop.Cancel(); } catch (ObjectDisposedException) { }
         }
 
-        internal async Task UpdateAsync(string[] desired, bool phoneOnly, bool allowSpeakerMute, CancellationToken token)
+        internal async Task UpdateAsync(string[] desired, bool phoneOnly, bool allowSpeakerMute, bool register, CancellationToken token)
         {
             using var change = CancellationTokenSource.CreateLinkedTokenSource(token, _stop.Token);
             var previous = Sinks;
@@ -415,7 +411,7 @@ internal static partial class LocalAppOutputMirrors
                 change.Token.ThrowIfCancellationRequested();
                 if (Capture.IsCompleted) { await Capture.ConfigureAwait(false); throw new IOException(L10n.T("Tray.AppUnavailable")); }
                 UpdateIsolation(phoneOnly, allowSpeakerMute);
-                Replace(next.ToArray());
+                Replace(next.ToArray(), register);
             }
             catch { foreach (var sink in staged) sink.Dispose(); throw; }
         }
@@ -432,6 +428,8 @@ internal static partial class LocalAppOutputMirrors
             return sink;
         }
 
+        partial void OnRouteStopped();
+
         private void RecordAndPruneFailed(Sink sink, Exception error)
         {
             _ = Task.Run(async () =>
@@ -446,9 +444,14 @@ internal static partial class LocalAppOutputMirrors
 
         internal Task PruneFailed(Sink sink) => PruneAsync((route, value) => route == this && ReferenceEquals(value, sink), recover: true);
 
-        internal void Replace(Sink[] next)
+        internal void Replace(Sink[] next, bool register = false)
         {
+#if SONICROUTE_NATIVE_PC
+            var previous = PublishSinks(next, register);
+#else
             var previous = Interlocked.Exchange(ref _sinks, next);
+            if (register) Routes[ProcessId] = this;
+#endif
             foreach (var sink in previous) if (!next.Contains(sink)) sink.Dispose();
         }
 
@@ -482,6 +485,7 @@ internal static partial class LocalAppOutputMirrors
         internal async Task StopAsync()
         {
             ReleaseIsolation();
+            OnRouteStopped();
             _process.Exited -= Exited;
             _stop.Cancel();
             try { await Capture.ConfigureAwait(false); } catch (OperationCanceledException) { } catch (Exception ex) { Debug.WriteLine(ex); }

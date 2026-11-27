@@ -7,6 +7,9 @@ namespace SonicRoute.Native.Product.Views;
 internal enum MainNavTab
 {
     Apps,
+#if SONICROUTE_PHONE
+    Devices,
+#endif
     Hotkeys,
     Theme,
     Settings,
@@ -51,7 +54,6 @@ internal interface IViewHostActions
     void SetInlineEditText(string tag, string text);
     void CloseInlineEdit(bool commit);
     void NavigateTo(MainNavTab tab);
-    void OpenPhoneDevice(string? profileId = null) { }
 }
 
 internal interface IViewPage : IDisposable
@@ -71,6 +73,9 @@ internal interface IViewPage : IDisposable
     void OnFilesDropped(string[] paths, string? targetId) => OnFilesDropped(paths);
     void OnCaptureLost() { }
     void OnFocusLost() { }
+    bool HasOpenModal => false;
+    void ClosePopups() { }
+    void OnThemeChanged(UiThemePalette theme) { }
     bool NeedsAnimationTick => false;
     void TickAnimation() { }
 }

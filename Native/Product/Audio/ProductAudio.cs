@@ -182,6 +182,34 @@ internal sealed partial class ProductAudio : IDisposable
         return [Core.AudioService.SystemDefaultDeviceId];
     }
 
+    internal MirrorGainState GetMirrorGain(AudioAppInfo app, string sinkId)
+    {
+        if (string.IsNullOrWhiteSpace(sinkId)) return new(100, false);
+        if (!app.IsExternal) return LocalAppOutputMirrors.GetSinkGain(checked((int)app.ProcessId), sinkId);
+#if SONICROUTE_PHONE
+        if (ExternalAudio?.FindSession(app.ExternalSourceId) is SonicRoute.AndroidAudio.IMultiOutputAudioSession multi)
+        {
+            var g = multi.GetMirrorGain(sinkId);
+            return new(g.VolumePercent, g.Muted);
+        }
+#endif
+        return new(100, false);
+    }
+
+    internal MirrorGainState SetMirrorGain(AudioAppInfo app, string sinkId, int? volumePercent = null, bool? muted = null, bool toggleMute = false)
+    {
+        if (string.IsNullOrWhiteSpace(sinkId)) return new(100, false);
+        if (!app.IsExternal) return LocalAppOutputMirrors.SetSinkGain(checked((int)app.ProcessId), sinkId, volumePercent, muted, toggleMute);
+#if SONICROUTE_PHONE
+        if (ExternalAudio?.FindSession(app.ExternalSourceId) is SonicRoute.AndroidAudio.IMultiOutputAudioSession multi)
+        {
+            var g = multi.SetMirrorGain(sinkId, volumePercent, muted, toggleMute);
+            return new(g.VolumePercent, g.Muted);
+        }
+#endif
+        return new(100, false);
+    }
+
     internal bool SetRoute(int pid, Flow flow, string? endpoint)
     {
         var result = PcRoutingApi.ApplyEndpoint(pid, (EDataFlow)flow, endpoint);

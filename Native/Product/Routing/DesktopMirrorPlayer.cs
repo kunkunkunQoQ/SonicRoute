@@ -17,9 +17,15 @@ internal sealed class DesktopMirrorPlayer : IDisposable
     private Func<nint,int,int>? _copyPending;
     private RegisteredWaitHandle? _writable;
     private int _active, _closed, _failed;
+    private const int MuteBit = 1 << 8;
+    private int _gain = 100;
+    private byte[]? _gainBuffer;
     private long _written, _dropped, _emptyAfterStart, _firstWrite, _signalFrames;
     internal string EndpointId { get; }
     internal event Action<Exception>? Failed;
+
+    internal void SetGain(int volumePercent, bool muted) =>
+        Volatile.Write(ref _gain, volumePercent | (muted ? MuteBit : 0));
 
     internal DesktopMirrorPlayer(string? endpointId, AutoResetEvent renderWake, MirrorMeasurement measurement)
     {
@@ -56,6 +62,28 @@ internal sealed class DesktopMirrorPlayer : IDisposable
         if (!Enter()) return;
         try
         {
+            int gain = Volatile.Read(ref _gain);
+            bool muted = (gain & MuteBit) != 0;
+            int vol = gain & (MuteBit - 1);
+            if ((muted || vol < 100) && !packet.IsEmpty)
+            {
+                if (_gainBuffer == null || _gainBuffer.Length < packet.Length)
+                    _gainBuffer = new byte[Math.Max(packet.Length, 4096)];
+                var dstBytes = _gainBuffer.AsSpan(0, packet.Length);
+                if (muted || vol <= 0)
+                {
+                    dstBytes.Clear();
+                }
+                else
+                {
+                    var src = MemoryMarshal.Cast<byte, short>(packet.Span);
+                    var dst = MemoryMarshal.Cast<byte, short>(dstBytes);
+                    int q15 = (vol * 32768 + 50) / 100;
+                    for (int i = 0; i < src.Length; i++)
+                        dst[i] = (short)((src[i] * q15) >> 15);
+                }
+                packet = _gainBuffer.AsMemory(0, packet.Length);
+            }
             int padding = checked((int)_output.Padding);
             int available = checked((int)_output.Capacity) - padding;
             if (padding == 0 && available > packet.Length / 4)

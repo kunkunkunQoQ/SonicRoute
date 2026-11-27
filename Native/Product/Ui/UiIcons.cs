@@ -62,12 +62,16 @@ internal enum UiIcon
     Maximize,
     Restore,
     CollapseNav,
-    ExpandNav,
     ChevronRight,
     ChevronUp,
     Search,
-    VolumeMutedSlash,
+    SpeakerMuted,
     Refresh,
+    Filter,
+    FitCanvas,
+    AutoArrange,
+    Minus,
+    MicMuted,
 }
 
 /// <summary>
@@ -138,12 +142,16 @@ internal static class UiIcons
         UiIcon.Maximize => "M4,4 L20,4 L20,20 L4,20 Z",
         UiIcon.Restore => "M8,8 L20,8 L20,20 L8,20 Z M4,16 L4,4 L16,4 L16,8",
         UiIcon.CollapseNav => "M15,5 L8,12 L15,19",
-        UiIcon.ExpandNav => "M9,5 L16,12 L9,19",
         UiIcon.ChevronRight => "M9,5 L16,12 L9,19",
         UiIcon.ChevronUp => "M5,15 L12,8 L19,15",
         UiIcon.Search => "M11,3 A8,8 0 1 0 11,19 A8,8 0 1 0 11,3 M17,17 L21,21",
-        UiIcon.VolumeMutedSlash => "M4,4 L20,20",
+        UiIcon.SpeakerMuted => "M3,9 L7,9 L13,4 L13,20 L7,15 L3,15 Z M17,9 L23,15 M23,9 L17,15",
         UiIcon.Refresh => "M4,11 A8,8 0 1 1 6.5,17.5 M4,5 L4,11 L10,11",
+        UiIcon.Filter => "M3,5 L21,5 L14,13 L14,19 L10,21 L10,13 Z",
+        UiIcon.FitCanvas => "M4,9 L4,4 L9,4 M15,4 L20,4 L20,9 M20,15 L20,20 L15,20 M9,20 L4,20 L4,15",
+        UiIcon.AutoArrange => "M3,4 L9,4 L9,10 L3,10 Z M15,3 L21,3 L21,8 L15,8 Z M15,10 L21,10 L21,15 L15,15 Z M15,17 L21,17 L21,22 L15,22 Z M9,7 L15,5.5 M9,7 L15,12.5 M9,7 L15,19.5",
+        UiIcon.Minus => "M5,12 L19,12",
+        UiIcon.MicMuted => "M8,5 A4,4 0 0 1 16,5 L16,12 A4,4 0 0 1 8,12 Z M5,10 L5,12 A7,7 0 0 0 19,12 L19,10 M12,19 L12,23 M8,23 L16,23 M3,3 L21,21",
         _ => "",
     };
 }

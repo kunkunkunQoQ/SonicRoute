@@ -14,6 +14,7 @@ internal sealed partial class PhonePreview
         if (!token.IsCancellationRequested && SavedPlaybackStore.ReadAll().Values.Any(
             choice => choice.Outputs.Any(AndroidOutputIdentity.IsPhoneOutput)))
             AppPlaybackRestore.RefreshDevices();
+        Notify();
     }
 
     private void UpdatePlaybackConnections()

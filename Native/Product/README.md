@@ -1,4 +1,4 @@
-# SonicRoute 1.37 Native AOT
+# SonicRoute 2.00 Native AOT
 
 Full 和 Lite 共用本项目。Full 包含 Android 和 AirPlay，Lite 提供电脑音频功能。桌面窗口、托盘、配置、规则、音频和更新交接均由本项目运行。使用仓库根目录的 `SonicRoute.Native.slnx` 开发。
 

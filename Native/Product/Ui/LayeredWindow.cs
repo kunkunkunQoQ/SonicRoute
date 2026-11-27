@@ -106,10 +106,13 @@ internal abstract unsafe class LayeredWindow : IDisposable
     private D2dTarget? _target;
     private nint _memDc;
     private nint _dibBitmap;
+    private nint _dibPixels;
     private nint _oldBitmap;
     private int _bufWidthPx;
     private int _bufHeightPx;
     private bool _boundsPending, _resizedSurfaceReady, _presentingBounds;
+    private nint _overlayBackground;
+    private WinRect _overlayPixels;
 
     private float _widthDip;
     private float _heightDip;
@@ -512,7 +515,7 @@ internal abstract unsafe class LayeredWindow : IDisposable
         _heldTrack = null;
     }
 
-    protected static bool ClientAreaAnimationsEnabled() =>
+    internal static bool ClientAreaAnimationsEnabled() =>
         !SystemParametersInfoW(0x1042 /* SPI_GETCLIENTAREAANIMATION */, 0, out uint enabled, 0) || enabled != 0;
 
     protected void StartAnimationTimer(int intervalMs = 16)
@@ -644,7 +647,8 @@ internal abstract unsafe class LayeredWindow : IDisposable
         try
         {
             OnRender(_target, width, height);
-            if (InputMap is { ShowFocus: true } focus && focus.TryGetFocus(out _, out var visible))
+            if (InputMap is { ShowFocus: true } focus && focus.TryGetFocus(out var focused, out var visible) &&
+                focused.Id != RenderOverlayFocusId)
             {
                 var ring = visible.Offset(0, InputOffsetY).Deflate(1.5f);
                 if (!ring.IsEmpty)
@@ -658,9 +662,85 @@ internal abstract unsafe class LayeredWindow : IDisposable
         {
             if (expanding) _target.PopTransform();
             _target.Editor = null;
-            _target.EndDraw();
+            if (_target.EndDraw()) PrepareOverlay(wPx, hPx);
+            else ClearOverlayBackground();
         }
     }
+
+    // The base frame stays available as a small bitmap under a moving overlay.
+    // Subsequent frames bind D2D only to that patch of the existing window DIB.
+    private void PrepareOverlay(int width, int height)
+    {
+        ClearOverlayBackground();
+        var bounds = RenderOverlayBounds;
+        if (bounds.IsEmpty || _dockedEntrance < 1f || _dibPixels == 0 || _target == null) return;
+
+        float scale = DpiScale;
+        _overlayPixels = new WinRect
+        {
+            Left = Math.Clamp((int)MathF.Floor(bounds.X * scale), 0, width),
+            Top = Math.Clamp((int)MathF.Floor(bounds.Y * scale), 0, height),
+            Right = Math.Clamp((int)MathF.Ceiling(bounds.Right * scale), 0, width),
+            Bottom = Math.Clamp((int)MathF.Ceiling(bounds.Bottom * scale), 0, height),
+        };
+        var r = _overlayPixels;
+        if (r.Right <= r.Left || r.Bottom <= r.Top) return;
+        GdiFlush();
+        _overlayBackground = _target.CreateBgraBitmap(_dibPixels + (r.Top * _bufWidthPx + r.Left) * 4,
+            r.Right - r.Left, r.Bottom - r.Top, _bufWidthPx * 4);
+        if (_overlayBackground != 0 && !DrawOverlayPatch())
+            ClearOverlayBackground();
+    }
+
+    private bool DrawOverlayPatch()
+    {
+        if (_target == null || _overlayBackground == 0) return false;
+        var r = _overlayPixels;
+        int width = r.Right - r.Left, height = r.Bottom - r.Top;
+        float scale = DpiScale;
+        // DC render targets address the bound rectangle from its local origin.
+        _target.BeginDraw(_memDc, width, height, _dpi, r.Left, r.Top);
+        _target.DrawBitmap(_overlayBackground, width, height, new UiRect(0f, 0f, width / scale, height / scale),
+            nearestNeighbor: true);
+        _target.PushTransform(D2dMatrix3x2.ScaleTranslate(1f, -r.Left / scale, -r.Top / scale));
+        bool drawn;
+        try { OnRenderOverlay(_target); }
+        finally
+        {
+            _target.PopTransform();
+            drawn = _target.EndDraw();
+        }
+        return drawn;
+    }
+
+    protected bool RefreshRenderOverlay()
+    {
+        if (_paintPending) return true; // The queued full frame will include the overlay.
+        if (!IsVisible || _boundsPending || _overlayBackground == 0) return false;
+        if (!DrawOverlayPatch())
+        {
+            ClearOverlayBackground();
+            return false;
+        }
+
+        var size = new Size { Cx = WidthPx, Cy = HeightPx };
+        var source = new Point();
+        var dirty = _overlayPixels;
+        var blend = new BlendFunction { SourceConstantAlpha = 255, AlphaFormat = 1 };
+        var update = new LayeredWindowUpdate
+        {
+            SizeOf = (uint)sizeof(LayeredWindowUpdate),
+            Size = &size,
+            SourceDc = _memDc,
+            Source = &source,
+            Blend = &blend,
+            Flags = 2, // ULW_ALPHA
+            Dirty = &dirty,
+        };
+        return UpdateLayeredWindowIndirect(Handle, &update) || PresentSurface(size.Cx, size.Cy, null);
+    }
+
+    private void ClearOverlayBackground() => D2dSharedContext.Release(ref _overlayBackground);
 
     private bool PresentSurface(int wPx, int hPx, Point* dest)
     {
@@ -689,7 +769,7 @@ internal abstract unsafe class LayeredWindow : IDisposable
             BiBitCount = 32,
             BiCompression = 0,
         };
-        _dibBitmap = CreateDIBSection(_memDc, ref bmi, 0, out _, 0, 0);
+        _dibBitmap = CreateDIBSection(_memDc, ref bmi, 0, out _dibPixels, 0, 0);
         _oldBitmap = SelectObject(_memDc, _dibBitmap);
         ReleaseDC(0, screenDc);
         _bufWidthPx = wPx;
@@ -702,6 +782,7 @@ internal abstract unsafe class LayeredWindow : IDisposable
         _tooltip?.Dispose();
         _tooltip = null;
         StopAnimationTimer();
+        ClearOverlayBackground();
         _target?.Dispose();
         _target = null;
         ReleaseBackBuffer();
@@ -717,6 +798,7 @@ internal abstract unsafe class LayeredWindow : IDisposable
         }
         _memDc = 0;
         _dibBitmap = 0;
+        _dibPixels = 0;
         _oldBitmap = 0;
         _bufWidthPx = 0;
         _bufHeightPx = 0;
@@ -724,6 +806,9 @@ internal abstract unsafe class LayeredWindow : IDisposable
 
     protected virtual string GetWindowTitle() => "SonicRoute";
     protected virtual void OnRender(D2dTarget g, float widthDip, float heightDip) { }
+    protected virtual UiRect RenderOverlayBounds => default;
+    protected virtual string? RenderOverlayFocusId => null;
+    protected virtual void OnRenderOverlay(D2dTarget g) { }
     protected virtual void OnShown() { }
     protected virtual void OnHidden() => ReleaseRenderResources();
     protected virtual bool OnClosing() => true;
@@ -1219,6 +1304,20 @@ internal abstract unsafe class LayeredWindow : IDisposable
     [StructLayout(LayoutKind.Sequential)]
     private struct BlendFunction { public byte BlendOp, BlendFlags, SourceConstantAlpha, AlphaFormat; }
     [StructLayout(LayoutKind.Sequential)]
+    private struct LayeredWindowUpdate
+    {
+        public uint SizeOf;
+        public nint DestinationDc;
+        public Point* Destination;
+        public Size* Size;
+        public nint SourceDc;
+        public Point* Source;
+        public uint ColorKey;
+        public BlendFunction* Blend;
+        public uint Flags;
+        public WinRect* Dirty;
+    }
+    [StructLayout(LayoutKind.Sequential)]
     private struct MonitorInfo { public uint CbSize; public WinRect Monitor, Work; public uint Flags; }
     [StructLayout(LayoutKind.Sequential)]
     private struct TrackMouseEventStruct { public uint CbSize, DwFlags; public nint HwndTrack; public uint DwHoverTime; }
@@ -1276,6 +1375,7 @@ internal abstract unsafe class LayeredWindow : IDisposable
     [DllImport("gdi32.dll")] private static extern nint CreateCompatibleDC(nint hdc);
     [DllImport("gdi32.dll")] private static extern bool DeleteDC(nint hdc);
     [DllImport("gdi32.dll")] private static extern nint CreateDIBSection(nint hdc, ref BitmapInfoHeader bmi, uint usage, out nint bits, nint section, uint offset);
+    [DllImport("gdi32.dll")] private static extern bool GdiFlush();
     [DllImport("gdi32.dll")] private static extern nint SelectObject(nint hdc, nint obj);
     [DllImport("gdi32.dll")] private static extern bool DeleteObject(nint obj);
     [DllImport("user32.dll")] private static extern bool GetWindowRect(nint hwnd, out WinRect rect);
@@ -1286,4 +1386,5 @@ internal abstract unsafe class LayeredWindow : IDisposable
     [DllImport("shell32.dll")] private static extern bool DragQueryPoint(nint drop, ref Point pt);
     [DllImport("shell32.dll")] private static extern void DragFinish(nint drop);
     [DllImport("user32.dll")] private static extern bool UpdateLayeredWindow(nint hwnd, nint hdcDst, nint pptDst, ref Size psize, nint hdcSrc, ref Point pptSrc, uint crKey, ref BlendFunction pblend, uint dwFlags);
+    [DllImport("user32.dll")] private static extern bool UpdateLayeredWindowIndirect(nint hwnd, LayeredWindowUpdate* update);
 }
