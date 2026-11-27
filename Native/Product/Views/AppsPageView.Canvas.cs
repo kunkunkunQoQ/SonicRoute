@@ -34,6 +34,8 @@ internal sealed partial class AppsPageView
     private readonly HashSet<string> _seenNodeKeys = new(IdCmp);
     private readonly List<CanvasDeviceNode> _orderedRenderNodes = new();
     private readonly List<CanvasDeviceNode> _orderedCaptureNodes = new();
+    private readonly List<string> _raisedCanvasCards = new();
+    private readonly List<CanvasDeviceNode?> _canvasCardOrder = new(); // null is the app card
     private readonly List<CanvasWire> _wires = new();
     private readonly List<string> _forwardTargetIds = new();
     private readonly CanvasWireGeometryCache _wireCache = new();
@@ -139,6 +141,7 @@ internal sealed partial class AppsPageView
             _deviceNodes.Remove(node.NodeKey);
         }
         _orderedCaptureNodes.Clear();
+        _canvasCardOrder.RemoveAll(static node => node?.Flow == Flow.Capture);
         _wires.RemoveAll(w => w.Kind == CanvasWireKind.MicrophoneInput);
         _lastLayoutSignature = null;
     }
@@ -181,13 +184,14 @@ internal sealed partial class AppsPageView
     private Func<CanvasDeviceNode, int> MakeRenderRank(AudioAppInfo? app)
     {
         string? nativeId = app != null ? GetDisplayedNativeOutputId(app) : null;
-        var outputs = _pendingOutputs ?? _selectedOutputs;
+        var outputs = DisplayedOutputs;
         return n =>
         {
             if (nativeId != null && IdCmp.Equals(n.DeviceId, nativeId)) return 0;
-            if (outputs.Contains(n.DeviceId)) return 1;
+            if (outputs.Contains(n.DeviceId, IdCmp)) return 1;
             if (n.IsSystemDefault) return 2;
-            return 3;
+            if (n.IsActualWindowsDefault) return 3;
+            return n.IsPhoneOutput ? 5 : 4;
         };
     }
 
@@ -197,7 +201,7 @@ internal sealed partial class AppsPageView
         {
             if (app != null && !app.IsExternal && IdCmp.Equals(DisplayedInput, n.DeviceId)) return 0;
             if (n.IsSystemDefault) return 1;
-            return 2;
+            return n.IsActualWindowsDefault ? 2 : 3;
         };
     }
 
@@ -208,6 +212,7 @@ internal sealed partial class AppsPageView
         {
             _orderedRenderNodes.Clear();
             _orderedCaptureNodes.Clear();
+            _canvasCardOrder.Clear();
             _deviceNodes.Clear();
             _wires.Clear();
             _wireCache.Clear();
@@ -229,6 +234,8 @@ internal sealed partial class AppsPageView
         if (switchedApp)
         {
             _lastLayoutSignature = null;
+            _raisedCanvasCards.Clear();
+            if (saved?.RaisedCards is { } raisedCards) _raisedCanvasCards.AddRange(raisedCards);
             if (saved != null)
             {
                 _zoom = Math.Clamp(saved.Zoom, AppsCanvasMetrics.MinZoom, AppsCanvasMetrics.MaxZoom);
@@ -271,7 +278,7 @@ internal sealed partial class AppsPageView
             _needsInitialFit = true;
         }
 
-        var activeSet = _pendingOutputs ?? _selectedOutputs;
+        var activeOutputs = DisplayedOutputs;
         _seenNodeKeys.Clear();
         bool topologyChanged = false;
         _orderedRenderNodes.Clear();
@@ -361,7 +368,7 @@ internal sealed partial class AppsPageView
         if (_outputChoicesIdentity == _selectedIdentity)
         {
             bool showSysOut = cfg.IsDeviceShown(EDataFlow.eRender, AudioService.SystemDefaultDeviceId);
-            if (showSysOut || activeSet.Contains(AudioService.SystemDefaultDeviceId))
+            if (showSysOut || activeOutputs.Contains(AudioService.SystemDefaultDeviceId, IdCmp))
             {
                 UpsertDevice(Flow.Render, AudioService.SystemDefaultDeviceId, AudioService.SystemDefaultDeviceId,
                     L10n.T("Dev.SystemDefaultOut"), isSysDefault: true, isActualDefault: false, isHiddenFallback: !showSysOut);
@@ -370,7 +377,7 @@ internal sealed partial class AppsPageView
             foreach (var ep in _outputs)
             {
                 bool shown = cfg.IsDeviceShown(EDataFlow.eRender, ep.PreferenceId);
-                bool connected = activeSet.Contains(ep.Id);
+                bool connected = activeOutputs.Contains(ep.Id, IdCmp);
                 if (!shown && !connected) continue;
                 bool isWinDef = _windowsDefaultRenderId != null && IdCmp.Equals(ep.Id, _windowsDefaultRenderId);
                 UpsertDevice(Flow.Render, ep.Id, ep.PreferenceId, ep.Name, isSysDefault: false, isActualDefault: isWinDef, isHiddenFallback: !shown);
@@ -432,7 +439,9 @@ internal sealed partial class AppsPageView
                 MakeRenderRank(app),
                 MakeCaptureRank(app),
                 fullArrange: false,
-                remembered: remembered);
+                remembered: remembered,
+                restoreSavedStack: switchedApp && _raisedCanvasCards.Count > 0);
+            RebuildCanvasCardOrder();
         }
 
         _lastLayoutSignature = BuildLayoutSignature(appKey, showMic, _appNodeHeight);
@@ -472,12 +481,18 @@ internal sealed partial class AppsPageView
         return h;
     }
 
+    private const float CanvasFitPaddingX = 24f;
+    private const float CanvasDefaultMinZoom = 0.78f;
+
     private void ArrangeNodesDefault(bool fitViewport)
     {
         var app = _selectedApp;
         int forwardCount = app != null ? GetForwardTargetIds(app).Count : 0;
         bool showMic = _actions.Config.ExperimentalMic;
         _appNodeHeight = app != null ? ComputeAppNodeHeight(app, forwardCount, showMic) : 250f;
+        float twoColumnWidth = AppsCanvasMetrics.AppNodeWidth + AppsCanvasMetrics.DefaultColumnGap
+            + 2f * AppsCanvasMetrics.DeviceNodeWidth + AppsCanvasMetrics.DefaultDeviceGapX;
+        bool allowTwoColumns = _canvasRect.Width - 2f * CanvasFitPaddingX >= twoColumnWidth * CanvasDefaultMinZoom;
 
         AppsCanvasLayoutEngine.Reconcile(
             ref _appNodeX,
@@ -489,7 +504,9 @@ internal sealed partial class AppsPageView
             MakeRenderRank(app),
             MakeCaptureRank(app),
             fullArrange: true,
-            remembered: null);
+            remembered: null,
+            allowTwoColumns: allowTwoColumns);
+        RebuildCanvasCardOrder();
 
         if (!string.IsNullOrWhiteSpace(_activeCanvasAppKey))
             _lastLayoutSignature = BuildLayoutSignature(_activeCanvasAppKey, showMic, _appNodeHeight);
@@ -504,7 +521,7 @@ internal sealed partial class AppsPageView
     private void FrameDefaultViewport()
     {
         if (_canvasRect.IsEmpty || _selectedApp == null) return;
-        const float padX = 24f;
+        const float padX = CanvasFitPaddingX;
         const float padTop = 52f; // clear space below floating top-right toolbar
         const float padBottom = 24f;
         float availW = MathF.Max(160f, _canvasRect.Width - padX * 2f);
@@ -531,20 +548,23 @@ internal sealed partial class AppsPageView
         float totalH = MathF.Max(100f, maxY - minY);
         float focusW = totalW <= primaryMaxX - minX + 10f ? totalW : MathF.Max(100f, primaryMaxX - minX);
 
-        float scaleAll = MathF.Min(availW / totalW, availH / totalH);
+        float scaleForWidth = availW / totalW;
+        bool fitAllColumns = scaleForWidth >= CanvasDefaultMinZoom;
+        float scaleAll = MathF.Min(scaleForWidth, availH / totalH);
         float scale;
-        if (scaleAll >= 0.78f)
+        if (scaleAll >= CanvasDefaultMinZoom)
         {
-            scale = Math.Clamp(scaleAll, 0.78f, 1.0f);
+            scale = Math.Clamp(scaleAll, CanvasDefaultMinZoom, 1.0f);
         }
         else
         {
             float focusScale = MathF.Min(availW / focusW, availH / MathF.Max(_appNodeHeight + 24f, 360f));
-            scale = Math.Clamp(focusScale, 0.78f, 1.0f);
+            scale = Math.Clamp(focusScale, CanvasDefaultMinZoom, 1.0f);
+            if (fitAllColumns) scale = MathF.Min(scale, scaleForWidth);
         }
 
         _zoom = scale;
-        float fittedW = (scaleAll >= 0.78f ? totalW : focusW) * scale;
+        float fittedW = (fitAllColumns ? totalW : focusW) * scale;
         _panX = (availW >= fittedW ? padX + (availW - fittedW) * 0.5f : padX) - minX * scale;
         float fittedH = totalH * scale;
         _panY = (availH >= fittedH ? padTop + (availH - fittedH) * 0.5f : padTop) - minY * scale;
@@ -612,6 +632,7 @@ internal sealed partial class AppsPageView
                 Auto = !_appNodeUserPositioned,
             },
             Devices = new Dictionary<string, CanvasPoint>(IdCmp),
+            RaisedCards = _raisedCanvasCards,
         };
 
         void AddPosition(string key, float x, float y, bool auto)
@@ -661,6 +682,7 @@ internal sealed partial class AppsPageView
         _layoutSaveTimer = null;
         _layoutDirty = false;
         _lastMovedDeviceLayoutKey = null;
+        _raisedCanvasCards.Clear();
         string key = GetStableAppKey(_selectedApp);
         _rememberedNodePositions.Remove(key);
         if (_actions.Config.AppCanvasLayouts.Remove(key))
@@ -682,21 +704,11 @@ internal sealed partial class AppsPageView
 
     private List<string> GetForwardTargetIds(AudioAppInfo app)
     {
-        var activeSet = _pendingOutputs ?? _selectedOutputs;
         string? nativeId = GetDisplayedNativeOutputId(app);
         var list = _forwardTargetIds;
         list.Clear();
-        foreach (var node in _orderedRenderNodes)
-        {
-            if (activeSet.Contains(node.DeviceId) && (nativeId == null || !IdCmp.Equals(node.DeviceId, nativeId)))
-                list.Add(node.DeviceId);
-        }
-        // Include any active forward target even if device list hasn't caught up yet
-        foreach (string id in activeSet)
-        {
-            if (nativeId != null && IdCmp.Equals(id, nativeId)) continue;
-            if (!list.Contains(id, IdCmp)) list.Add(id);
-        }
+        foreach (string id in DisplayedOutputs)
+            if (!IdCmp.Equals(id, nativeId)) list.Add(id);
         return list;
     }
 
@@ -769,35 +781,41 @@ internal sealed partial class AppsPageView
                 t.TextSecondary, 11f, 600, UiTextAlign.Leading, UiVertAlign.Center);
         }
 
-        // 3. Device Nodes
-        var activeSet = _pendingOutputs ?? _selectedOutputs;
+        // 3. Draw cards and register their hit regions in the same order.
+        var activeOutputs = DisplayedOutputs;
         string? nativeId = GetDisplayedNativeOutputId(app);
-        foreach (var node in _orderedRenderNodes)
+        bool draggingCard = _interaction == InteractionMode.DraggingNode && _dragMoved;
+        CanvasDeviceNode? draggedDevice = null;
+        if (draggingCard && _dragNodeKey is { } key) _deviceNodes.TryGetValue(key, out draggedDevice);
+
+        void DrawCard(CanvasDeviceNode? node)
         {
-            bool connected = activeSet.Contains(node.DeviceId);
-            bool isNative = connected && nativeId != null && IdCmp.Equals(node.DeviceId, nativeId);
+            if (node == null)
+            {
+                RenderAppNode(g, t, hit, app, forwardIds, showMic);
+                return;
+            }
+            bool playback = node.Flow == Flow.Render;
+            if (!playback && !showMic) return;
+            bool connected = playback ? activeOutputs.Contains(node.DeviceId, IdCmp)
+                : !app.IsExternal && IdCmp.Equals(DisplayedInput, node.DeviceId);
+            bool isNative = connected && (!playback || IdCmp.Equals(node.DeviceId, nativeId));
             RenderDeviceNode(g, t, hit, node, connected, isNative);
         }
-        if (showMic)
-        {
-            foreach (var node in _orderedCaptureNodes)
-            {
-                bool connected = !app.IsExternal && IdCmp.Equals(DisplayedInput, node.DeviceId);
-                RenderDeviceNode(g, t, hit, node, connected, isNative: connected);
-            }
-        }
 
-        // 4. App Node (rendered last so it sits cleanly on top on overlap)
-        RenderAppNode(g, t, hit, app, forwardIds, showMic);
+        bool liftCard = draggingCard && (_dragNodeKey == null || draggedDevice != null);
+        foreach (var node in _canvasCardOrder)
+            if (!liftCard || node != draggedDevice) DrawCard(node);
+        if (liftCard) DrawCard(draggedDevice);
 
-        // 5. Active Wire-Drag Preview Curve (only once pointer passes drag threshold)
+        // 4. Active Wire-Drag Preview Curve (only once pointer passes drag threshold)
         if (_interaction == InteractionMode.DraggingWire && _dragMoved)
             RenderDraggingWirePreview(g, t);
 
         hit.PopTransform();
         g.PopTransform();
 
-        // 6. Floating Canvas Toolbar (Screen-space overlay, crisp at any zoom)
+        // 5. Floating Canvas Toolbar (Screen-space overlay, crisp at any zoom)
         RenderCanvasToolbar(g, t, hit, innerClip);
 
         hit.PopClip();
@@ -1627,15 +1645,15 @@ internal sealed partial class AppsPageView
     {
         var connectable = new List<OutputConnectionItem>();
         var disconnectable = new List<OutputConnectionItem>();
-        var activeSet = _pendingOutputs ?? _selectedOutputs;
+        var activeOutputs = DisplayedOutputs;
         string? nativeId = GetDisplayedNativeOutputId(app);
         bool pending = _pendingOutputs != null;
 
         foreach (var node in _orderedRenderNodes)
         {
-            bool connected = activeSet.Contains(node.DeviceId);
+            bool connected = activeOutputs.Contains(node.DeviceId, IdCmp);
             bool isNative = connected && nativeId != null && IdCmp.Equals(node.DeviceId, nativeId);
-            bool canDisconnect = connected && (activeSet.Count > 1 || !AudioService.IsSystemDefault(node.DeviceId));
+            bool canDisconnect = connected && (activeOutputs.Length > 1 || !AudioService.IsSystemDefault(node.DeviceId));
             var item = new OutputConnectionItem(
                 DeviceId: node.DeviceId,
                 PrimaryName: node.PrimaryName,
@@ -1670,11 +1688,11 @@ internal sealed partial class AppsPageView
         {
             if (node.Flow == Flow.Render)
             {
-                var activeSet = _pendingOutputs ?? _selectedOutputs;
-                bool connected = activeSet.Contains(node.DeviceId);
+                var activeOutputs = DisplayedOutputs;
+                bool connected = activeOutputs.Contains(node.DeviceId, IdCmp);
                 string? nativeId = GetDisplayedNativeOutputId(app);
                 bool isNative = connected && nativeId != null && IdCmp.Equals(node.DeviceId, nativeId);
-                bool canDisconnect = connected && (activeSet.Count > 1 || !AudioService.IsSystemDefault(node.DeviceId));
+                bool canDisconnect = connected && (activeOutputs.Length > 1 || !AudioService.IsSystemDefault(node.DeviceId));
 
                 if (!isNative && (!node.IsPhoneOutput || app.IsExternal))
                 {
@@ -2082,7 +2100,7 @@ internal sealed partial class AppsPageView
                 if (node.Flow == Flow.Render && _outputChoicesIdentity != _selectedIdentity) return false;
                 if (node.Flow == Flow.Capture && _selectedApp.IsExternal) return false;
                 bool isConnectedFwd = node.Flow == Flow.Render
-                    && (_pendingOutputs ?? _selectedOutputs).Contains(node.DeviceId)
+                    && DisplayedOutputs.Contains(node.DeviceId, IdCmp)
                     && !IdCmp.Equals(GetDisplayedNativeOutputId(_selectedApp), node.DeviceId);
                 BeginWireDrag(
                     node.Flow == Flow.Capture ? WireDragOriginKind.CaptureDevicePort : WireDragOriginKind.RenderDevicePort,
@@ -2174,7 +2192,7 @@ internal sealed partial class AppsPageView
                     if (moved)
                     {
                         if (mode == InteractionMode.DraggingNode)
-                            MarkDraggedNodeUserPositioned(draggedKey);
+                            CommitCanvasCardDrag(draggedKey);
                         ScheduleCanvasLayoutSave();
                         return true;
                     }
@@ -2258,15 +2276,7 @@ internal sealed partial class AppsPageView
             _dockResultsScroll.OnWheel(delta);
             return _dockResultsScroll.Offset != before;
         }
-        bool dockCard = _hit?.HitTest(x, y)?.Id.StartsWith(DockItemPrefix, StringComparison.Ordinal) == true;
-        if (dockCard || (_appsScroll.MaxOffset > 0f && _dockListRect.Contains(x, y)))
-        {
-            float before = _appsScroll.Offset;
-            _appsScroll.OnWheel(delta);
-            if (_appsScroll.Offset == before) return false;
-            ResetDockHover();
-            return true;
-        }
+        if (Dock.HandlesWheel(_hit, x, y)) return Dock.Scroll(delta);
 
         if (!_canvasRect.Contains(x, y) || _activeCanvasAppKey == null) return false;
         // Use the same clipped, frontmost target as pointer and keyboard input.
@@ -2326,11 +2336,32 @@ internal sealed partial class AppsPageView
         return false;
     }
 
-    private void MarkDraggedNodeUserPositioned(string? draggedNodeKey)
+    private void RebuildCanvasCardOrder()
     {
+        _canvasCardOrder.Clear();
+        _canvasCardOrder.AddRange(_orderedRenderNodes);
+        _canvasCardOrder.AddRange(_orderedCaptureNodes);
+        _canvasCardOrder.Add(null);
+        foreach (string key in _raisedCanvasCards)
+        {
+            for (int i = 0; i < _canvasCardOrder.Count; i++)
+            {
+                var card = _canvasCardOrder[i];
+                if (!IdCmp.Equals(key, card?.LayoutKey ?? AppCanvasLayout.AppCardKey)) continue;
+                _canvasCardOrder.RemoveAt(i);
+                _canvasCardOrder.Add(card);
+                break;
+            }
+        }
+    }
+
+    private void CommitCanvasCardDrag(string? draggedNodeKey)
+    {
+        string cardKey;
         if (draggedNodeKey == null)
         {
             _appNodeUserPositioned = true;
+            cardKey = AppCanvasLayout.AppCardKey;
         }
         else if (_deviceNodes.TryGetValue(draggedNodeKey, out var node))
         {
@@ -2338,7 +2369,15 @@ internal sealed partial class AppsPageView
             node.HasAssignedPosition = true;
             _lastMovedDeviceLayoutKey = node.LayoutKey;
             RememberNodePosition(_activeCanvasAppKey, node);
+            cardKey = node.LayoutKey;
         }
+        else return;
+
+        int index = _raisedCanvasCards.FindIndex(key => IdCmp.Equals(key, cardKey));
+        if (index >= 0) _raisedCanvasCards.RemoveAt(index);
+        _raisedCanvasCards.Add(cardKey);
+        if (_raisedCanvasCards.Count > AppCanvasLayout.MaxDevices + 1) _raisedCanvasCards.RemoveAt(0);
+        RebuildCanvasCardOrder();
     }
 
     private void BeginWireDrag(WireDragOriginKind kind, string? originDevId, UiPoint originWorld, UiColor color, bool dashed, float sx, float sy)
@@ -2361,12 +2400,12 @@ internal sealed partial class AppsPageView
     {
         WireDragOriginKind.NativePort => node.Flow == Flow.Render,
         WireDragOriginKind.ForwardPort => node.Flow == Flow.Render && !IdCmp.Equals(node.DeviceId, _wireOriginDeviceId),
-        WireDragOriginKind.AddOutputPort => node.Flow == Flow.Render && !(_pendingOutputs ?? _selectedOutputs).Contains(node.DeviceId),
+        WireDragOriginKind.AddOutputPort => node.Flow == Flow.Render && !DisplayedOutputs.Contains(node.DeviceId, IdCmp),
         WireDragOriginKind.MicPort => node.Flow == Flow.Capture,
         WireDragOriginKind.RenderDevicePort => node.Flow == Flow.Render
             && _wireOriginDeviceId != null
             && !IdCmp.Equals(node.DeviceId, _wireOriginDeviceId)
-            && (_pendingOutputs ?? _selectedOutputs).Contains(_wireOriginDeviceId),
+            && DisplayedOutputs.Contains(_wireOriginDeviceId, IdCmp),
         WireDragOriginKind.CaptureDevicePort => node.Flow == Flow.Capture
             && _wireOriginDeviceId != null
             && !IdCmp.Equals(node.DeviceId, _wireOriginDeviceId)
@@ -2387,7 +2426,7 @@ internal sealed partial class AppsPageView
     private bool IsDockOverlayAt(float x, float y) =>
         (_dockToolsOpen && _dockToolsRect.Contains(x, y)) ||
         _hit?.IsOverlayAt(x, y) == true ||
-        (_dockListRect.Contains(x, y) && _hit?.HitTest(x, y)?.Id.StartsWith(DockItemPrefix, StringComparison.Ordinal) == true);
+        Dock.OwnsItem(_hit?.HitTest(x, y)?.Id);
 
     private bool IsBlankWireDrop(float x, float y) =>
         !GetAppDropRect().Contains(x, y)
@@ -2408,8 +2447,8 @@ internal sealed partial class AppsPageView
             }
             else if (_wireOriginKind == WireDragOriginKind.RenderDevicePort && _wireOriginDeviceId != null)
             {
-                var activeSet = _pendingOutputs ?? _selectedOutputs;
-                if (activeSet.Contains(_wireOriginDeviceId)) DisconnectOutputDevice(app, _wireOriginDeviceId);
+                var activeOutputs = DisplayedOutputs;
+                if (activeOutputs.Contains(_wireOriginDeviceId, IdCmp)) DisconnectOutputDevice(app, _wireOriginDeviceId);
                 else ConnectOutputDevice(app, _wireOriginDeviceId);
             }
             else if (_wireOriginKind == WireDragOriginKind.CaptureDevicePort && _wireOriginDeviceId != null && !app.IsExternal)
@@ -2427,8 +2466,8 @@ internal sealed partial class AppsPageView
                 var target = HitTestDeviceNode(Flow.Render, dropWorldX, dropWorldY);
                 if (target != null)
                 {
-                    var activeSet = _pendingOutputs ?? _selectedOutputs;
-                    if (!activeSet.Contains(target.DeviceId))
+                    var activeOutputs = DisplayedOutputs;
+                    if (!activeOutputs.Contains(target.DeviceId, IdCmp))
                         ConnectOutputDevice(app, target.DeviceId);
                 }
                 break;
@@ -2480,8 +2519,8 @@ internal sealed partial class AppsPageView
                 }
 
                 // Dragging a connected output device port onto another output device reroutes; onto blank canvas disconnects.
-                var activeSet = _pendingOutputs ?? _selectedOutputs;
-                if (!activeSet.Contains(_wireOriginDeviceId)) break;
+                var activeOutputs = DisplayedOutputs;
+                if (!activeOutputs.Contains(_wireOriginDeviceId, IdCmp)) break;
 
                 var otherDevice = HitTestDeviceNode(Flow.Render, dropWorldX, dropWorldY);
                 if (otherDevice != null)
@@ -2525,11 +2564,10 @@ internal sealed partial class AppsPageView
 
     private CanvasDeviceNode? HitTestDeviceNode(Flow flow, float wx, float wy)
     {
-        var list = flow == Flow.Capture ? _orderedCaptureNodes : _orderedRenderNodes;
-        for (int i = list.Count - 1; i >= 0; i--)
+        for (int i = _canvasCardOrder.Count - 1; i >= 0; i--)
         {
-            var n = list[i];
-            if (GetDeviceDropRect(n).Contains(wx, wy)) return n;
+            var n = _canvasCardOrder[i];
+            if (n != null && n.Flow == flow && GetDeviceDropRect(n).Contains(wx, wy)) return n;
         }
         return null;
     }
@@ -2575,8 +2613,8 @@ internal sealed partial class AppsPageView
         }
         else if (wire.Kind == CanvasWireKind.NativeOutput)
         {
-            var activeSet = _pendingOutputs ?? _selectedOutputs;
-            bool canDisc = activeSet.Count > 1 || !AudioService.IsSystemDefault(wire.DeviceId);
+            var activeOutputs = DisplayedOutputs;
+            bool canDisc = activeOutputs.Length > 1 || !AudioService.IsSystemDefault(wire.DeviceId);
             if (canDisc)
             {
                 items.Add(new UiMenuItem
@@ -2629,7 +2667,7 @@ internal sealed partial class AppsPageView
         else if (_dragMoved && _interaction is InteractionMode.DraggingNode or InteractionMode.PanningCanvas)
         {
             if (_interaction == InteractionMode.DraggingNode)
-                MarkDraggedNodeUserPositioned(_dragNodeKey);
+                CommitCanvasCardDrag(_dragNodeKey);
             ScheduleCanvasLayoutSave();
         }
         _interaction = InteractionMode.None;

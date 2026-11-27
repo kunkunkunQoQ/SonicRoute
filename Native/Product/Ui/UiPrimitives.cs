@@ -632,7 +632,7 @@ internal static class UiPrimitives
 
     public static void DrawComboBox(D2dTarget g, UiThemePalette t, UiHitMap hit, string id, UiRect rect, string text,
         bool open = false, float fontSize = 12.5f, bool enabled = true, bool showTooltip = true,
-        ComboAppIcon? appIcon = null, Action? onAppIconLoaded = null)
+        ComboAppIcon? appIcon = null, Action? onAppIconLoaded = null, bool wrapText = false)
     {
         if (enabled) hit.Add(id, rect, UiCursorKind.Hand, showTooltip ? text : null);
         bool hot = enabled && hit.IsHover(id);
@@ -648,7 +648,7 @@ internal static class UiPrimitives
             if (!hit.VisiblePart(iconRect).IsEmpty) icon.Draw(g, iconRect, ink, onAppIconLoaded, opacity);
             label = label.Deflate(22f, 0, 0, 0);
         }
-        g.DrawText(text, label, ink, fontSize, 400, UiTextAlign.Leading, UiVertAlign.Center);
+        g.DrawText(text, label, ink, fontSize, 400, UiTextAlign.Leading, UiVertAlign.Center, wrap: wrapText);
         float arrowRight = rect.Right - 12f;
         float arrowTop = rect.CenterY - 2f;
         var arrowColor = t.TextSecondary.WithAlphaFraction(opacity);

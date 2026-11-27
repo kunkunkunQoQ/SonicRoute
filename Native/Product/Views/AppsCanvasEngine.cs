@@ -165,10 +165,11 @@ internal static class AppsCanvasLayoutEngine
         Func<CanvasDeviceNode, int> renderRank,
         Func<CanvasDeviceNode, int> captureRank,
         bool fullArrange,
-        IReadOnlyDictionary<string, RememberedNodePosition>? remembered)
+        IReadOnlyDictionary<string, RememberedNodePosition>? remembered,
+        bool allowTwoColumns = true,
+        bool restoreSavedStack = false)
     {
         bool changed = false;
-        var obstacles = new List<UiRect>(renderNodes.Count + captureNodes.Count + 2);
 
         if (fullArrange)
         {
@@ -179,29 +180,14 @@ internal static class AppsCanvasLayoutEngine
             appY = newAppY;
             appUserPositioned = false;
 
-            var appRect = new UiRect(appX, appY, AppsCanvasMetrics.AppNodeWidth, appHeight);
-            obstacles.Add(appRect);
-
             float col1X = appX + AppsCanvasMetrics.AppNodeWidth + AppsCanvasMetrics.DefaultColumnGap;
-            float col2X = col1X + AppsCanvasMetrics.DeviceNodeWidth + AppsCanvasMetrics.DefaultDeviceGapX;
             float renderTop = AppsCanvasMetrics.DefaultStartY;
 
-            // Playback partition: connected devices first in Column 1, then remaining in 1 or 2 columns.
+            // Read roles across each row before moving down. Unused phone outputs start their own row.
             var sortedRender = SortByRank(renderNodes, renderRank);
-            int renderCols = sortedRender.Count > 4 ? 2 : 1;
-            for (int i = 0; i < sortedRender.Count; i++)
-            {
-                var n = sortedRender[i];
-                bool isConnected = renderRank(n) <= 1;
-                int allowedCols = isConnected ? 1 : renderCols;
-                var pt = FindFreeSlotInPartition(renderTop, col1X, col2X, allowedCols, n.Width, n.Height, obstacles);
-                if (!n.HasAssignedPosition || MathF.Abs(n.X - pt.X) > 0.1f || MathF.Abs(n.Y - pt.Y) > 0.1f) changed = true;
-                n.X = pt.X;
-                n.Y = pt.Y;
-                n.IsUserPositioned = false;
-                n.HasAssignedPosition = true;
-                obstacles.Add(n.Bounds);
-            }
+            int renderCols = allowTwoColumns && sortedRender.Count > 4 ? 2 : 1;
+            int firstOptionalPhone = sortedRender.FindIndex(n => n.IsPhoneOutput && renderRank(n) > 1);
+            changed |= PlaceSortedRows(sortedRender, col1X, renderTop, renderCols, firstOptionalPhone);
 
             // Gently center short playback column against App Node only when there is no Mic section below.
             if (sortedRender.Count > 0 && captureNodes.Count == 0 && renderCols == 1)
@@ -234,20 +220,8 @@ internal static class AppsCanvasLayoutEngine
                     : renderTop;
 
                 var sortedCapture = SortByRank(captureNodes, captureRank);
-                int capCols = sortedCapture.Count > 4 ? 2 : 1;
-                for (int i = 0; i < sortedCapture.Count; i++)
-                {
-                    var n = sortedCapture[i];
-                    bool isConnected = captureRank(n) == 0;
-                    int allowedCols = isConnected ? 1 : capCols;
-                    var pt = FindFreeSlotInPartition(micZoneTop, col1X, col2X, allowedCols, n.Width, n.Height, obstacles);
-                    if (!n.HasAssignedPosition || MathF.Abs(n.X - pt.X) > 0.1f || MathF.Abs(n.Y - pt.Y) > 0.1f) changed = true;
-                    n.X = pt.X;
-                    n.Y = pt.Y;
-                    n.IsUserPositioned = false;
-                    n.HasAssignedPosition = true;
-                    obstacles.Add(n.Bounds);
-                }
+                int capCols = allowTwoColumns && sortedCapture.Count > 4 ? 2 : 1;
+                changed |= PlaceSortedRows(sortedCapture, col1X, micZoneTop, capCols);
                 captureNodes.Clear();
                 captureNodes.AddRange(sortedCapture);
             }
@@ -258,15 +232,14 @@ internal static class AppsCanvasLayoutEngine
         // === Incremental Dynamic Reconcile ===
         // 1. App Node is always an obstacle with its real current height (including dynamic forwarding rows).
         var liveAppRect = new UiRect(appX, appY, AppsCanvasMetrics.AppNodeWidth, appHeight);
-        obstacles.Add(liveAppRect);
+        var obstacles = new List<UiRect>(renderNodes.Count + captureNodes.Count + 2) { liveAppRect };
 
-        // Compute stable right-hand column X anchor without jittering existing auto-arranged nodes.
-        float anchorCol1X = ComputeStableColumnX(liveAppRect, renderNodes, captureNodes);
-        float anchorCol2X = anchorCol1X + AppsCanvasMetrics.DeviceNodeWidth + AppsCanvasMetrics.DefaultDeviceGapX;
-        float rZoneTop = AppsCanvasMetrics.DefaultStartY;
+        HashSet<CanvasDeviceNode>? restoredStack = restoreSavedStack ? new() : null;
+        bool IsLocked(CanvasDeviceNode n) => n.HasAssignedPosition
+            && (n.IsUserPositioned || restoredStack?.Contains(n) == true);
 
-        // 2. Lock already-present user-positioned nodes first (user manual placements are strictly preserved).
-        //    Also restore reconnected user-positioned nodes ONLY if their remembered position is still collision-free.
+        // 2. Preserve a saved stack when opening the canvas, including the cards underneath it.
+        //    During ordinary device reconnects, restore remembered manual positions only if clear.
         void LockPinnedNodes(List<CanvasDeviceNode> list)
         {
             for (int i = 0; i < list.Count; i++)
@@ -277,16 +250,17 @@ internal static class AppsCanvasLayoutEngine
                     obstacles.Add(n.Bounds);
                 }
                 else if (!n.HasAssignedPosition && remembered != null
-                    && remembered.TryGetValue(n.LayoutKey, out var rem) && rem.UserPositioned)
+                    && remembered.TryGetValue(n.LayoutKey, out var rem) && (restoreSavedStack || rem.UserPositioned))
                 {
                     var cand = new UiRect(rem.X, rem.Y, n.Width, n.Height);
-                    if (!OverlapsAny(cand, obstacles))
+                    if (restoreSavedStack || !OverlapsAny(cand, obstacles))
                     {
                         n.X = rem.X;
                         n.Y = rem.Y;
-                        n.IsUserPositioned = true;
+                        n.IsUserPositioned = rem.UserPositioned;
                         n.HasAssignedPosition = true;
                         obstacles.Add(cand);
+                        restoredStack?.Add(n);
                         changed = true;
                     }
                 }
@@ -295,12 +269,17 @@ internal static class AppsCanvasLayoutEngine
         LockPinnedNodes(renderNodes);
         LockPinnedNodes(captureNodes);
 
+        // Compute stable right-hand column X anchor without jittering existing auto-arranged nodes.
+        float anchorCol1X = ComputeStableColumnX(liveAppRect, renderNodes, captureNodes);
+        float anchorCol2X = anchorCol1X + AppsCanvasMetrics.DeviceNodeWidth + AppsCanvasMetrics.DefaultDeviceGapX;
+        float rZoneTop = AppsCanvasMetrics.DefaultStartY;
+
         // 3. Playback Partition (Flow.Render, strictly upper right zone)
         var renderNeedsPlace = new List<CanvasDeviceNode>();
         for (int i = 0; i < renderNodes.Count; i++)
         {
             var n = renderNodes[i];
-            if (n.HasAssignedPosition && n.IsUserPositioned) continue;
+            if (IsLocked(n)) continue;
 
             if (n.HasAssignedPosition && !OverlapsAny(n.Bounds, obstacles))
             {
@@ -380,7 +359,7 @@ internal static class AppsCanvasLayoutEngine
             for (int i = 0; i < captureNodes.Count; i++)
             {
                 var n = captureNodes[i];
-                if (n.HasAssignedPosition && n.IsUserPositioned) continue;
+                if (IsLocked(n)) continue;
                 if (!n.HasAssignedPosition) continue;
                 existingAutoCapCount++;
                 if (n.Y < minExistingAutoCapY) minExistingAutoCapY = n.Y;
@@ -404,7 +383,7 @@ internal static class AppsCanvasLayoutEngine
                 var autoCaps = new List<CanvasDeviceNode>();
                 for (int i = 0; i < captureNodes.Count; i++)
                 {
-                    if (!(captureNodes[i].HasAssignedPosition && captureNodes[i].IsUserPositioned))
+                    if (!IsLocked(captureNodes[i]))
                         autoCaps.Add(captureNodes[i]);
                 }
                 autoCaps.Sort((a, b) =>
@@ -440,7 +419,7 @@ internal static class AppsCanvasLayoutEngine
                 for (int i = 0; i < captureNodes.Count; i++)
                 {
                     var n = captureNodes[i];
-                    if (n.HasAssignedPosition && n.IsUserPositioned) continue;
+                    if (IsLocked(n)) continue;
                     if (n.HasAssignedPosition)
                         obstacles.Add(n.Bounds);
                     else
@@ -555,18 +534,48 @@ internal static class AppsCanvasLayoutEngine
         return max;
     }
 
+    private static bool PlaceSortedRows(List<CanvasDeviceNode> nodes, float firstX, float y, int columns, int rowBreak = -1)
+    {
+        bool changed = false;
+        int column = 0;
+        float rowHeight = 0f;
+        float columnPitch = AppsCanvasMetrics.DeviceNodeWidth + AppsCanvasMetrics.DefaultDeviceGapX;
+        for (int i = 0; i < nodes.Count; i++)
+        {
+            var n = nodes[i];
+            float x = firstX + column * columnPitch;
+            if (!n.HasAssignedPosition || MathF.Abs(n.X - x) > 0.1f || MathF.Abs(n.Y - y) > 0.1f) changed = true;
+            n.X = x;
+            n.Y = y;
+            n.IsUserPositioned = false;
+            n.HasAssignedPosition = true;
+
+            rowHeight = MathF.Max(rowHeight, n.Height);
+            column++;
+            if (column == columns || i + 1 == rowBreak)
+            {
+                y += rowHeight + AppsCanvasMetrics.DefaultDeviceGapY;
+                column = 0;
+                rowHeight = 0f;
+            }
+        }
+        return changed;
+    }
+
     private static List<CanvasDeviceNode> SortByRank(IReadOnlyList<CanvasDeviceNode> source, Func<CanvasDeviceNode, int> rank)
     {
-        var indexed = new List<(CanvasDeviceNode Node, int Rank, int Index)>(source.Count);
+        var ranked = new List<(CanvasDeviceNode Node, int Rank)>(source.Count);
         for (int i = 0; i < source.Count; i++)
-            indexed.Add((source[i], rank(source[i]), i));
-        indexed.Sort((a, b) =>
+            ranked.Add((source[i], rank(source[i])));
+        ranked.Sort((a, b) =>
         {
             int r = a.Rank.CompareTo(b.Rank);
-            return r != 0 ? r : a.Index.CompareTo(b.Index);
+            if (r != 0) return r;
+            int name = StringComparer.CurrentCultureIgnoreCase.Compare(a.Node.PrimaryName, b.Node.PrimaryName);
+            return name != 0 ? name : StringComparer.OrdinalIgnoreCase.Compare(a.Node.DeviceId, b.Node.DeviceId);
         });
         var result = new List<CanvasDeviceNode>(source.Count);
-        for (int i = 0; i < indexed.Count; i++) result.Add(indexed[i].Node);
+        for (int i = 0; i < ranked.Count; i++) result.Add(ranked[i].Node);
         return result;
     }
 }

@@ -7,13 +7,19 @@ internal readonly record struct ComboChoice(string Key, string Label, UiIcon? Ic
 
 /// <summary>
 /// Floating scrollable dropdown popup matching WPF App.xaml RoundedComboBox + RoundedComboItem.
-/// Supports full keyboard navigation, type-ahead prefix cycling, anchor-width sizing, and close notifications.
+/// Supports keyboard navigation, type-ahead, optional sizing to the choices, and close notifications.
 /// </summary>
 internal sealed class ComboPopupWindow : LayeredWindow
 {
     private const float ItemH = 39f;
     private const float Pad = 1f;
     private const float MaxListHeight = 320f;
+    private const float RowInset = 4f;
+    private const float LabelInset = 10f;
+    private const float LabelFont = 13f;
+    private const float AppIconSpace = 22f;
+    private const float GlyphSpace = 20f;
+    private const float ScrollSpace = UiMetrics.ScrollBarWidth + 2f;
     private readonly LayeredWindow _owner;
 
     private UiThemePalette _theme;
@@ -69,7 +75,8 @@ internal sealed class ComboPopupWindow : LayeredWindow
         IReadOnlyList<ComboChoice> choices,
         string selectedKey,
         Action<ComboChoice> onSelected,
-        Func<Action, bool>? tryPost = null)
+        Func<Action, bool>? tryPost = null,
+        bool fitChoices = false)
     {
         var pop = new ComboPopupWindow(theme, choices, selectedKey, onSelected, owner, tryPost);
         var topLeft = owner.DipToScreenPx(comboRectDip.X, comboRectDip.Y);
@@ -77,8 +84,6 @@ internal sealed class ComboPopupWindow : LayeredWindow
         var center = owner.DipToScreenPx(comboRectDip.CenterX, comboRectDip.CenterY);
         GetMonitorWorkAreaForPoint(center.X, center.Y, out int ml, out int mt, out int mr, out int mb, out uint monDpi);
         float scale = monDpi / 96f;
-        int widthPx = Math.Clamp(bottomRight.X - topLeft.X, 1, Math.Max(1, mr - ml));
-        int xPx = Math.Clamp(topLeft.X, ml, Math.Max(ml, mr - widthPx));
         int gapPx = (int)MathF.Round(4f * scale);
         int below = Math.Max(0, mb - bottomRight.Y - gapPx);
         int above = Math.Max(0, topLeft.Y - gapPx - mt);
@@ -89,6 +94,25 @@ internal sealed class ComboPopupWindow : LayeredWindow
         int yPx = openAbove ? topLeft.Y - gapPx - heightPx : bottomRight.Y + gapPx;
         yPx = Math.Clamp(yPx, mt, Math.Max(mt, mb - heightPx));
         float viewH = MathF.Max(0f, heightPx / scale - Pad * 2f);
+
+        int widthPx = bottomRight.X - topLeft.X;
+        if (fitChoices)
+        {
+            float maxLabelWidth = MathF.Max(1f, (mr - ml) / scale);
+            float widest = 0f;
+            foreach (var choice in choices)
+            {
+                float labelWidth = D2dSharedContext.Instance.MeasureText(choice.Label, UiMetrics.FontFamily, LabelFont, 400,
+                    maxLabelWidth, ItemH, wrap: false).Width;
+                float iconSpace = choice.AppIcon != null ? AppIconSpace : choice.Icon != null ? GlyphSpace : 0f;
+                widest = MathF.Max(widest, labelWidth + iconSpace);
+            }
+            float preferredWidth = widest + 2f * (Pad + RowInset + LabelInset) + 2f;
+            if (contentH - viewH > 0.5f) preferredWidth += ScrollSpace;
+            widthPx = Math.Max(widthPx, (int)MathF.Ceiling(preferredWidth * scale));
+        }
+        widthPx = Math.Clamp(widthPx, 1, Math.Max(1, mr - ml));
+        int xPx = Math.Clamp(topLeft.X, ml, Math.Max(ml, mr - widthPx));
 
         pop._scroll.ContentHeight = contentH;
         pop._scroll.ViewportHeight = viewH;
@@ -129,7 +153,7 @@ internal sealed class ComboPopupWindow : LayeredWindow
         _scroll.ContentHeight = _choices.Count * ItemH;
         _scroll.Clamp();
 
-        float itemW = _scroll.MaxOffset > 0.5f ? view.Width - UiMetrics.ScrollBarWidth - 2f : view.Width;
+        float itemW = _scroll.MaxOffset > 0.5f ? view.Width - ScrollSpace : view.Width;
         g.PushClip(view);
         for (int i = 0; i < _choices.Count; i++)
         {
@@ -139,23 +163,23 @@ internal sealed class ComboPopupWindow : LayeredWindow
             var choice = _choices[i];
             bool sel = choice.Key == _selectedKey;
             bool hot = i == _hoverIndex || i == _focusedIndex;
-            var inner = r.Deflate(4f);
+            var inner = r.Deflate(RowInset);
             if (sel || hot) g.FillRoundedRect(inner, 7f, _theme.Accent);
             UiColor ink = sel || hot ? _theme.OnAccent : _theme.TextPrimary;
-            var label = inner.Deflate(10f, 0f);
+            var label = inner.Deflate(LabelInset, 0f);
             if (choice.AppIcon is { } appIcon)
             {
                 appIcon.Draw(g, new UiRect(label.X, label.CenterY - 8f, 16f, 16f), ink, _onAppIconLoaded);
-                label = label.Deflate(22f, 0, 0, 0);
+                label = label.Deflate(AppIconSpace, 0, 0, 0);
             }
             else if (choice.Icon is UiIcon icon)
             {
                 g.DrawIcon(icon, new UiRect(label.X, label.CenterY - 7f, 14f, 14f), ink);
-                label = label.Deflate(20f, 0, 0, 0);
+                label = label.Deflate(GlyphSpace, 0, 0, 0);
             }
             // The full label stays available to the tooltip, type-ahead and selection callbacks.
             _hit.Add(choice.Key, UiHitMap.Intersect(view, r), UiCursorKind.Arrow, choice.Label);
-            g.DrawText(choice.Label, label, ink, 13f, 400, UiTextAlign.Leading, UiVertAlign.Center, wrap: false, ellipsis: true);
+            g.DrawText(choice.Label, label, ink, LabelFont, 400, UiTextAlign.Leading, UiVertAlign.Center, wrap: false, ellipsis: true);
         }
         g.PopClip();
 
@@ -334,7 +358,7 @@ internal sealed class ComboPopupWindow : LayeredWindow
 
     private int HitChoiceIndex(float x, float y)
     {
-        var view = new UiRect(Pad, Pad, WidthDip - Pad * 2f - (_scroll.MaxOffset > 0.5f ? UiMetrics.ScrollBarWidth + 2f : 0f), HeightDip - Pad * 2f);
+        var view = new UiRect(Pad, Pad, WidthDip - Pad * 2f - (_scroll.MaxOffset > 0.5f ? ScrollSpace : 0f), HeightDip - Pad * 2f);
         if (!view.Contains(x, y)) return -1;
         int idx = (int)MathF.Floor((y - view.Y + _scroll.Offset) / ItemH);
         return idx >= 0 && idx < _choices.Count ? idx : -1;

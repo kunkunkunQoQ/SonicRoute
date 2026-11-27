@@ -37,7 +37,10 @@ internal interface IViewHostActions
     void ShowProjectLicense(string text);
     void ShowMenu(UiRect anchorDip, List<UiMenuItem> items);
     void ShowMenuAtCursor(List<UiMenuItem> items, bool alignBottomUp = false);
-    void ShowCombo(UiRect anchorDip, IReadOnlyList<ComboChoice> choices, string selectedKey, Action<ComboChoice> onSelected);
+    void ShowCombo(UiRect anchorDip, IReadOnlyList<ComboChoice> choices, string selectedKey,
+        Action<ComboChoice> onSelected) => ShowCombo(anchorDip, choices, selectedKey, onSelected, fitChoices: false);
+    void ShowCombo(UiRect anchorDip, IReadOnlyList<ComboChoice> choices, string selectedKey,
+        Action<ComboChoice> onSelected, bool fitChoices);
     void StartInlineEdit(
         string tag,
         UiRect rectDip,
@@ -78,6 +81,13 @@ internal interface IViewPage : IDisposable
     void OnThemeChanged(UiThemePalette theme) { }
     bool NeedsAnimationTick => false;
     void TickAnimation() { }
+}
+
+internal interface IViewDockPage
+{
+    UiDockRail Dock { get; }
+    bool NeedsContentAnimationTick => false;
+    void RenderDock(D2dTarget g, UiThemePalette theme, UiHitMap hit, float navEdge);
 }
 
 // ConfigService owns the existing atomic file and last committed snapshot.

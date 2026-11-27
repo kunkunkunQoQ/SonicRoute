@@ -776,6 +776,8 @@
   "Phone.RetainedCountFormat": "Pinned apps: {0}",
   "Phone.PinDesc": "Pinned apps appear in the device list in the quick panel. Turn on Smart Volume to even out volume changes automatically.",
   "Phone.RetainedEmptyHint": "Add your favorite apps here for quick access next time.",
+  "Phone.AddAppsShort": "Add apps",
+  "Phone.AppPinColumn": "Pinned",
   "Phone.AddQuickPanelAppButton": "＋  Add apps to quick panel",
   "Phone.QrPairTitle": "Pair with QR code",
   "Phone.QrPairSteps": "Developer options → Wireless debugging → Pair device with QR code",

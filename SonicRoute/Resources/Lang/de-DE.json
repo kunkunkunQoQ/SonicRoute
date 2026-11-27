@@ -776,6 +776,8 @@
   "Phone.RetainedCountFormat": "Angeheftete Apps: {0}",
   "Phone.PinDesc": "Angeheftete Apps erscheinen in der Geräteliste im Schnellpanel. Aktivieren Sie „Intelligente Lautstärke“, um Lautstärkeunterschiede automatisch auszugleichen.",
   "Phone.RetainedEmptyHint": "Fügen Sie häufig genutzte Apps hinzu, um sie beim nächsten Öffnen sofort zu nutzen.",
+  "Phone.AddAppsShort": "Apps hinzufügen",
+  "Phone.AppPinColumn": "Angeheftet",
   "Phone.AddQuickPanelAppButton": "＋  Apps zum Schnellpanel hinzufügen",
   "Phone.QrPairTitle": "Per QR-Code koppeln",
   "Phone.QrPairSteps": "Entwickleroptionen → Kabelloses Debugging → Über QR-Code koppeln",

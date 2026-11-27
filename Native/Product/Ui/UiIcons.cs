@@ -37,6 +37,7 @@ internal enum UiIcon
     Monitor,
     Phone,
 #if SONICROUTE_PHONE
+    Devices,
     AirPlay,
     Download,
     Folder,
@@ -116,6 +117,7 @@ internal static class UiIcons
         UiIcon.Monitor => "M2,3 L22,3 L22,17 L2,17 Z M12,17 L12,22 M7,22 L17,22",
         UiIcon.Phone => "M7,1 L17,1 Q19,1 19,3 L19,21 Q19,23 17,23 L7,23 Q5,23 5,21 L5,3 Q5,1 7,1 Z M10,3 L14,3 M10,21 L14,21",
 #if SONICROUTE_PHONE
+        UiIcon.Devices => "M11,15 H4 Q2,15 2,13 V6 Q2,4 4,4 H17 Q19,4 19,6 M8,15 V20 M5,20 H11 M16,9 H20 Q22,9 22,11 V19 Q22,21 20,21 H16 Q14,21 14,19 V11 Q14,9 16,9 Z",
         UiIcon.AirPlay => "M6,18 H4 Q2,18 2,16 V5 Q2,3 4,3 H20 Q22,3 22,5 V16 Q22,18 20,18 H18 M5,22 L12,13 L19,22 Z",
 #endif
 #if SONICROUTE_PHONE

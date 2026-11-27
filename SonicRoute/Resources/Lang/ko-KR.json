@@ -776,6 +776,8 @@
   "Phone.RetainedCountFormat": "고정된 앱: {0}개",
   "Phone.PinDesc": "고정한 앱은 빠른 패널의 기기 목록에 표시됩니다. 스마트 볼륨 조절을 켜면 소리 크기의 차이를 자동으로 줄여 줍니다.",
   "Phone.RetainedEmptyHint": "자주 쓰는 앱을 추가하면 다음에 바로 사용할 수 있습니다.",
+  "Phone.AddAppsShort": "앱 추가",
+  "Phone.AppPinColumn": "고정",
   "Phone.AddQuickPanelAppButton": "＋  빠른 패널에 앱 추가",
   "Phone.QrPairTitle": "QR 코드 페어링",
   "Phone.QrPairSteps": "개발자 옵션 → 무선 디버깅 → QR 코드로 페어링",

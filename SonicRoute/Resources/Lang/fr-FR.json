@@ -776,6 +776,8 @@
   "Phone.RetainedCountFormat": "Applications épinglées : {0}",
   "Phone.PinDesc": "Les applications épinglées apparaissent dans le panneau rapide de l’appareil. Activez le volume intelligent pour atténuer les écarts de volume.",
   "Phone.RetainedEmptyHint": "Ajoutez les applications que vous utilisez souvent pour les retrouver dans le panneau rapide.",
+  "Phone.AddAppsShort": "Ajouter des applis",
+  "Phone.AppPinColumn": "Épinglées",
   "Phone.AddQuickPanelAppButton": "＋  Ajouter des applications au panneau rapide",
   "Phone.QrPairTitle": "Associer par code QR",
   "Phone.QrPairSteps": "Options pour les développeurs → Débogage sans fil → Associer avec un code QR",

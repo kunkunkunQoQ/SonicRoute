@@ -776,6 +776,8 @@
   "Phone.RetainedCountFormat": "Aplicaciones fijadas: {0}",
   "Phone.PinDesc": "Las aplicaciones fijadas aparecen en el panel rápido del dispositivo. Si activas el volumen inteligente, se compensan automáticamente las diferencias de volumen.",
   "Phone.RetainedEmptyHint": "Añade las aplicaciones que uses a menudo para tenerlas a mano en el panel rápido.",
+  "Phone.AddAppsShort": "Añadir aplicaciones",
+  "Phone.AppPinColumn": "Fijadas",
   "Phone.AddQuickPanelAppButton": "＋  Añadir aplicaciones al panel rápido",
   "Phone.QrPairTitle": "Vincular con código QR",
   "Phone.QrPairSteps": "Opciones para desarrolladores → Depuración inalámbrica → Vincular con código QR",

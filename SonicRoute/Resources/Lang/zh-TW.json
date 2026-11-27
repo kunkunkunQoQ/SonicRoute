@@ -776,6 +776,8 @@
   "Phone.RetainedCountFormat": "{0} 個",
   "Phone.PinDesc": "釘選的應用程式會顯示在快速面板的裝置清單中。開啟「智慧音量」可自動平衡音量，減少忽大忽小的情形。",
   "Phone.RetainedEmptyHint": "加入常用的應用程式，方便下次使用。",
+  "Phone.AddAppsShort": "新增應用程式",
+  "Phone.AppPinColumn": "釘選",
   "Phone.AddQuickPanelAppButton": "＋  將應用程式加入快速面板",
   "Phone.QrPairTitle": "掃碼配對",
   "Phone.QrPairSteps": "開發人員選項 → 無線偵錯 → 使用 QR 圖碼配對",

@@ -18,12 +18,14 @@ namespace SonicRoute.Core
     public sealed class AppCanvasLayout
     {
         public const int MaxDevices = 64;
+        public const string AppCardKey = "app";
 
         public float Zoom { get; set; } = 1f;
         public float PanX { get; set; }
         public float PanY { get; set; }
         public CanvasPoint? AppNode { get; set; }
         public Dictionary<string, CanvasPoint> Devices { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+        public List<string> RaisedCards { get; set; } = new();
 
         public AppCanvasLayout Snapshot()
         {
@@ -47,6 +49,17 @@ namespace SonicRoute.Core
                     copy.Devices[pair.Key] = pt;
                     count++;
                 }
+            }
+            if (RaisedCards != null && RaisedCards.Count > 0)
+            {
+                var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                for (int i = RaisedCards.Count - 1; i >= 0; i--)
+                {
+                    string key = RaisedCards[i];
+                    if (key != null && (key == AppCardKey || copy.Devices.ContainsKey(key)) && seen.Add(key))
+                        copy.RaisedCards.Add(key);
+                }
+                copy.RaisedCards.Reverse();
             }
             return copy;
         }

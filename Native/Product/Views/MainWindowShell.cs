@@ -241,7 +241,8 @@ internal sealed partial class MainWindowShell : LayeredWindow, IViewHostActions
             _activeMenu = PopupMenuWindow.ShowAtCursor(_theme, items, Handle, pt.X, pt.Y, alignBottomUp);
     }
 
-    public void ShowCombo(UiRect anchorDip, IReadOnlyList<ComboChoice> choices, string selectedKey, Action<ComboChoice> onSelected)
+    public void ShowCombo(UiRect anchorDip, IReadOnlyList<ComboChoice> choices, string selectedKey,
+        Action<ComboChoice> onSelected, bool fitChoices)
     {
         ClosePopups();
         if (Handle == 0 || choices.Count == 0) return;
@@ -249,7 +250,7 @@ internal sealed partial class MainWindowShell : LayeredWindow, IViewHostActions
         {
             onSelected(choice);
             if (IsVisible) Invalidate();
-        }, _host.TryPost);
+        }, _host.TryPost, fitChoices);
     }
 
     public void StartInlineEdit(
@@ -438,9 +439,10 @@ internal sealed partial class MainWindowShell : LayeredWindow, IViewHostActions
 
         if (_activePage is { NeedsAnimationTick: true } page)
         {
+            bool overlayOnly = page is IViewDockPage { NeedsContentAnimationTick: false };
             page.TickAnimation();
             anyAnim |= page.NeedsAnimationTick;
-            if (!fullFrame) fullFrame = page is not AppsPageView || !RefreshRenderOverlay();
+            if (!fullFrame) fullFrame = !overlayOnly || !RefreshRenderOverlay();
         }
 
         if (!anyAnim) StopAnimationTimer();
@@ -474,7 +476,8 @@ internal sealed partial class MainWindowShell : LayeredWindow, IViewHostActions
         var navClip = new UiRect(0f, bodyY, _sidebarWidth, bodyH);
         _pageViewport = new UiRect(navClip.Right, bodyY, MathF.Max(0f, widthDip - navClip.Right), bodyH);
         bool isApps = _currentTab == MainNavTab.Apps;
-        if (!isApps) DrawNavigation(g, navClip);
+        var dockPage = _activePage as IViewDockPage;
+        if (dockPage == null) DrawNavigation(g, navClip);
         const float padLeft = 9f;
         float padRight = isApps ? 14f : 26f;
         float padTop = isApps ? 10f : 20f;
@@ -495,10 +498,11 @@ internal sealed partial class MainWindowShell : LayeredWindow, IViewHostActions
             g.PopClip();
         }
 
-        if (_activePage is AppsPageView apps)
-            apps.RenderAppDock(g, _theme, _hit, navClip.Right);
-
-        if (isApps) DrawNavigation(g, navClip);
+        if (dockPage != null)
+        {
+            dockPage.RenderDock(g, _theme, _hit, navClip.Right);
+            DrawNavigation(g, navClip);
+        }
 
         if (!string.IsNullOrEmpty(_noticeText))
             RenderNoticeToast(g, widthDip, heightDip, _noticeText);
@@ -520,17 +524,17 @@ internal sealed partial class MainWindowShell : LayeredWindow, IViewHostActions
         g.DrawLine(edge, bounds.Y, edge, bounds.Bottom, _theme.Border, 1f, roundCaps: false);
     }
 
-    protected override UiRect RenderOverlayBounds =>
-        (_activePage as AppsPageView)?.DockOverlayBounds ?? default;
+    private UiDockRail? ActiveDock => (_activePage as IViewDockPage)?.Dock;
 
-    protected override string? RenderOverlayFocusId =>
-        (_activePage as AppsPageView)?.DockOverlayFocusId;
+    protected override UiRect RenderOverlayBounds => ActiveDock?.OverlayBounds ?? default;
+
+    protected override string? RenderOverlayFocusId => ActiveDock?.OverlayFocusId;
 
     protected override void OnRenderOverlay(D2dTarget g)
     {
-        if (_activePage is AppsPageView apps)
+        if (ActiveDock is { } dock)
         {
-            apps.RenderDockOverlay(g, _theme);
+            dock.RenderOverlay(g, _theme);
             if (_noticeText is { Length: > 0 } notice)
                 RenderNoticeToast(g, WidthDip, HeightDip, notice);
         }
@@ -612,7 +616,7 @@ internal sealed partial class MainWindowShell : LayeredWindow, IViewHostActions
         DrawNavItem(g, MainNavTab.Apps, L10n.T("Nav.Apps"), UiIcon.Apps, new UiRect(x, y, itemW, UiMetrics.NavItemHeight));
         y += UiMetrics.NavItemHeight + 4f;
 #if SONICROUTE_PHONE
-        DrawNavItem(g, MainNavTab.Devices, L10n.T("Phone.Title"), UiIcon.Phone, new UiRect(x, y, itemW, UiMetrics.NavItemHeight));
+        DrawNavItem(g, MainNavTab.Devices, L10n.T("Phone.Title"), UiIcon.Devices, new UiRect(x, y, itemW, UiMetrics.NavItemHeight));
         y += UiMetrics.NavItemHeight + 4f;
 #endif
         DrawNavItem(g, MainNavTab.Hotkeys, L10n.T("Nav.Hotkeys"), UiIcon.Keyboard, new UiRect(x, y, itemW, UiMetrics.NavItemHeight));
@@ -698,9 +702,9 @@ internal sealed partial class MainWindowShell : LayeredWindow, IViewHostActions
         else SetCursorKind(UiCursorKind.Arrow);
 
         bool pageChanged = _activePage?.OnPointerMove(xDip, yDip, leftDown) ?? false;
-        if (_activePage is AppsPageView apps)
+        if (ActiveDock is { } dock)
         {
-            if (!leftDown) pageChanged |= apps.UpdateDockHover(HasOpenModal ? null : _hit.Hovered?.Id);
+            if (!leftDown) pageChanged |= dock.UpdateHover(HasOpenModal ? null : _hit.Hovered?.Id);
             if (hoverChanged && IsPlainDockHover(previousHover) && IsPlainDockHover(_hit.Hovered?.Id))
                 hoverChanged = false;
             SyncPageAnimationTimer();
@@ -709,17 +713,17 @@ internal sealed partial class MainWindowShell : LayeredWindow, IViewHostActions
         if (hoverChanged || pageChanged) Invalidate();
     }
 
-    private static bool IsPlainDockHover(string? id) =>
-        id is null or "canvas.bg" || id.StartsWith("apps.item.", StringComparison.Ordinal);
+    private bool IsPlainDockHover(string? id) =>
+        id is null or "canvas.bg" || ActiveDock?.OwnsItem(id) == true;
 
     protected override void OnPointerLeave()
     {
         bool redraw = !IsPlainDockHover(_hit.Hovered?.Id);
         _hit.ClearHover();
         SetCursorKind(UiCursorKind.Arrow);
-        if (_activePage is AppsPageView apps)
+        if (ActiveDock is { } dock)
         {
-            redraw |= apps.UpdateDockHover(null);
+            redraw |= dock.UpdateHover(null);
             SyncPageAnimationTimer();
         }
         else redraw = true;

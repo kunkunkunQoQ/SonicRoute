@@ -776,6 +776,8 @@
   "Phone.RetainedCountFormat": "{0} 件",
   "Phone.PinDesc": "ピン留めしたアプリはクイックパネルのデバイス別リストに表示されます。「スマート音量調整」をオンにすると、音量のばらつきを自動で抑えます。",
   "Phone.RetainedEmptyHint": "よく使うアプリを追加すると、次回からすぐに使えます。",
+  "Phone.AddAppsShort": "アプリを追加",
+  "Phone.AppPinColumn": "固定",
   "Phone.AddQuickPanelAppButton": "＋  クイックパネルにアプリを追加",
   "Phone.QrPairTitle": "QR コードでペア設定",
   "Phone.QrPairSteps": "開発者向けオプション → ワイヤレス デバッグ → QR コードによるデバイスのペア設定",

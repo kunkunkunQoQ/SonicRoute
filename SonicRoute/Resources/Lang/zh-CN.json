@@ -776,6 +776,8 @@
   "Phone.RetainedCountFormat": "{0} 个",
   "Phone.PinDesc": "固定的应用会显示在快速面板的设备列表中。开启“智能音量”可自动减小声音忽大忽小的幅度。",
   "Phone.RetainedEmptyHint": "添加常用应用，方便下次使用。",
+  "Phone.AddAppsShort": "添加应用",
+  "Phone.AppPinColumn": "固定",
   "Phone.AddQuickPanelAppButton": "＋  添加应用到快速面板",
   "Phone.QrPairTitle": "扫码配对",
   "Phone.QrPairSteps": "开发者选项 → 无线调试 → 二维码配对",

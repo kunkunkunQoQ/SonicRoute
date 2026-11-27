@@ -782,7 +782,7 @@ internal sealed class QuickPanelWindow : LayeredWindow
         var phoneRect = new UiRect(rx - phoneBtnW, y - 1f, phoneBtnW, 28f);
         bool phoneOpen = _phoneCompanion is { IsVisible: true };
         UiPrimitives.DrawSecondaryButton(g, theme, _hit, "qp.phone", phoneRect, "",
-            radius: 8f, icon: UiIcon.Phone, active: phoneOpen);
+            radius: 8f, icon: UiIcon.Devices, active: phoneOpen);
         rx = phoneRect.X - 6f;
 #endif
 

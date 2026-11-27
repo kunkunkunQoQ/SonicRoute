@@ -17,7 +17,7 @@ using SonicRoute.AndroidAudio;
 
 namespace SonicRoute.Native.Product.Views;
 
-internal sealed partial class AppsPageView : IViewPage
+internal sealed partial class AppsPageView : IViewPage, IViewDockPage
 {
     private static readonly StringComparer IdCmp = StringComparer.OrdinalIgnoreCase;
 
@@ -27,7 +27,6 @@ internal sealed partial class AppsPageView : IViewPage
     private readonly AliasEditor _aliasEditor;
     private readonly Action _appIconLoaded;
     private UiHitMap? _hit;
-    private readonly UiScrollState _appsScroll = new();
     private readonly Dictionary<string, Action> _clicks = new(StringComparer.Ordinal);
     private readonly Dictionary<string, AudioAppInfo> _appRows = new(StringComparer.Ordinal);
 
@@ -56,8 +55,9 @@ internal sealed partial class AppsPageView : IViewPage
     private bool _selectedMuted;
     private string _nativeOutput = AudioService.SystemDefaultDeviceId;
     private string _nativeInput = AudioService.SystemDefaultInputDeviceId;
-    private HashSet<string> _selectedOutputs = new(IdCmp);
-    private HashSet<string>? _pendingOutputs;
+    private string[] _selectedOutputs = [];
+    private string[]? _pendingOutputs;
+    private string[] DisplayedOutputs => _pendingOutputs ?? _selectedOutputs;
     private string? _pendingPrimary;
     private readonly Dictionary<string, MirrorGainState> _mirrorGains = new(IdCmp);
 
@@ -86,6 +86,7 @@ internal sealed partial class AppsPageView : IViewPage
     internal AppsPageView(IViewHostActions actions)
     {
         _actions = actions;
+        Dock = new UiDockRail(DockItemPrefix, actions.Invalidate);
         _aliasEditor = new(actions);
         _appIconLoaded = () => _actions.Host.TryPost(InvalidateAppIcon);
     }
@@ -232,7 +233,7 @@ internal sealed partial class AppsPageView : IViewPage
     {
         if (_searchQuery == text) return;
         _searchQuery = text;
-        _appsScroll.Offset = 0f;
+        Dock.ResetScroll();
         _dockResultsScroll.Offset = 0f;
         RebuildFilteredApps();
         _actions.Invalidate();
@@ -264,7 +265,7 @@ internal sealed partial class AppsPageView : IViewPage
     {
         if (_filterMode == mode) return;
         _filterMode = mode;
-        _appsScroll.Offset = 0f;
+        Dock.ResetScroll();
         _dockResultsScroll.Offset = 0f;
         RebuildFilteredApps();
         _actions.Invalidate();
@@ -336,24 +337,10 @@ internal sealed partial class AppsPageView : IViewPage
         });
     }
 
-    private readonly record struct AppIconVisual(
-        NativeAppIconService.IconBitmap? Bitmap, UiIcon? Glyph = null, string? Initial = null)
-    {
-        internal void Render(D2dTarget g, UiThemePalette t, UiRect rect)
-        {
-            if (Bitmap is { } b)
-                g.DrawBgraBitmap(b.BgraPixels, b.BgraPixels, b.Width, b.Height, rect);
-            else if (Glyph is { } glyph)
-                g.DrawIcon(glyph, rect.Deflate(rect.Width * 0.19f), t.TextSecondary, 1.6f);
-            else
-                g.DrawText(Initial ?? "?", rect, t.TextPrimary, rect.Height * 0.48f, 600, UiTextAlign.Center, UiVertAlign.Center);
-        }
-    }
-
     private void DrawAppIcon(D2dTarget g, UiThemePalette t, AudioAppInfo app, UiRect rect) =>
         ResolveAppIcon(app, GetAppDisplayLabel(app)).Render(g, t, rect);
 
-    private AppIconVisual ResolveAppIcon(AudioAppInfo app, string label)
+    private UiItemIcon ResolveAppIcon(AudioAppInfo app, string label)
     {
         if (app.ExternalIconPng is { Length: > 0 } extBytes &&
             NativeAppIconService.GetPngIcon(extBytes, _appIconLoaded) is { } eb)
@@ -436,7 +423,7 @@ internal sealed partial class AppsPageView : IViewPage
                 bool muted = false;
                 string natOut = AudioService.SystemDefaultDeviceId;
                 string natIn = AudioService.SystemDefaultInputDeviceId;
-                HashSet<string> selOuts = new(IdCmp) { AudioService.SystemDefaultDeviceId };
+                string[] selOuts = [AudioService.SystemDefaultDeviceId];
                 var mirrorGains = new Dictionary<string, MirrorGainState>(IdCmp);
 
                 var liveSelected = targetIdentity != null ? apps.FirstOrDefault(a => a.Identity == targetIdentity) : null;
@@ -479,8 +466,8 @@ internal sealed partial class AppsPageView : IViewPage
                         natOut = string.IsNullOrWhiteSpace(persisted) || AudioService.IsSystemDefault(persisted)
                             ? AudioService.SystemDefaultDeviceId
                             : AudioPolicyConfig.UnpackDeviceId(persisted);
-                        selOuts = new HashSet<string>(_actions.Host.Audio.GetSelectedOutputs(liveSelected), IdCmp);
-                        if (selOuts.Count == 0) selOuts.Add(natOut);
+                        selOuts = _actions.Host.Audio.GetSelectedOutputs(liveSelected);
+                        if (selOuts.Length == 0) selOuts = [natOut];
                         foreach (string oid in selOuts)
                             mirrorGains[oid] = _actions.Host.Audio.GetMirrorGain(liveSelected, oid);
                     }
@@ -566,7 +553,13 @@ internal sealed partial class AppsPageView : IViewPage
                             if (_pendingOutputs == null)
                             {
                                 _nativeOutput = natOut;
-                                _selectedOutputs = selOuts;
+                                // Readback confirms membership. Keep the display order of surviving connections.
+                                var previousOutputs = _selectedOutputs;
+                                if (previousOutputs.Length != selOuts.Length || !previousOutputs.All(id => selOuts.Contains(id, IdCmp)))
+                                {
+                                    _selectedOutputs = [.. previousOutputs.Where(id => selOuts.Contains(id, IdCmp)),
+                                        .. selOuts.Where(id => !previousOutputs.Contains(id, IdCmp))];
+                                }
                                 if (mirrorRevision == _mirrorGainRevision)
                                 {
                                     _mirrorGains.Clear();
@@ -721,7 +714,7 @@ internal sealed partial class AppsPageView : IViewPage
         _pendingOutputs = null;
         _pendingPrimary = null;
         _nativeOutput = AudioService.SystemDefaultDeviceId;
-        _selectedOutputs.Clear();
+        _selectedOutputs = [];
         _mirrorGains.Clear();
         _outputChoicesIdentity = null;
         foreach (var node in _deviceNodes.Values)
@@ -732,6 +725,8 @@ internal sealed partial class AppsPageView : IViewPage
         _deviceNodes.Clear();
         _orderedRenderNodes.Clear();
         _orderedCaptureNodes.Clear();
+        _canvasCardOrder.Clear();
+        _raisedCanvasCards.Clear();
         _wires.Clear();
         _wireCache.Clear();
     }
@@ -1063,7 +1058,7 @@ internal sealed partial class AppsPageView : IViewPage
             preferPhysical: !app.IsExternal,
             lowPriorityId: PlaybackSelection.LowPriorityOutputId(_actions.Host.Audio, app));
 
-        _pendingOutputs = new HashSet<string>(normalized, IdCmp);
+        _pendingOutputs = normalized;
         _pendingPrimary = effectivePrimary;
         _stateGen++;
         int editGen = ++_outputEditGen;
@@ -1094,21 +1089,21 @@ internal sealed partial class AppsPageView : IViewPage
             SubmitOutputsChange(app, [deviceId], deviceId, singleNativeSwitch: true);
             return;
         }
-        var current = new HashSet<string>(_pendingOutputs ?? _selectedOutputs, IdCmp);
-        if (current.Contains(deviceId)) return;
-        current.Add(deviceId);
+        var current = DisplayedOutputs;
+        if (current.Contains(deviceId, IdCmp)) return;
         string currentPrimary = GetDisplayedPrimaryOutput();
         string preferred = !app.IsExternal && PcRoutingApi.IsPhoneOutputDevice(currentPrimary) && !PcRoutingApi.IsPhoneOutputDevice(deviceId)
             ? deviceId
             : currentPrimary;
-        SubmitOutputsChange(app, current.ToArray(), preferred, singleNativeSwitch: false);
+        SubmitOutputsChange(app, [.. current, deviceId], preferred, singleNativeSwitch: false);
     }
 
     private void DisconnectOutputDevice(AudioAppInfo app, string deviceId)
     {
-        var current = new HashSet<string>(_pendingOutputs ?? _selectedOutputs, IdCmp);
-        if (!current.Remove(deviceId)) return;
-        if (current.Count == 0)
+        var current = DisplayedOutputs;
+        if (!current.Contains(deviceId, IdCmp)) return;
+        var remaining = current.Where(id => !IdCmp.Equals(id, deviceId)).ToArray();
+        if (remaining.Length == 0)
         {
             if (AudioService.IsSystemDefault(deviceId)) return;
             SubmitOutputsChange(app, [AudioService.SystemDefaultDeviceId], AudioService.SystemDefaultDeviceId, singleNativeSwitch: true);
@@ -1116,10 +1111,10 @@ internal sealed partial class AppsPageView : IViewPage
         }
         string currentPrimary = GetDisplayedPrimaryOutput();
         string preferred = IdCmp.Equals(currentPrimary, deviceId)
-            ? PlaybackSelection.SelectPrimary(current.ToArray(), null, preferPhysical: !app.IsExternal,
+            ? PlaybackSelection.SelectPrimary(remaining, null, preferPhysical: !app.IsExternal,
                 lowPriorityId: PlaybackSelection.LowPriorityOutputId(_actions.Host.Audio, app))
             : currentPrimary;
-        SubmitOutputsChange(app, current.ToArray(), preferred, singleNativeSwitch: current.Count == 1 && !PcRoutingApi.IsPhoneOutputDevice(preferred));
+        SubmitOutputsChange(app, remaining, preferred, singleNativeSwitch: remaining.Length == 1 && !PcRoutingApi.IsPhoneOutputDevice(preferred));
     }
 
     private void SwitchNativeOutputDevice(AudioAppInfo app, string newNativeId)
@@ -1127,26 +1122,22 @@ internal sealed partial class AppsPageView : IViewPage
         if (!app.IsExternal && PcRoutingApi.IsPhoneOutputDevice(newNativeId))
         {
             // Phone output cannot be a Windows native policy endpoint; route to phone via existing exclusive/mirror flow.
-            var currentSet = new HashSet<string>(_pendingOutputs ?? _selectedOutputs, IdCmp);
-            if (currentSet.Count <= 1)
+            if (DisplayedOutputs.Length <= 1)
                 SubmitOutputsChange(app, [newNativeId], newNativeId, singleNativeSwitch: true);
             else
                 ConnectOutputDevice(app, newNativeId);
             return;
         }
 
-        var current = new HashSet<string>(_pendingOutputs ?? _selectedOutputs, IdCmp);
         string? oldNative = GetDisplayedNativeOutputId(app);
         if (oldNative != null && IdCmp.Equals(oldNative, newNativeId)) return;
-        if (oldNative != null) current.Remove(oldNative);
-        current.Add(newNativeId);
-        SubmitOutputsChange(app, current.ToArray(), newNativeId, singleNativeSwitch: current.Count == 1);
+        var next = DisplayedOutputs.Where(id => !IdCmp.Equals(id, oldNative)).Append(newNativeId).Distinct(IdCmp).ToArray();
+        SubmitOutputsChange(app, next, newNativeId, singleNativeSwitch: next.Length == 1);
     }
 
     private void RetargetForwardOutput(AudioAppInfo app, string oldForwardId, string newTargetId)
     {
         if (IdCmp.Equals(oldForwardId, newTargetId)) return;
-        var current = new HashSet<string>(_pendingOutputs ?? _selectedOutputs, IdCmp);
         string? nativeId = GetDisplayedNativeOutputId(app);
         if (nativeId != null && IdCmp.Equals(nativeId, newTargetId))
         {
@@ -1154,10 +1145,9 @@ internal sealed partial class AppsPageView : IViewPage
             DisconnectOutputDevice(app, oldForwardId);
             return;
         }
-        current.Remove(oldForwardId);
-        current.Add(newTargetId);
+        var next = DisplayedOutputs.Where(id => !IdCmp.Equals(id, oldForwardId)).Append(newTargetId).ToArray();
         string preferred = nativeId ?? GetDisplayedPrimaryOutput();
-        SubmitOutputsChange(app, current.ToArray(), preferred, singleNativeSwitch: false);
+        SubmitOutputsChange(app, next, preferred, singleNativeSwitch: false);
     }
 
 #if SONICROUTE_PHONE
@@ -1229,9 +1219,8 @@ internal sealed partial class AppsPageView : IViewPage
 
     private string? GetDisplayedNativeOutputId(AudioAppInfo app)
     {
-        var activeSet = _pendingOutputs ?? _selectedOutputs;
         string primary = GetDisplayedPrimaryOutput();
-        if (!activeSet.Contains(primary)) return null;
+        if (!DisplayedOutputs.Contains(primary, IdCmp)) return null;
         if (!app.IsExternal && PcRoutingApi.IsPhoneOutputDevice(primary)) return null;
         return primary;
     }
@@ -1315,7 +1304,7 @@ internal sealed partial class AppsPageView : IViewPage
     private void ChangeForwardGain(string targetDeviceId, int? percent, bool toggleMute)
     {
         if (_selectedApp is not { IsExternalOffline: false } app || _outputChoicesIdentity != app.Identity
-            || !(_pendingOutputs ?? _selectedOutputs).Contains(targetDeviceId)
+            || !DisplayedOutputs.Contains(targetDeviceId, IdCmp)
             || IdCmp.Equals(GetDisplayedNativeOutputId(app), targetDeviceId)) return;
         _mirrorGainRevision++;
         _mirrorGains[targetDeviceId] = _actions.Host.Audio.SetMirrorGain(app, targetDeviceId, volumePercent: percent, toggleMute: toggleMute);

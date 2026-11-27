@@ -16,14 +16,16 @@ internal sealed partial class PhoneDevicePageView
 
     private AndroidAppCatalogCache? _catalogCache;
 
-    private void DrawAppPin(D2dTarget g, UiThemePalette theme, UiRect bounds, AndroidApp app, bool retained)
+    private void DrawAppPin(D2dTarget g, UiThemePalette theme, UiRect bounds, AndroidApp app, bool retained, bool compact = false)
     {
         string id = "phone.pin:" + app.Package;
         _hit.Add(id, bounds, UiCursorKind.Hand, L10n.T(retained ? "Phone.RemoveFromQuickPanel" : "Phone.AddToQuickPanel"));
         if (_hit.IsHover(id)) g.FillRoundedRect(bounds, 8f, theme.NavHover);
         if (_hit.ShowFocus && _hit.FocusId == id) g.DrawRoundedRect(bounds, 8f, theme.Accent, 1f);
-        g.DrawIcon(UiIcon.Pin, new UiRect(bounds.CenterX - 9f, bounds.CenterY - 9f, 18f, 18f),
-            theme.Accent.WithAlphaFraction(retained ? 1f : 0.55f), rotationDeg: retained ? 45f : 0f, filled: true);
+        float radius = compact ? 7f : 9f;
+        var ink = compact ? theme.TextSecondary : theme.Accent;
+        g.DrawIcon(UiIcon.Pin, new UiRect(bounds.CenterX - radius, bounds.CenterY - radius, radius * 2f, radius * 2f),
+            ink.WithAlphaFraction(retained ? 1f : 0.55f), rotationDeg: retained ? 45f : 0f, filled: true);
     }
 
     private void CloseCatalog()
