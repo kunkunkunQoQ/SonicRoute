@@ -64,7 +64,12 @@ function Get-LiveStatus([int]$previous=0){
         $r=Invoke-Control @('status')
         if($r.Code -eq 0 -and $r.Text.StartsWith('{')){
             $status=$r.Text | ConvertFrom-Json
-            if($status.Pid -ne $previous -and $status.DataDirectory -eq $data -and $status.NativeAot){return $status}
+            if($status.Pid -ne $previous -and $status.DataDirectory -eq $data){
+                if($status.Edition -cne $Edition -or $status.Packaged -ne $false -or $status.NativeAot -ne $true -or $status.ReflectionJson -ne $false){
+                    throw 'Unexpected Native AOT product identity.'
+                }
+                return $status
+            }
         }
         Start-Sleep -Milliseconds 125
     }while($timer.Elapsed.TotalSeconds -lt 24)
@@ -84,8 +89,12 @@ function Wait-Outcome([string]$value){
     $timer=[Diagnostics.Stopwatch]::StartNew()
     do{
         if(Test-Path -LiteralPath $updateResult){
-            $journal=Get-Content -Raw -LiteralPath $updateResult | ConvertFrom-Json
-            if($journal.Status -eq $value){return $journal}
+            try {
+                $journal=[IO.File]::ReadAllText($updateResult) | ConvertFrom-Json
+                if($journal.Status -eq $value){return $journal}
+            } catch [IO.IOException] {
+                # The worker may still have the result file open during atomic replacement.
+            }
         }
         Start-Sleep -Milliseconds 125
     }while($timer.Elapsed.TotalSeconds -lt 20)

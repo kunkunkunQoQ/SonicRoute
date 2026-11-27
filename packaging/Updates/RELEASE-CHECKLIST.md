@@ -5,8 +5,8 @@
 ## 固定发布约定
 
 - `build/Version.props` 中的 `SonicRouteVersion` 是版本号唯一来源。发布前将它更新为目标稳定版本（如 `1.26`），不要在命令或资产名中另设版本号。
-- Full / Lite 使用固定的稳定 .NET 10 SDK，由仓库 `global.json` 约束；不再生成 NET8 新包。Legacy 定义仍为 net48 x64，单独验收。
-- 五个包、七个 Release 资产：无版本名后缀的 SonicRoute x64/ARM64 ZIP、Lite x64/ARM64 EXE、Legacy x64 ZIP、`SonicRoute-update.json`、`SHA256SUMS.txt`。构建区分见 [EDITIONS.md](../EDITIONS.md)。
+- Full 与 Lite 通过仓库 `global.json` 选择稳定 .NET 10 SDK，使用对应架构的 MSVC 生成 Native AOT 单文件。Legacy 保留 .NET Framework 4.8 x64。
+- 五个便携包包括 Full x64 和 ARM64 EXE、Lite x64 和 ARM64 EXE、Legacy x64 ZIP。再加上 `SonicRoute-update.json` 和 `SHA256SUMS.txt`，共七项 Release 资产。构建区分见 [EDITIONS.md](../EDITIONS.md)。
 - 日常开发 `dotnet build` 与正式候选发布分开。普通编译成功不等于候选包已验证。
 - 仓库不跟踪 `.gitignore`。新的发行检出先执行 `Initialize-ReleaseCheckout.ps1`，只在该检出的 Git 本地排除文件中加入 `bin/`、`obj/` 和根 `build-artifacts/`；源码和其他未跟踪文件仍参与 clean 检查。Actions 两个 job 均自动执行该步骤，不上传本机排除文件。
 - 每个候选使用新的、绝对路径输出目录。脚本不会清理或覆盖旧目录；失败后保留目录供检查，修正后换新目录重建。

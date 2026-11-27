@@ -268,13 +268,15 @@ try {
     Case 'unsafe Legacy per-file path refused' {$dir=Fixture;$m=Get-Content "$dir/SonicRoute-update.json" -Raw|ConvertFrom-Json;$m.packages[4].files[0].path='../config.json';Save-Manifest $dir $m;Reject {Assert-LocalArtifacts $dir $version} 'per-file path'}
     Case 'incorrect individual file hash refused' {$dir=Fixture;$m=Get-Content "$dir/SonicRoute-update.json" -Raw|ConvertFrom-Json;$m.packages[4].files[0].sha256='0'*64;Save-Manifest $dir $m;Reject {Assert-LocalArtifacts $dir $version} 'per-file path'}
     Case 'duplicate checksum line refused' {$dir=Fixture;Add-Content "$dir/SHA256SUMS.txt" (Get-Content "$dir/SHA256SUMS.txt"|Select-Object -First 1);Reject {Assert-LocalArtifacts $dir $version} 'duplicate SHA256SUMS'}
-    Case 'embedded runtime dependency actually verified' {
+    Case 'native runtime export is required even when package hashes agree' {
         $dir=Fixture;$asset="SonicRoute-v$version-Lite-x64.exe";$path=Join-Path $dir $asset
-        $config=[SonicRouteReleaseBundle]::Read($path);$replacement=$config.Replace('net10.0','net11.0').Replace('10.0.0','11.0.0')
-        $bytes=[IO.File]::ReadAllBytes($path);$offset=[Text.Encoding]::GetEncoding(28591).GetString($bytes).IndexOf($config,[StringComparison]::Ordinal)
-        Require ($offset -ge 0 -and $replacement.Length -eq $config.Length -and $replacement -ne $config) 'Invalid runtime fixture'
-        $changed=[Text.Encoding]::UTF8.GetBytes($replacement);[array]::Copy($changed,0,$bytes,$offset,$changed.Length);[IO.File]::WriteAllBytes($path,$bytes)
-        $m=Get-Content "$dir/SonicRoute-update.json" -Raw|ConvertFrom-Json;Refresh-Package $dir $m $asset;Reject {Assert-LocalArtifacts $dir $version} 'embedded target framework'
+        $bytes=[IO.File]::ReadAllBytes($path)
+        $exportEntry=[BitConverter]::ToInt32($bytes,0x3c)+24+112
+        Require ([BitConverter]::ToUInt32($bytes,$exportEntry) -ne 0) 'Missing export directory in the fixture'
+        [Array]::Clear($bytes,$exportEntry,8)
+        [IO.File]::WriteAllBytes($path,$bytes)
+        $m=Get-Content "$dir/SonicRoute-update.json" -Raw|ConvertFrom-Json;Refresh-Package $dir $m $asset
+        Reject {Assert-LocalArtifacts $dir $version} 'Invalid Native AOT export or CLR directory'
     }
     Case 'unsafe ZIP rejected even with consistent outer hash' {
         $dir=Fixture;$asset="SonicRoute-v$version-Legacy-x64.zip";$path=Join-Path $dir $asset

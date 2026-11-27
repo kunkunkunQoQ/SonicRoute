@@ -136,7 +136,8 @@ function Assert-ReleaseExecutable([string]$Path, [string]$Architecture, [string]
         if($offset -lt 64 -or $offset -gt $reader.BaseStream.Length-6){throw 'Invalid PE header.'}
         $reader.BaseStream.Position=$offset;$machine=if($Architecture -eq 'arm64'){0xaa64}else{0x8664}
         if($reader.ReadUInt32() -ne 0x4550 -or $reader.ReadUInt16() -ne $machine){throw "Wrong PE architecture: $Path"}
-        if($Runtime -eq 'net10' -and $info.Comments -ceq 'SonicRoute .NET 10 Native AOT'){
+        if($Runtime -eq 'net10'){
+            if($info.Comments -cne 'SonicRoute .NET 10 Native AOT'){throw "Expected a Native AOT product: $Path"}
             Assert-NativeAotImage $reader $offset
             return
         }
@@ -148,7 +149,7 @@ function Assert-ReleaseExecutable([string]$Path, [string]$Architecture, [string]
         if($LASTEXITCODE -ne 0 -or $target -cne '.NETFramework,Version=v4.8'){throw "Wrong Legacy target framework: $Path"}
     } else {
         $config=Read-ReleaseRuntimeConfig $Path
-        $expected=if($Runtime -eq 'net8'){'8.0'}elseif($Runtime -eq 'net10'){'10.0'}else{throw "Unsupported runtime $Runtime"}
+        $expected=if($Runtime -eq 'net8'){'8.0'}else{throw "Unsupported runtime $Runtime"}
         $options=$config.runtimeOptions
         if($options.tfm -cne "net$expected" -or $options.rollForward -in @('Major','LatestMajor')){throw "Wrong embedded target framework or roll-forward policy: $Path"}
         $frameworks=@($options.frameworks)

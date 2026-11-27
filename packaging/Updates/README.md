@@ -2,20 +2,20 @@
 
 ## Automated GitHub Releases Workflow (CI/CD)
 
-The repository provides a fully automated, one-click GitHub Actions workflow [`.github/workflows/release.yml`](../../.github/workflows/release.yml) and an orchestration script [`Invoke-ReleasePipeline.ps1`](./Invoke-ReleasePipeline.ps1).
+[`Build and Release`](../../.github/workflows/release.yml) builds and validates a candidate when release inputs change on `master`. This push-triggered run uses read-only credentials. The same workflow can be dispatched manually with [`Invoke-ReleasePipeline.ps1`](./Invoke-ReleasePipeline.ps1) handling candidate verification and publication.
 
 See [RELEASE-CHECKLIST.md](./RELEASE-CHECKLIST.md) for candidate creation, the source-bound build receipt, read-only full DryRun, interruption recovery and the separate Store gate. The validation job has Contents read permission; only a non-DryRun master publication job obtains write permission. Hosted Actions execution must be verified separately from local tests.
 
 ### One-Click Release Usage
 
-1. Open GitHub repository → **Actions** → select **Release** workflow.
+1. Open GitHub repository → **Actions** → select **Build and Release**.
 2. Click **Run workflow** (branch: `master`).
 3. **Dry Run is checked by default**. It actually builds all five packages and runs the checks, without changing Releases. An already published current version can be revalidated from a later commit; this never authorizes overwriting that release. To publish a new version, increase `Version.props`, select `master` and explicitly uncheck Dry Run.
 4. The workflow automatically:
    - Reads the target release version from `build/Version.props` (e.g. `1.25` → `v1.25`).
    - Asserts preflight conditions (strictly `master` branch, commit SHA binding, monotonic version increase against remote releases and local tags, absence of conflicting published releases).
    - `Build-PortableRelease.ps1` builds the Native AOT solution and calls `Native/Build-Product.ps1` for Full and Lite x64/ARM64. It keeps the Legacy net48 x64 ZIP and writes the versioned portable assets to the candidate's `assets` directory. Full embeds the phone runtime.
-   - Validates PE architecture (`0x8664`/`0xaa64`), FileVersion, edition/runtime, Full's embedded component manifests and single-EXE payload, the Legacy ZIP allowlist, `SHA256SUMS.txt`, and the protocol 2 update manifest.
+   - Validates PE architecture (`0x8664`/`0xaa64`), file version, edition and Native AOT image identity, the Legacy ZIP allowlist, `SHA256SUMS.txt`, and the Protocol 2 update manifest.
    - Generates release notes: prioritizes curated `docs/release-v<version>.md` if maintained, or automatically extracts and groups conventional commits and PRs since the previous official release tag.
    - Creates a **Draft Release** pinned to the validated commit SHA and uploads all 7 assets.
    - Performs **Remote Cryptographic Re-verification**: re-queries the GitHub API for asset counts and sizes, downloads each asset back to an isolated temporary sandbox, and re-computes its SHA-256 hash locally.
@@ -40,7 +40,7 @@ The workflow preserves curated UTF-8 Markdown verbatim. If none exists, the exis
 - Release policy is checked before compilation. A production request from a non-master branch fails explicitly instead of silently skipping all jobs. Checkout credentials are not persisted. Only the publish job has Contents write permission; its script step explicitly receives GH_TOKEN, while actions in that job also run within the job token's permission boundary.
 - After publication, a temporarily stale Latest tag or release ID is retried through the existing three-attempt backoff. A persistent mismatch or query failure remains a failed, already-published outcome in the summary; it never causes duplicate draft creation or republishing.
 - Summary timestamps use the UTC clock explicitly, so a local run cannot label local wall time with a misleading `Z` suffix.
-- Candidate artifacts are named per validation attempt, and the publish job downloads the exact name returned by that successful job. **Re-run failed jobs** after a publish failure to reuse the same validated bytes; **Re-run all jobs** or a new dispatch rebuilds them and is not an identical-candidate retry.
+- Candidate artifacts are named per validation attempt. The publish job retrieves the exact artifact ID and verifies the archive SHA-256 returned by the successful validation job. **Re-run failed jobs** after a publish failure to reuse the same validated bytes. **Re-run all jobs** or a new dispatch builds a new candidate.
 - Validation also downloads its uploaded candidate into a fresh directory and runs the actual publish-stage checks in DryRun mode. This verifies artifact layout, source-bound receipt, seven files and reviewed notes without granting release write permission.
 - On validation failure, available candidate files and check results are retained as a separate diagnostic artifact for 14 days. Diagnostic artifacts are never publication inputs. No valid receipt means no publishable candidate.
 - **Manual Verification / Dry-Run**: Run locally or in CI at any time using:
@@ -50,7 +50,7 @@ The workflow preserves curated UTF-8 Markdown verbatim. If none exists, the exis
 
 `Test-ReleasePipelineHarness.ps1 -AssetsDirectory <candidate>/assets` exercises actual release functions against real binaries; git/gh, binary-download and retry-delay boundaries are simulated and make no network changes. It retains malformed fixtures, results and simulated publication summaries under `build-artifacts`. The production download helper copies native stdout as bytes, avoiding PowerShell 5 text redirection corruption. Without an asset directory the harness builds a fresh five-package candidate once. Runtime isolation/staging tests are in `tests/RuntimeChecks` (net10/net48); historical NET8 protocol fixtures remain readable without building a NET8 program; transactional worker tests in `tests/WorkerChecks` use locally built fixture executables and real filesystem/process operations. They are not evidence of an installed Store update, an ARM64 run, or a NET8-only OS.
 
-CI runs RuntimeChecks for NET10 and NET48, the Full edition/resource/payload checks, and worker process/rollback checks for NET10 through `tests/Run-WorkerChecks.ps1`. Worker fixtures use isolated directories and processes, not normal application/audio sessions. Store submission remains a separate operation.
+CI checks configuration serialization and localization, the .NET 10 and .NET Framework 4.8 client staging paths, and the existing worker fixtures. Restore graphs verify that each Native AOT build uses the target architecture's compiler pack and that only Full includes the Android project. CI launches both actual Native AOT x64 candidates in isolated profiles to verify edition identity, restart, update, and rollback. The ARM64 candidates are cross-compiled and verified as PE files. The Full x64 executable is also packaged as an unsigned MSIX and uploaded to Actions separately from the portable release.
 
 ---
 
@@ -62,7 +62,7 @@ Build from the reviewed release source in the current checkout. Use a fresh abso
 ./packaging/Updates/Build-PortableRelease.ps1 -OutputDirectory E:/releases/SonicRoute-candidate
 ```
 
-The script reads `build/Version.props`, selects the SDK from the repository directory so `global.json` also applies to calls from another working directory, and restores the caller's directory on exit. It builds Full and Lite .NET 10 for x64/ARM64 plus Legacy x64 in sequence, retains LICENSE in the Legacy ZIP, validates PE architecture, file version and edition/runtime, and generates:
+The script reads `build/Version.props`, selects the SDK from the repository directory so `global.json` also applies to calls from another working directory, and restores the caller's directory on exit. It builds .NET 10 Native AOT Full and Lite for x64 and ARM64 plus Legacy x64. It retains LICENSE in the Legacy ZIP and verifies PE architecture, file version and deployment type before generating these files.
 
 - `SonicRoute-v<version>-Lite-x64.exe`
 - `SonicRoute-v<version>-Lite-arm64.exe`
@@ -76,7 +76,7 @@ Create an official **draft** GitHub Release with a numeric `v<version>` tag, upl
 
 This is the pipeline's complete build matrix, not a claim that every historical release contains all targets. The published v1.31 has three x64 programs plus two metadata files; the last published experimental ARM64 programs remain v1.30. Download links must follow actual release assets.
 
-MSIX packaging and Microsoft Store updates are unchanged. The portable update code rejects packaged execution, including its internal worker entry points. The original manual extract/copy/run workflow is retained. A version older than 1.25 does not contain this updater: its first upgrade to 1.25 is manual or via Microsoft Store.
+The unsigned Actions MSIX uses the existing Microsoft Store packaging script. The portable update code rejects packaged execution, including its internal worker entry points. Manual extract, copy and run upgrades remain supported. Versions older than 1.25 must upgrade manually or via Microsoft Store.
 
 Automatic checking is **off by default**. Users can check manually in Settings, or enable checking after startup. When enabled, a single asynchronous check runs after startup warmup and a 15-second delay, only if the previous attempt was at least 24 hours ago. There is no recurring idle polling. Existing explicit preferences are preserved; turning it off cancels a pending startup check. Download and restart/install each require a user action.
 

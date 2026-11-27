@@ -24,6 +24,18 @@ try {
             Write-Host "Publishing $($variant.Asset) ($($variant.Framework), win-$($variant.Architecture))..."
             & "$root/Native/Build-Product.ps1" -Edition $variant.Edition -Architecture $variant.Architecture `
                 -OutputRoot $output -PublishDirectory $destination -Dotnet $dotnet -VsRoot $VsRoot -ToolCache $ToolCache | Out-Null
+            $buildPath=Join-Path $output "build/$($variant.Edition)-$($variant.Architecture)"
+            $restore=Get-Content -LiteralPath (Join-Path $buildPath 'obj/Product/project.assets.json') -Raw | ConvertFrom-Json
+            $libraries=$restore.libraries.PSObject.Properties.Name
+            $frameworks=$restore.project.frameworks.PSObject.Properties.Value
+            $frameworkReferences=@(foreach($framework in $frameworks){$framework.frameworkReferences.PSObject.Properties.Name})
+            $hasPhone=[bool]($libraries -match '^SonicRoute\.AndroidAudio/')
+            $aotPack="^runtime\.win-$($variant.Architecture)\.Microsoft\.DotNet\.ILCompiler/"
+            if($hasPhone -ne ($variant.Edition -eq 'Full') -or !($libraries -match $aotPack) -or
+                $libraries -match '^(NAudio[^/]*|System\.Management|Microsoft\.WindowsDesktop\.App[^/]*)/' -or
+                $frameworkReferences -match '^Microsoft\.WindowsDesktop\.App'){
+                throw "Unexpected dependency graph for $($variant.Asset)."
+            }
             if (Test-Path -LiteralPath (Join-Path $destination 'AndroidRuntime')) { throw 'Single-EXE publish contains obsolete loose phone components.' }
             Copy-Item -LiteralPath (Join-Path $destination 'SonicRoute.exe') -Destination (Join-Path $assets $variant.Asset)
         } else {

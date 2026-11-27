@@ -1,6 +1,22 @@
-name: Release
+name: Build and Release
 
 on:
+  push:
+    branches: [master]
+    paths:
+      - '.github/workflows/release.yml'
+      - 'Native/**'
+      - 'SonicRoute*/**'
+      - 'SonicRoute.Native.slnx'
+      - 'StoreInterop/**'
+      - 'Directory.Build.*'
+      - 'global.json'
+      - 'build/**'
+      - 'docs/readme/**'
+      - 'docs/release-*.md'
+      - 'packaging/**'
+      - 'shared/**'
+      - 'LICENSE'
   workflow_dispatch:
     inputs:
       dry_run:
@@ -10,7 +26,7 @@ on:
         default: true
 
 concurrency:
-  group: release-publishing
+  group: ${{ github.event_name == 'workflow_dispatch' && !inputs.dry_run && 'release-publishing' || 'release-validation' }}
   cancel-in-progress: false
 
 permissions:
@@ -24,8 +40,8 @@ defaults:
 jobs:
   validate:
     name: Build and validate candidate (read only)
-    runs-on: windows-latest
-    timeout-minutes: 35
+    runs-on: windows-2025
+    timeout-minutes: 45
     outputs:
       candidate_artifact_id: ${{ steps.upload_candidate.outputs.artifact-id }}
       candidate_artifact_digest: ${{ steps.upload_candidate.outputs.artifact-digest }}
@@ -51,14 +67,14 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           TARGET_REPOSITORY: ${{ github.repository }}
-          DRY_RUN: ${{ inputs.dry_run }}
+          DRY_RUN: ${{ github.event_name != 'workflow_dispatch' || inputs.dry_run }}
         run: |
           .\packaging\Updates\Invoke-ReleasePipeline.ps1 -Stage Preflight -Repo $env:TARGET_REPOSITORY -DryRun:($env:DRY_RUN -eq 'true')
 
       - name: Setup .NET 10 SDK
         uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: '10.0.x'
+          global-json-file: global.json
 
       - name: Setup Node.js
         uses: actions/setup-node@v7
@@ -69,11 +85,14 @@ jobs:
       - name: Verify README consistency
         run: node docs/readme/generate.cjs --check
 
-      - name: Build all five portable packages and solution
+      - name: Build Native AOT Full and Lite for x64 and ARM64, plus Legacy x64
         run: |
           $ErrorActionPreference = 'Stop'
           .\packaging\Updates\Build-PortableRelease.ps1 -OutputDirectory $env:CANDIDATE_DIRECTORY
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Validate configuration and localization contracts
+        run: dotnet run --project packaging/Tests/SerializationChecks/Checks.csproj -c Release -f net10.0-windows
 
       - name: Test actual release functions against candidate bytes
         run: |
@@ -86,17 +105,20 @@ jobs:
             if ($LASTEXITCODE -ne 0) { throw "Client validation failed: $tfm" }
           }
 
-      - name: Verify full edition isolation and nested package transaction
-        run: |
-          dotnet run --project checks/EditionChecks/EditionChecks.csproj -c Debug -p:SonicRouteEdition=Full -- "$env:RUNNER_TEMP/client-validation/Full"
-          if ($LASTEXITCODE -ne 0) { throw 'Full edition validation failed.' }
-          $version = [string]([xml](Get-Content build/Version.props -Raw)).Project.PropertyGroup.SonicRouteVersion
-          dotnet run --project checks/EditionChecks/EditionChecks.csproj -c Debug -p:SonicRouteEdition=Full -- "$env:RUNNER_TEMP/client-validation/FullPayload" --payload "$env:CANDIDATE_DIRECTORY/assets/SonicRoute-v$version-x64.exe"
-          if ($LASTEXITCODE -ne 0) { throw 'Full package transaction failed.' }
-
       - name: Verify actual worker processes and rollback
         run: |
           .\packaging\Updates\tests\Run-WorkerChecks.ps1 -AssetsDirectory "$env:CANDIDATE_DIRECTORY/assets" -OutputDirectory "$env:RUNNER_TEMP/worker-validation"
+
+      - name: Verify restart, update and rollback in the Native AOT x64 executables
+        shell: pwsh
+        run: |
+          $version = [string]([xml](Get-Content build/Version.props -Raw)).Project.PropertyGroup.SonicRouteVersion
+          ./Native/ProductChecks/Test-ProductUpdate.ps1 -Edition Full -ProductExe "$env:CANDIDATE_DIRECTORY/assets/SonicRoute-v$version-x64.exe" -EvidenceDirectory "$env:RUNNER_TEMP/native-validation/Full-x64"
+          ./Native/ProductChecks/Test-ProductUpdate.ps1 -Edition Lite -ProductExe "$env:CANDIDATE_DIRECTORY/assets/SonicRoute-v$version-Lite-x64.exe" -EvidenceDirectory "$env:RUNNER_TEMP/native-validation/Lite-x64"
+
+      - name: Build the unsigned Full x64 Microsoft Store candidate
+        run: |
+          .\packaging\Store\Build-Package.ps1 -Edition Full -PublishDirectory "$env:CANDIDATE_DIRECTORY/full-net10.0-windows-x64" -OutputDirectory "$env:RUNNER_TEMP/sonicroute-store"
 
       - name: Full dry run without write credentials
         env:
@@ -164,6 +186,14 @@ jobs:
         run: |
           .\packaging\Updates\Invoke-ReleasePipeline.ps1 -Stage Publish -DryRun -Repo $env:TARGET_REPOSITORY -OutputDirectory "$env:RUNNER_TEMP/candidate-roundtrip"
 
+      - name: Preserve unsigned Store candidate separately from the portable release
+        uses: actions/upload-artifact@v7
+        with:
+          name: sonicroute-store-full-x64-unsigned-${{ github.run_attempt }}
+          retention-days: 14
+          path: ${{ runner.temp }}/sonicroute-store/*-unsigned.msix
+          if-no-files-found: error
+
       - name: Retain validation failures for diagnosis
         if: failure()
         uses: actions/upload-artifact@v7
@@ -179,13 +209,16 @@ jobs:
             ${{ runner.temp }}/client-validation/**/result.json
             ${{ runner.temp }}/client-validation/**/failure.txt
             ${{ runner.temp }}/worker-validation/**/results.json
+            ${{ runner.temp }}/native-validation/**/receipt.json
+            ${{ runner.temp }}/native-validation/**/last-result.json
+            ${{ runner.temp }}/sonicroute-store/*.log
           if-no-files-found: warn
 
   publish:
     name: Publish exact validated candidate
     needs: validate
-    if: ${{ !inputs.dry_run && github.ref == 'refs/heads/master' }}
-    runs-on: windows-latest
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run == false && github.ref == 'refs/heads/master' }}
+    runs-on: windows-2025
     timeout-minutes: 20
     permissions:
       contents: write

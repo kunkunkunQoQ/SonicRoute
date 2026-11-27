@@ -211,9 +211,15 @@ internal static class Program
         string target=Path.Combine(denied,"SonicRoute.exe");File.Copy(FixtureOld,target);
         var directory=new DirectoryInfo(denied);
         var original=System.IO.FileSystemAclExtensions.GetAccessControl(directory);
-        var modified=System.IO.FileSystemAclExtensions.GetAccessControl(directory);
+        using var identity=System.Security.Principal.WindowsIdentity.GetCurrent();
+        var modified=new System.Security.AccessControl.DirectorySecurity();
+        modified.SetAccessRuleProtection(isProtected:true,preserveInheritance:false);
         modified.AddAccessRule(new System.Security.AccessControl.FileSystemAccessRule(
-            System.Security.Principal.WindowsIdentity.GetCurrent().User!,
+            identity.User!,
+            System.Security.AccessControl.FileSystemRights.FullControl,
+            System.Security.AccessControl.AccessControlType.Allow));
+        modified.AddAccessRule(new System.Security.AccessControl.FileSystemAccessRule(
+            identity.User!,
             System.Security.AccessControl.FileSystemRights.CreateDirectories|System.Security.AccessControl.FileSystemRights.CreateFiles,
             System.Security.AccessControl.AccessControlType.Deny));
         bool rejected=false;
@@ -223,7 +229,12 @@ internal static class Program
             try{UpdateInstaller.Prepare(Release(Product),Product,target,Path.Combine(Root,"permission-data"));}
             catch(UnauthorizedAccessException){rejected=true;}
         }
-        finally{System.IO.FileSystemAclExtensions.SetAccessControl(directory,original);}
+        finally
+        {
+            modified.SetSecurityDescriptorBinaryForm(original.GetSecurityDescriptorBinaryForm(),
+                System.Security.AccessControl.AccessControlSections.Access);
+            System.IO.FileSystemAclExtensions.SetAccessControl(directory,modified);
+        }
         Check("actual Windows ACL denial preserves old EXE without elevation",()=>Assert(rejected&&UpdateProtocol.Hash(target)==UpdateProtocol.Hash(FixtureOld)));
     }
 

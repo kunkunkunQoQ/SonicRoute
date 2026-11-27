@@ -127,14 +127,14 @@ internal static class Program
         Check(!L10n.ImportLanguageFile(import).Ok, "malformed language import refused");
         var restored = L10n.RestoreBuiltinLanguagesAsync().GetAwaiter().GetResult();
         Check(restored.Ok && File.Exists(Path.Combine(L10n.ExternalLangDir, "en-US.json")), "restore keeps valid additional language");
-        L10n.Instance.SetLanguage("zh-CN"); string chineseName = L10n.T("App.Name");
+        string builtinName = LanguageFiles.Read(File.ReadAllText(Path.Combine(exports, "en-US.json")))!["App.Name"];
         File.WriteAllText(Path.Combine(L10n.ExternalLangDir, "en-US.json"), "{\"Lang.NativeName\":\"Metadata\",\"App.Name\":null}");
         L10n.Instance.ApplyImportedLanguage("en-US");
-        Check(L10n.T("App.Name") == chineseName, "null value in manually edited language falls back to Chinese");
+        Check(L10n.T("App.Name") == builtinName, "null override preserves the same builtin language");
         Check(L10n.T("Lang.NativeName") == "Lang.NativeName", "language metadata is excluded from translation keys");
         File.WriteAllText(Path.Combine(L10n.ExternalLangDir, "en-US.json"), "{broken");
         L10n.Instance.ApplyImportedLanguage("en-US");
-        Check(L10n.T("App.Name") == LanguageFiles.Read(File.ReadAllText(Path.Combine(exports, "en-US.json")))!["App.Name"], "corrupt external language falls back to same builtin language");
+        Check(L10n.T("App.Name") == builtinName, "corrupt external language falls back to same builtin language");
     }
 
 #if NET10_0_OR_GREATER
