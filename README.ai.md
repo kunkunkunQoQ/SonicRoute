@@ -26,7 +26,7 @@ SCHEMA_SPEC:
   download_latest: "https://github.com/kunkunkunQoQ/SonicRoute/releases/latest"
   store_url: "https://apps.microsoft.com/detail/9NQZGRTPM1NT"
   store_lite_url: "https://apps.microsoft.com/detail/9N37LQ8SMLF6"
-  localization: "9 built-in locales (de-DE, en-US, es-ES, fr-FR, ja-JP, ko-KR, ru-RU, zh-CN, zh-TW), 988 keys each + runtime custom JSON import/override"
+  localization: "9 built-in locales (de-DE, en-US, es-ES, fr-FR, ja-JP, ko-KR, ru-RU, zh-CN, zh-TW). Missing entries fall back to zh-CN. Custom JSON languages can be imported at runtime."
 ```
 
 ## 2. Feature & Branch Status Matrix
@@ -43,6 +43,8 @@ FEATURE_STATUS_MATRIX:
     - "Redesigned Apps workspace (AppsPageView.Canvas + AppsCanvasEngine + OutputConnectionPopupWindow): per-app node/wire routing canvas, partitioned collision-free layout, solid native / dashed forward / emerald mic wires, independent per-forward Q15 PCM gain/mute, and bounded AppCanvasLayouts persistence."
     - "Adaptive UiDockRail for Apps and Devices with floating search/filter/refresh tools."
     - "Unified Devices tab (MainNavTab.Devices / PhoneDevicePageView) combining Android Configure/Connect and AirPlay receiver settings."
+    - "Native Full can pair with the SonicRoute Android app over the LAN using SRAP. Devices exposes the app and output catalogs, media volume, an app-owned test tone, and linking to an existing ADB profile. Controls depend on the authenticated phone capabilities."
+    - "The Android configuration page supports dragging a pinned app by its row and shows encoder details in tooltips. Output identities preserve wired and USB endpoints with identical display names."
     - "Windows DNS-SD (DnsServiceBrowse) background detection for saved Android devices without triggering firewall prompts when AirPlay is off."
     - "Source-generated COM ([GeneratedComInterface]/[GeneratedComClass]) for Core Audio, VAD\\Process_Loopback, and MTA WMI ProcessTraceSubscription."
     - "Isolated diagnostic/test IPC (--control over SonicRoute.NativeControl.*) gated by CandidateEnvironment."
@@ -52,11 +54,12 @@ FEATURE_STATUS_MATRIX:
     - "ARM64 portable Native AOT builds (win-arm64 marked EXPERIMENTAL in release matrix)."
     - "StoreLite MSIX packaging path (AppxManifest.Lite.xml + Build-Package.ps1 -Edition Lite; release.yml currently produces Full x64 MSIX)."
   PENDING_HARDWARE_OR_RELEASE_VERIFICATION:
+    - "SRAP device checks still needed for a system media volume change and restore, media-session controls, and end-to-end ADB/app profile linking. The Xiaomi 13 Stage 2A results are recorded under ANDROID_APP_SRAP below."
     - "Native AOT v2.00 physical Android USB/Wi-Fi audio, virtual display, and canvas integration tests."
     - "Native AOT v2.00 physical Apple AirPlay streaming/mirroring, physical ARM64 execution, and signed Store install/upgrade."
     - "v2.00 GitHub Release (docs/release-v2.00.md prepared; shared.json release remains v1.36)."
   SEPARATE_BRANCH_UNMERGED:
-    - "Windows Link (LAN PC-to-PC audio/window sharing) exists only on branch codex/windows-link-20261119 (78c6428) and is NOT in master / v2.00."
+    - "Windows Link (LAN PC-to-PC audio and window sharing) is available in the Beta branch. The v2.00 master tree excludes it."
   DISCONTINUED_OR_REMOVED:
     - "NET8 builds (discontinued after v1.29)."
     - "External adb.exe, scrcpy.exe, FFmpeg, and SDL2 binaries (replaced in v1.32 by SonicRoute.AndroidAudio pure C# + sonicroute-catalog.jar)."
@@ -172,6 +175,16 @@ KNOWLEDGE_RETRIEVAL_ROUTER:
       - "Background detection of saved wireless endpoints uses Windows DnsServiceBrowse (AndroidMdnsDiscovery.WatchConnectionsAsync) to avoid triggering Windows firewall prompts on startup when AirPlay is off; explicit connect/search uses short-lived UDP mDNS + identity verification."
       - "AndroidConnectionManager enforces identity fingerprint / serial / transport disambiguation so USB and Wi-Fi aliases never collide or silently merge unverified endpoints."
 
+  ANDROID_APP_SRAP:
+    intent: "Native Full connection to the companion Android app on the same LAN"
+    source: ["Native/Product/Views/PhoneDevicePageView.App.cs", "SonicRoute.AndroidAudio/SrapPhoneTransport.cs", "SonicRoute.AndroidAudio/SrapClient.cs", "SonicRoute.AndroidAudio/SrapSession.cs", "SonicRoute.AndroidAudio/SrapOperationAdapter.cs", "SonicRoute.AndroidAudio/SrapMediaClient.cs", "SonicRoute.AndroidAudio/SrapSession.Alias.cs", "SonicRoute.AndroidAudio/AndroidConnectionManager.cs"]
+    pairing: "Paste a sonicroute://pair invitation and confirm on the phone. Windows can discover _sonicroute._tcp, pins the phone public key, and uses a persistent Windows CNG identity for mutual TLS. Revocation ends the session and stops trusted reconnects. Clipboard sync filters invitations."
+    operations: "The live capability list gates app and output catalogs, system media volume, routing a companion-owned test track, and supported media controls (play/pause, skip, seek). Android capture, PC audio forwarding, virtual display, file transfer and clipboard sync use the ADB transport in this revision."
+    adb_profile_linking: "With both connections active, the user confirms a signed identity challenge over the app session and a one-use direct ADB forward. The Windows merge keeps the ADB profile ID, offers a choice of settings for conflicts and lets the user select the preferred transport."
+    device_evidence_2026_11_28: "Stage 2A on Xiaomi 13 (Android 16), using the Windows product transport through its test client. LAN discovery, phone-confirmed pairing, TLS 1.2 and 1.3, catalog reads, system volume read, owned-track gain and speaker route readback, reconnect and trust revocation passed. Writing the original system volume returned io_failure on that Android build."
+    loopback_evidence_2026_11_28: "The Windows Stage 2B fixture passed 23 checks covering signed profile linking, stale or conflicting identity, forward cleanup, transport preference, revoke and unlink."
+    test_source: ["checks/AndroidAudioChecks/SrapStage2A.cs", "checks/AndroidAudioChecks/SrapStage2B.cs", "checks/AndroidAudioChecks/GeminiAndroidContract.cs", "checks/AndroidAudioChecks/fixtures/srap-v1.txt", "checks/AndroidAudioChecks/fixtures/srap-alias-v1.txt"]
+
   ANDROID_BIDIRECTIONAL_AUDIO:
     intent: "Phone app/device audio capture to PC, PC audio to phone, SmartVolume, companion media control (Full only)"
     keywords: ["phone audio", "opus", "pcm", "smartvolume", "latency", "companion", "media", "手机声音", "手机音频", "智能音量"]
@@ -276,6 +289,7 @@ KNOWLEDGE_RETRIEVAL_ROUTER:
     symbols: ["v1.36"]
     facts:
       - "v2.00 (dev on master): .NET 10 Native AOT + Win32/Direct2D/DirectWrite UI, redesigned Apps routing canvas + per-forward Q15 gain, adaptive UiDockRail, unified Devices tab, Windows DNS-SD Android background browse, --control isolated IPC."
+      - "2026-11-28 development update: Native Full adds companion-app pairing, capability-based controls and ADB profile linking. See ANDROID_APP_SRAP for device results and outstanding verification."
       - "v1.36 (published 2026-11-24): Shared Apps/QuickPanel multi-output selections (Ctrl/Shift/Ctrl+Shift), persistent sidebar collapse, AudioDeviceNotificationHub, AirPlay multi-output, Android 11+ Opus/PCM + 3 latency modes, AdaptiveBitrateController, Store AUMID & AirPlay firewall rules."
       - "v1.34-v1.35: Multi-PC playback selection & restart restore, shared WH_MOUSE_LL hook, optimistic QuickPanel/external switching, 45ms/500ms OSD thresholds, Android file browser/transfer, clipboard cancellation on phone disable."
       - "v1.32-v1.33: Pure C# ADB/TLS1.3/SPAKE2/MediaFoundation/D3D11 backend (removing adb.exe/scrcpy/FFmpeg/SDL2), self-built C# AirPlay audio/mirror receiver (PCM/ALAC/AAC-LC/AAC-ELD), H.265 + H.264 fallback, focus-gated 4-slot gamepad, unified QR+PIN pairing & mDNS recovery, StoreLite MSIX, GPL-3.0-only transition (2026-11-17)."
@@ -316,6 +330,13 @@ RESOURCE_AND_PERFORMANCE:
 node docs/readme/generate.cjs --check
 dotnet build SonicRoute.Core/SonicRoute.Core.csproj -c Release
 dotnet run --project packaging/Tests/SerializationChecks/Checks.csproj -c Release -f net10.0-windows
+
+# Check the Windows SRAP client with local fixtures
+$checks = "checks/AndroidAudioChecks"
+$run = Join-Path $env:TEMP ("sonicroute-srap-" + [guid]::NewGuid())
+dotnet run --project $checks -c Release -- --srap-stage2a "$run/pairing"
+dotnet run --project $checks -c Release -- --gemini-android-contract "$run/protocol" "$checks/fixtures/srap-v1.txt"
+dotnet run --project $checks -c Release -- --srap-stage2b "$run/linking" "$checks/fixtures/srap-alias-v1.txt"
 
 # Isolated candidate run (never touches user %LocalAppData%\SonicRoute\ or grabs running hotkeys)
 $exe = "../outputs/native-product/candidate/Full-x64/SonicRoute.exe"
@@ -424,6 +445,7 @@ QUERY_DECISION_MATRIX_FOR_AGENTS:
     CHECK_1: "Confirm edition is Full (Lite/Legacy/StoreLite exclude SonicRoute.AndroidAudio completely)."
     CHECK_2: "Android playback capture requires Android 11 (API 30+); USB UsbInterfaceInUse indicates external adb.exe or another host holds the WinUSB interface; Wi-Fi discovery requires matching LAN subnet & wireless debugging enabled."
     CHECK_3: "AirPlay requires active IPv4 LAN interface and inbound LAN firewall allowance (UDP 5353, 319-320, TCP/UDP 47120-47183)."
+    CHECK_4: "For an SRAP app connection, check discovery or the invitation address, phone confirmation, saved trust and the capability for the requested operation. See ANDROID_APP_SRAP for the tested device and ADB-only operations."
   WHEN user_asks_runtime_error:
     NATIVE_AOT_v200: "Native AOT Full and Lite bundles include the runtime; no .NET Desktop Runtime install is needed."
     WPF_v136_RELEASE: "Published WPF v1.36 Full and Lite require .NET 10 Desktop Runtime (matching x64 or ARM64); base .NET Runtime alone fails."
