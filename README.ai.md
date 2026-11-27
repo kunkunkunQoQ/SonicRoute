@@ -3,242 +3,366 @@
 
 [简体中文](README.md) | [English](README.en.md) | [繁體中文](README.zh-TW.md) | [日本語](README.ja.md) | [한국어](README.ko.md) | [Deutsch](README.de.md) | [Français](README.fr.md) | [Español](README.es.md) | [Русский](README.ru.md) | **🤖 AI**
 
+> **Scope notice**: `version` identifies the published GitHub stable release in `docs/readme/shared.json`; `source_version` comes from `build/Version.props`. The repository `master` branch has migrated to **.NET 10 Native AOT + Win32 / Direct2D / DirectWrite** (`v2.00`, unreleased development source), while `v1.36` (`3d9f9e1`) is the frozen WPF baseline and `SonicRoute.Legacy` remains on `.NET Framework 4.8` (x64).
+
+## 1. Schema, Licensing & Version Scope
+
 ```yaml
 SCHEMA_SPEC:
   system: "SonicRoute"
   platform: "Windows 10 2004+ (Build 19041+) | Windows 11 (x64 / win-arm64)"
+  process_loopback_min_os: "Windows 10 Build 20348+ (21H2 / Server 2022 / Windows 11) for VAD\\Process_Loopback"
+  android_min_os_capture: "Android 11 (API 30+) for AudioPlaybackCapture; encoder/app capture policies still apply"
   version: "v1.36 (1.36.0.0)"
-  source_version: "v2.00"
-  source_status: "Development version; not the current published release."
-  version_scope: "version identifies the published release from shared.json; source_version comes from Version.props. Implementation facts below describe repository source and do not establish that a development feature is in the stable download."
+  release_date: "2026-11-24"
+  source_version: "v2.00 (2.00.0.0)"
+  source_status: "Development version (Native AOT v2.00 on master); not yet published to releases/latest."
+  wpf_baseline_tag: "v1.36 (3d9f9e1083b228f666e30d97e3c8edfce5e6654a)"
   repository: "https://github.com/kunkunkunQoQ/SonicRoute"
-  license: "GNU General Public License v3.0 only (SPDX: GPL-3.0-only; commercial use and paid distribution permitted subject to GPL; see LICENSE and docs/LICENSING.md)"
-  license_transition: "From the GPL migration on 2026-11-17, the complete covered project in this revision, including previously authored code, is offered under GPL-3.0-only to the extent the copyright holder has the right to license it. Previously granted MIT and custom-license permissions remain valid. Existing tags and released binaries are not relabeled. Separately licensed third-party components retain their own licenses and notices."
+  license: "GNU General Public License v3.0 only (SPDX: GPL-3.0-only; commercial use, sale, and paid distribution permitted subject to GPL Section 6 source obligations; see LICENSE and docs/LICENSING.md)"
+  license_transition: "From 2026-11-17, the covered project in this revision (including prior authored code) is offered under GPL-3.0-only to the extent licensed by the copyright holder. Prior MIT and custom-license grants remain valid; old tags/binaries are not relabeled. Third-party notices remain under their original licenses."
+  third_party_notices: ["packaging/AndroidLab/THIRD-PARTY-NOTICES.md", "SonicRoute.AndroidAudio/AirPlay/AacEld.NOTICE.md", "SonicRoute.AndroidAudio/AirPlay/Compatibility/LICENSE-MIT.txt"]
   wiki_root: "https://github.com/kunkunkunQoQ/SonicRoute/wiki"
   download_latest: "https://github.com/kunkunkunQoQ/SonicRoute/releases/latest"
   store_url: "https://apps.microsoft.com/detail/9NQZGRTPM1NT"
   store_lite_url: "https://apps.microsoft.com/detail/9N37LQ8SMLF6"
+  localization: "9 built-in locales (de-DE, en-US, es-ES, fr-FR, ja-JP, ko-KR, ru-RU, zh-CN, zh-TW), 988 keys each + runtime custom JSON import/override"
+```
 
-SYSTEM_ARCHITECTURE_&_FACTUAL_BOUNDS:
-  driver_isolation: "NO_VIRTUAL_AUDIO_CABLE | NO_KERNEL_DRIVERS | NO_TARGET_PROCESS_DLL_INJECTION"
-  routing_backend: "Undocumented COM Windows.Media.Internal.AudioPolicyConfig -> Windows PropertyStore persistence"
-  persistence_scope: "Windows retains the primary PC playback and recording device preferences. Additional simultaneous outputs require SonicRoute to be running."
-  routing_scope: "Per-app endpoint preferences. ResetAllAppRouting clears routes, preserving volume/mute preferences and system default devices; it is not the Windows volume mixer full reset."
-  hooks_in_use: "User-mode only: SetWinEventHook (foreground focus tracking), SetWindowsHookEx WH_MOUSE_LL (tray wheel & mouse hotkey input)"
-  execution_resource_model: "Event-driven first (WinEventHook, CoreAudio device/session notifications, WMI process events). Process rules retain a 1-second snapshot fallback when enabled or event monitoring is unavailable. Visible enabled meters sample active/fading sessions at 33ms; idle, closed and failed states have different wait/recovery paths. This is not zero polling or a zero-CPU guarantee."
-  cli_ipc_transport: "NamedPipe IPC (sr.cmd targets running instance; SonicRoute.exe --run-rule cold-boots temporary CLI host if instance absent)"
-  cross_platform: "FALSE (Windows desktop, including Win32/Core Audio and the WPF baseline)"
+## 2. Feature & Branch Status Matrix
 
+```yaml
+FEATURE_STATUS_MATRIX:
+  PUBLISHED_STABLE_v136:
+    - "WPF/.NET 10 Desktop Runtime (Full/Lite x64; ARM64 experimental) and .NET Framework 4.8 (Legacy x64)."
+    - "Per-app primary playback/capture routing, multi-device playback mirrors & restart restore, global hotkeys, tray wheel, 6x39 automation, CLI sr/--run-rule, Protocol 2 updater."
+    - "Full: pure C# in-process ADB, Android audio (Opus/Raw PCM, 3 latency modes), SmartVolume, virtual display & H.265/adaptive bitrate, focus-gated gamepad, 64 KiB clipboard sync, file transfer, AirPlay audio/mirror + multi-output."
+  IMPLEMENTED_IN_DEV_v200_MASTER:
+    - "Native AOT (.NET 10 PublishAot=true, reflection JSON disabled) single-EXE desktop host for Full & Lite; removes WPF, WinForms, XAML, NAudio, and System.Management from Full/Lite."
+    - "Custom Win32 LayeredWindow + Direct2D/DirectWrite UI matching v1.36 theme/metrics, per-monitor DPI, and zero idle timers."
+    - "Redesigned Apps workspace (AppsPageView.Canvas + AppsCanvasEngine + OutputConnectionPopupWindow): per-app node/wire routing canvas, partitioned collision-free layout, solid native / dashed forward / emerald mic wires, independent per-forward Q15 PCM gain/mute, and bounded AppCanvasLayouts persistence."
+    - "Adaptive UiDockRail for Apps and Devices with floating search/filter/refresh tools."
+    - "Unified Devices tab (MainNavTab.Devices / PhoneDevicePageView) combining Android Configure/Connect and AirPlay receiver settings."
+    - "Windows DNS-SD (DnsServiceBrowse) background detection for saved Android devices without triggering firewall prompts when AirPlay is off."
+    - "Source-generated COM ([GeneratedComInterface]/[GeneratedComClass]) for Core Audio, VAD\\Process_Loopback, and MTA WMI ProcessTraceSubscription."
+    - "Isolated diagnostic/test IPC (--control over SonicRoute.NativeControl.*) gated by CandidateEnvironment."
+  EXPERIMENTAL:
+    - "ExperimentalMode page (unlock by clicking author name 5x in Settings, restart required): BackgroundPollingFallbackEnabled (1s fallback), ExecutionHistoryEnabled (bounded JSONL), MicInPanel, and Config export/import/clear."
+    - "ExperimentalMic (default true; per-app capture routing & mic canvas partition; unsupported on external Android/AirPlay sources)."
+    - "ARM64 portable Native AOT builds (win-arm64 marked EXPERIMENTAL in release matrix)."
+    - "StoreLite MSIX packaging path (AppxManifest.Lite.xml + Build-Package.ps1 -Edition Lite; release.yml currently produces Full x64 MSIX)."
+  PENDING_HARDWARE_OR_RELEASE_VERIFICATION:
+    - "Native AOT v2.00 physical Android USB/Wi-Fi audio, virtual display, and canvas integration tests."
+    - "Native AOT v2.00 physical Apple AirPlay streaming/mirroring, physical ARM64 execution, and signed Store install/upgrade."
+    - "v2.00 GitHub Release (docs/release-v2.00.md prepared; shared.json release remains v1.36)."
+  SEPARATE_BRANCH_UNMERGED:
+    - "Windows Link (LAN PC-to-PC audio/window sharing) exists only on branch codex/windows-link-20261119 (78c6428) and is NOT in master / v2.00."
+  DISCONTINUED_OR_REMOVED:
+    - "NET8 builds (discontinued after v1.29)."
+    - "External adb.exe, scrcpy.exe, FFmpeg, and SDL2 binaries (replaced in v1.32 by SonicRoute.AndroidAudio pure C# + sonicroute-catalog.jar)."
+    - "Legacy classic quick panel (removed; single QuickPanelWindow in Native AOT, QuickPanelModernWindow in Legacy)."
+```
+
+## 3. Architecture, Tech Stack & Editions
+
+### 3.1 Solution & Project Topology
+
+| Solution / Project | Target & Mode | Role | Notes |
+|---|---|---|---|
+| `SonicRoute.Native.slnx` | `.NET 10` Native AOT | Active `v2.00` Full & Lite solution | `Native/Product`, `Native/Audio`, `SonicRoute.AndroidAudio`, `SonicRoute.Core`, `StoreInterop` |
+| `Native/Product/Product.csproj` | `net10.0-windows`, `PublishAot=true` | Native AOT WinExe (`Full` / `Lite`) | Reflection JSON off; links shared C# from `SonicRoute/` via `Protocol/Routing/Automation.targets` |
+| `Native/Audio/Audio.csproj` | `net10.0-windows`, `IsAotCompatible` | AOT COM Core Audio, Policy & Loopback | Raw vtable calls + `[GeneratedComInterface]` (`Endpoints`, `Policy`, `ProcessCapture`, `DeviceNotificationHub`) |
+| `SonicRoute.Core/SonicRoute.Core.csproj` | `net10.0-windows;net48` | Shared config, rules, stores, Core Audio models | `PersistenceJsonContext` source-gen on NET10; `System.Text.Json 8.0.5` on `net48` |
+| `SonicRoute.AndroidAudio/SonicRoute.AndroidAudio.csproj` | `net10.0-windows` (`Full` only) | Pure C# ADB, Android A/V, Virtual Display, AirPlay | `Concentus 2.2.2`, `SONICROUTE_NATIVE_LOOPBACK`, embeds `sonicroute-catalog.jar` (`99,072` B) |
+| `StoreInterop/StoreInterop.csproj` | `net10.0-windows` | Packaged MSIX identity, `StartupTask`, AUMID | Embedded `Microsoft.Windows.CsWinRT 2.3.1` (`WinRT.Runtime.dll` stripped for NET10) |
+| `SonicRoute.Legacy/SonicRoute.Legacy.csproj` | `net48`, x64 only | Legacy compatibility shell (`WPF` + `NAudio 2.2.1`) | Compiles `..\SonicRoute\**\*.cs` WPF UI; no phone/AirPlay; no Native AOT v2.00 canvas |
+| `SonicRoute/SonicRoute.csproj` | `net10.0-windows` (WPF) | Frozen `v1.36` baseline + shared source pool | Shared logic files (`AutoRule*`, `Hotkey*`, `AppPlayback*`, `LocalAppOutputMirrors`, `Updates/*`) compiled into Native via `.targets` |
+| `android-helper/` | Java (`AndroidRuntime/sonicroute-catalog.jar`) | On-device helper launched via `app_process` | `SonicRouteServer`, `Catalog`, `ClipboardBridge`, `AudioOutputBridge`, `MediaSessionBridge`, `EncoderCatalog` |
+
+### 3.2 Editions & Distribution Matrix
+
+```yaml
 RELEASE_EDITIONS:
-  - { edition: Full, runtime: net10, architecture: x64, asset: "SonicRoute-v1.36-x64.exe", deployment: FRAMEWORK_DEPENDENT_SINGLE_EXE, features: ANDROID_PHONE_AUDIO_AND_VIRTUAL_DISPLAY }
-  - { edition: Full, runtime: net10, architecture: arm64, release: "v1.36", asset: "SonicRoute-v1.36-arm64.exe", deployment: FRAMEWORK_DEPENDENT_SINGLE_EXE, status: EXPERIMENTAL, features: ANDROID_PHONE_AUDIO_AND_VIRTUAL_DISPLAY }
-  - { edition: Lite, runtime: net10, architecture: x64, asset: "SonicRoute-v1.36-Lite-x64.exe", deployment: FRAMEWORK_DEPENDENT_SINGLE_EXE }
-  - { edition: Legacy, runtime: net48, architecture: x64, asset: "SonicRoute-v1.36-Legacy-x64.zip", deployment: MULTIFILE_ZIP }
-  - { edition: Lite, runtime: net10, architecture: arm64, release: "v1.36", asset: "SonicRoute-v1.36-Lite-arm64.exe", deployment: FRAMEWORK_DEPENDENT_SINGLE_EXE, status: EXPERIMENTAL }
-  - { edition: Store, runtime: net10, architecture: x64, deployment: MSIX_WITH_FRAMEWORK_DEPENDENT_FULL_EXE, features: ANDROID_PHONE_AUDIO_AND_VIRTUAL_DISPLAY, updates: MICROSOFT_STORE }
-  - { edition: StoreLite, runtime: net10, architecture: x64, deployment: MSIX_WITH_FRAMEWORK_DEPENDENT_LITE_EXE, features: PC_AUDIO, updates: MICROSOFT_STORE }
-  - { edition: Lite, runtime: net8, architecture: x64, asset: "SonicRoute-v1.29-Lite-NET8-x64.exe", deployment: FRAMEWORK_DEPENDENT_SINGLE_EXE, status: DISCONTINUED }
-  - { edition: Lite, runtime: net8, architecture: arm64, asset: "SonicRoute-v1.29-Lite-NET8-arm64.exe", deployment: FRAMEWORK_DEPENDENT_SINGLE_EXE, status: DISCONTINUED }
+  - { edition: Full, runtime: net10_native_aot, architecture: x64, published_v136_asset: "SonicRoute-v1.36-x64.exe", source_v200_asset: "SonicRoute-v2.00-x64.exe", deployment: SELF_CONTAINED_NATIVE_EXE, defines: [SONICROUTE_PHONE], nuget: [Concentus 2.2.2, QRCoder 1.7.0, CsWinRT 2.3.1(build)], features: "PC Audio + Android Audio/Files/Clipboard/VirtualDisplay + AirPlay" }
+  - { edition: Full, runtime: net10_native_aot, architecture: arm64, published_last_release: "v1.36", source_v200_asset: "SonicRoute-v2.00-arm64.exe", deployment: SELF_CONTAINED_NATIVE_EXE, status: EXPERIMENTAL, defines: [SONICROUTE_PHONE], features: "PC Audio + Android + AirPlay" }
+  - { edition: Lite, runtime: net10_native_aot, architecture: x64, published_v136_asset: "SonicRoute-v1.36-Lite-x64.exe", source_v200_asset: "SonicRoute-v2.00-Lite-x64.exe", deployment: SELF_CONTAINED_NATIVE_EXE, features: "PC Audio only (no AndroidAudio/QRCoder)" }
+  - { edition: Lite, runtime: net10_native_aot, architecture: arm64, published_last_release: "v1.36", source_v200_asset: "SonicRoute-v2.00-Lite-arm64.exe", deployment: SELF_CONTAINED_NATIVE_EXE, status: EXPERIMENTAL, features: "PC Audio only" }
+  - { edition: Legacy, runtime: net48, architecture: x64, published_v136_asset: "SonicRoute-v1.36-Legacy-x64.zip", source_v200_asset: "SonicRoute-v2.00-Legacy-x64.zip", deployment: MULTIFILE_ZIP_WPF, runtime_dep: ".NET Framework 4.8 + NAudio 2.2.1 + System.Management", features: "PC Audio only (WPF UI)" }
+  - { edition: Store, runtime: net10_native_aot, architecture: x64, manifest: "packaging/Store/AppxManifest.xml", package_id: "8B44F47E.SonicRoute", deployment: MSIX_FULL_NATIVE_EXE, features: "Full + StartupTask + AUMID + AirPlay Inbound Firewall Rules", updates: MICROSOFT_STORE }
+  - { edition: StoreLite, runtime: net10_native_aot, architecture: x64, manifest: "packaging/Store/AppxManifest.Lite.xml", package_id: "8B44F47E.SonicRouteLite", deployment: MSIX_LITE_NATIVE_EXE, features: "PC Audio + StartupTask + AUMID", updates: MICROSOFT_STORE }
+  - { edition: Lite, runtime: net8, architecture: "x64 / arm64", last_release: "v1.29", status: DISCONTINUED }
+```
 
+### 3.3 Native AOT Host & UI Architecture (`Native/Product`)
+
+```yaml
+NATIVE_HOST_&_UI_PIPELINE:
+  entry_and_host:
+    - "Program.Main ([STAThread]) opens CandidateEnvironment before any Core singleton, installs ExceptionDiagnostics, initializes STA COM, checks UpdateBootstrap/RestartCoordinator, parses CLI (--version, --help, --run-rule, --control), acquires single-instance mutex, and enters NativeApplicationWindow.Run() (blocking GetMessageW/DispatchMessageW)."
+    - "NativeApplicationWindow owns one invisible top-level Win32 HWND (to receive WM_DEVICECHANGE, WM_POWERBROADCAST, WM_WTSSESSION_CHANGE, WM_SETTINGCHANGE, TaskbarCreated, RegisterHotKey, clipboard listener, and WinEventHook). Never uses message-only HWND."
+    - "ApplicationHost owns lifecycle, ProductAudio, ProductCurrentApp, ProductAutomation, CoalescedVolumeWriter (app, endpoint(Flow,Id), external), PhonePreview, AirPlayPreview, UpdateService, FeedbackState, and UI shells."
+  rendering_and_windows:
+    - "LayeredWindow (WS_EX_LAYERED + UpdateLayeredWindow premultiplied BGRA DIB + D2dTarget / D2dSharedContext lazy Direct2D/DirectWrite factories) handles per-monitor DPI (WM_DPICHANGED), keyboard/UIA/mouse/wheel/OLE drop, and Win32 InlineEditHost."
+    - "MainWindowShell (920x620 default, 780x540 min, collapsible nav rail 196<->64 DIP 180ms CubicOut): hosts Apps, Devices (Full only), Hotkeys, Theme, Settings, Automation, and Experimental (when unlocked & enabled) pages."
+    - "Transient layered windows: QuickPanelWindow (372 DIP wide, 350..850 DIP height), PhoneAudioWindowView (235 DIP companion, 6 DIP gap), OutputVolumesPopupWindow, OutputConnectionPopupWindow (304x<=368 DIP), OsdWindow (NoActivate + ClickThrough, 90ms eased bar), TrayMenuController, ColorPickerWindow, DragIconWindow, ReadOnlyWindow, VirtualDisplayStatusWindow."
+    - "Cross-thread audio/phone operations run off the UI thread (MTA or ThreadPool) and marshal results back via TryPost / PostContinuation; closing MainWindowShell hides it and releases D2D/DIB buffers in OnHidden()."
+```
+
+## 4. Subsystems: Mechanisms, Permissions, Limits & Source Map
+
+```yaml
+SYSTEM_ARCHITECTURE_&_FACTUAL_BOUNDS:
+  driver_isolation: "NO_VIRTUAL_AUDIO_CABLE | NO_KERNEL_DRIVERS | NO_TARGET_PROCESS_DLL_INJECTION (PC) | NO_ELEVATION_BY_DEFAULT (asInvoker / runFullTrust)"
+  routing_backend: "Undocumented WinRT/COM Windows.Media.Internal.AudioPolicyConfig (Win10 IID 2a59116d-...; Win11 22000+ IID ab3d4648-...) -> Windows PropertyStore persistence"
+  persistence_scope: "Windows retains primary PC playback/capture endpoint preferences and active session volumes. Additional simultaneous outputs, hotkeys, tray wheel, automation, Android audio/mirror/clipboard, and AirPlay require SonicRoute running."
+  routing_scope: "Per-app endpoint preferences. ResetAllAppRouting invokes ClearAllPersistedApplicationDefaultEndpoints first with per-running-process fallback; preserves volume/mute and system defaults."
+  hooks_in_use: "User-mode only: SetWinEventHook (foreground focus tracking, active only when needed), SetWindowsHookEx WH_MOUSE_LL (single shared hook for tray wheel & mouse hotkeys)"
+  cross_platform: "FALSE (Windows 10 2004+ / Windows 11 only)"
+
+KNOWLEDGE_RETRIEVAL_ROUTER:
+  APPS_ROUTING_CANVAS:
+    intent: "Visual per-app audio routing canvas, node graph, dock rail, continuous output popup (v2.00)"
+    keywords: ["canvas", "wire", "dock", "node", "zoom", "layout", "apps", "画布", "连线", "节点", "应用页"]
+    source: ["Native/Product/Views/AppsPageView.cs", "Native/Product/Views/AppsPageView.Canvas.cs", "Native/Product/Views/AppsCanvasEngine.cs", "Native/Product/Views/AppsPageView.Dock.cs", "Native/Product/Views/OutputConnectionPopupWindow.cs"]
+    symbols: ["AppsPageView", "AppsCanvasLayoutEngine.Reconcile", "CanvasWireGeometryCache", "OutputConnectionPopupWindow", "AppConfig.AppCanvasLayouts"]
+    facts:
+      - "Left UiDockRail lists filtered apps (All, Active, Saved, Hidden) with floating search/refresh/filter panel (AppsPageView.Dock.cs)."
+      - "Right canvas maintains one reusable node-and-wire state per active app: Application node (primary volume/mute, forward rows, right-edge + port, mic input, switches) wired to Playback nodes (upper-right) and Capture nodes (lower-right when ExperimentalMic=true)."
+      - "3 wire types: solid primary/native output (AudioPolicyConfig), dashed capture-forwarding output (LocalAppOutputMirrors/PcmOutputMirrors), emerald-green reverse microphone input (Flow.Capture; disabled for external Android/AirPlay apps)."
+      - "AppsCanvasLayoutEngine enforces collision-free playback/capture partitioning (>4 devices per partition switches to 2 columns), preserves user-positioned nodes (Auto=false), and skips layout solves when BuildLayoutSignature is unchanged."
+      - "Zoom 0.35..1.80, 6 DIP drag-vs-click threshold, asymmetric low-zoom port hit reach, continuous non-closing OutputConnectionPopupWindow on + click, and 450ms debounced per-app layout save (<=256 apps, <=64 devices/app)."
+
+  ROUTE_CORE_AUDIO:
+    intent: "Per-app primary audio routing, default audio devices, endpoint enumeration"
+    keywords: ["route", "headset", "speaker", "device", "endpoint", "render", "capture", "分流", "设备", "耳机", "音箱"]
+    wiki: "02-功能特性.md"
+    source: ["Native/Audio/Endpoints.cs", "Native/Audio/Policy.cs", "Native/Product/Audio/ProductAudio.cs", "Native/Product/Routing/PcRoutingApi.cs", "SonicRoute.Core/AudioService.cs", "SonicRoute.Core/Interop/AudioPolicyConfig.cs"]
+    symbols: ["ProductAudio", "PcRoutingApi", "Policy", "Endpoints", "AudioService.ApplyEndpoint", "AudioPolicyConfig.SetDefaultEndPoint"]
+    facts:
+      - "Native/Audio uses source-generated COM and raw vtable function pointers (no NAudio/RCW) on MTA threads."
+      - "Native/Core read routes via AudioPolicyConfig.GetPersistedDefaultAudioEndpoint; missing preference follows Windows system default."
+      - "QuickPanel & AppsPage share Ctrl-click (toggle), Shift-click (additive range), and Ctrl+Shift-click (set PC primary native endpoint while keeping additional mirrors)."
+      - "SystemDefault device node syncs bidirectionally with actual Windows default render/capture device."
+
+  MULTI_OUTPUT_AND_CAPTURE_FORWARDING:
+    intent: "Simultaneous multi-device playback, process loopback capture, independent per-forward gain, PC-to-phone isolation"
+    keywords: ["mirror", "split", "simultaneous", "loopback", "gain", "forward", "多设备", "同时播放", "转发", "环回"]
+    source: ["SonicRoute/AppPlaybackOutputs.cs", "SonicRoute/AppPlaybackRestore.cs", "SonicRoute/LocalAppOutputMirrors.cs", "Native/Product/Routing/LocalAppOutputMirrors.Native.cs", "Native/Product/Routing/DesktopMirrorPlayer.cs", "Native/Audio/Streams.cs", "shared/WindowsAudio/PcProcessLoopbackCapture.cs", "Native/Product/Routing/PhoneMirrorIsolation.cs"]
+    symbols: ["AppPlaybackOutputs.SetAsync", "AppPlaybackRestore", "LocalAppOutputMirrors", "ProcessCapture", "LoopbackCompletion", "DesktopMirrorPlayer", "PhoneMirrorIsolation"]
+    limits_and_permissions:
+      - "Requires Windows 10 Build 20348+ for VAD\\Process_Loopback capture; cannot capture SonicRoute itself."
+      - "Cross-instance process lock Local\\SonicRoute.AudioMirror.{pid} prevents Full & Lite side-by-side from double-capturing the same PID."
+    facts:
+      - "One event-driven ProcessCapture per PID feeds multiple DesktopMirrorPlayer (WASAPI render) or AndroidPhonePcmPlayer sinks."
+      - "DesktopMirrorPlayer applies lockless Q15 PCM scaling/muting per sink (100% unmuted takes zero-copy pass-through); external sources use PcmOutputMirrors (_volume * sinkPercent / 100f). Per-forward mirror gain is runtime in-memory and never alters system endpoint master volume."
+      - "AppPlaybackRestore persists multi-output selections in SavedPlaybackStore and restores them via PlaybackSessionWatch (IAudioSessionNotification) when apps restart or devices return."
+      - "Routing a PC app exclusively to a phone (PhoneMirrorIsolation + LocalSilenceLeasePool + SourceSpeakerLeases) reserves an unoccupied non-default muted endpoint or speaker mute lease via AudioPolicyConfig and rolls back automatically on unplug or external route migration."
+
+  ANDROID_CONNECTION_AND_DISCOVERY:
+    intent: "Pure C# ADB transport, USB/Wi-Fi pairing, DNS-SD background discovery, device profiles (Full only)"
+    keywords: ["android", "adb", "winusb", "qr", "spake2", "tls", "mdns", "reconnect", "安卓", "连接", "配对", "无线调试"]
+    source: ["SonicRoute.AndroidAudio/AdbClient.cs", "SonicRoute.AndroidAudio/DirectAdbTransport.cs", "SonicRoute.AndroidAudio/WinUsbAdbTransport.cs", "SonicRoute.AndroidAudio/AdbSocketClient.cs", "SonicRoute.AndroidAudio/Spake25519.cs", "SonicRoute.AndroidAudio/SspiPairingTls.cs", "SonicRoute.AndroidAudio/AndroidMdnsDiscovery.cs", "SonicRoute.AndroidAudio/AndroidConnectionManager.cs", "SonicRoute.AndroidAudio/AndroidPhoneStore.cs", "Native/Product/Views/PhonePreview.cs", "Native/Product/Views/PhoneDevicePageView.cs"]
+    symbols: ["DirectAdbTransport", "ArbitratedAdbTransport", "WinUsbAdbLink", "Spake25519", "SspiPairingTls", "AndroidMdnsDiscovery", "AndroidConnectionManager", "AndroidPhoneStore"]
+    limits_and_permissions:
+      - "Requires USB debugging or Android 11+ Wireless debugging; WinUSB interface claimed exclusively if another ADB daemon holds the USB interface (reports UsbInterfaceInUse)."
+      - "Up to 32 saved phone profiles stored in android-phone.json (migrated from legacy android-phones.json if present)."
+    facts:
+      - "Pure C# in-process ADB v41 over WinUSB (SetupAPI/WinUSB DMA POH buffers) and TCP/TLS 1.3 (Windows SSPI SChannel); ArbitratedAdbTransport delegates to external 127.0.0.1:5037 if already listening and falls back to DirectAdbTransport when absent."
+      - "Pairing card combines ephemeral QR (QRCoder 1.7.0, 2-min cycle) and manual IP:port + 6-digit SPAKE2/Edwards25519 + AES-128-GCM pairing."
+      - "Background detection of saved wireless endpoints uses Windows DnsServiceBrowse (AndroidMdnsDiscovery.WatchConnectionsAsync) to avoid triggering Windows firewall prompts on startup when AirPlay is off; explicit connect/search uses short-lived UDP mDNS + identity verification."
+      - "AndroidConnectionManager enforces identity fingerprint / serial / transport disambiguation so USB and Wi-Fi aliases never collide or silently merge unverified endpoints."
+
+  ANDROID_BIDIRECTIONAL_AUDIO:
+    intent: "Phone app/device audio capture to PC, PC audio to phone, SmartVolume, companion media control (Full only)"
+    keywords: ["phone audio", "opus", "pcm", "smartvolume", "latency", "companion", "media", "手机声音", "手机音频", "智能音量"]
+    source: ["SonicRoute.AndroidAudio/AndroidAudioManager.cs", "SonicRoute.AndroidAudio/AndroidAudioSession.cs", "SonicRoute.AndroidAudio/PcToPhoneAudioManager.cs", "SonicRoute.AndroidAudio/ScrcpyOpusReceiver.cs", "SonicRoute.AndroidAudio/ScrcpyRawPcmReceiver.cs", "SonicRoute.AndroidAudio/AndroidPcmSource.cs", "SonicRoute.AndroidAudio/AudioLatencyProfile.cs", "SonicRoute.AndroidAudio/AndroidMediaSessionClient.cs", "Native/Product/Audio/ExternalAudioBridge.cs", "Native/Product/Views/PhoneAudioWindowView.cs", "Native/Product/Views/CrossDeviceDragHost.cs", "android-helper/src/org/sonicroute/android/audio/PlaybackAudioCapture.java", "android-helper/AudioOutputBridge.java"]
+    symbols: ["AndroidAudioManager", "AndroidAudioSession", "PcToPhoneAudioManager", "AndroidPcmSource", "AudioLatencyProfile", "ExternalAudioBridge", "PhoneAudioWindowView", "CrossDeviceDragHost"]
+    limits_and_permissions:
+      - "Phone->PC AudioPlaybackCapture requires Android 11 (API 30+); DRM/opt-out apps or OEM ROM policies may block capture."
+      - "Audio codec/latency settings (Opus via Concentus 2.2.2 vs Raw PCM; Ultra-low / Balanced / Stable) apply per phone on next stream start."
+    facts:
+      - "Embedded sonicroute-catalog.jar (99,072 B, SHA-256 verified) runs on Android via app_process for app enumeration, icons, media controls, and audio capture/playback."
+      - "AndroidAudioSession supports simultaneous multi-output routing (PC endpoints and/or source phone playback) via IMultiOutputAudioSession + PcmOutputMirrors, plus SIMD PCM16 conversion and optional SmartVolume leveling."
+      - "PhoneAudioWindowView (235 DIP companion beside QuickPanel) supports cross-device drag-and-drop (PC apps <-> phone speaker/Bluetooth, Android apps <-> PC shared/exclusive/virtual display) and MediaSession seek/play/skip + album art."
+
+  VIRTUAL_DISPLAY_AND_MIRRORING:
+    intent: "Per-app Android virtual display, display0 mirroring, H.264/HEVC decoding, IME & gamepad input (Full only)"
+    keywords: ["virtual display", "mirror", "hevc", "h265", "h264", "d3d11", "gamepad", "ime", "虚拟屏", "投屏", "手柄"]
+    source: ["SonicRoute.AndroidAudio/AndroidVirtualDisplayManager.cs", "SonicRoute.AndroidAudio/InProcessVirtualDisplayClient.cs", "SonicRoute.AndroidAudio/MediaFoundationH264Decoder.cs", "SonicRoute.AndroidAudio/D3D11VideoSurfaceRenderer.cs", "SonicRoute.AndroidAudio/NativeVideoWindow.cs", "SonicRoute.AndroidAudio/NativeGamepadReader.cs", "android-helper/src/org/sonicroute/android/SonicRouteServer.java", "android-helper/src/org/sonicroute/android/video/AdaptiveBitrateController.java", "android-helper/src/org/sonicroute/android/control/UnicodeBroker.java", "android-helper/src/org/sonicroute/android/control/GamepadController.java"]
+    symbols: ["AndroidVirtualDisplayManager", "InProcessVirtualDisplayClient", "MediaFoundationH264Decoder", "D3D11VideoSurfaceRenderer", "NativeVideoWindow", "NativeGamepadReader"]
+    limits_and_permissions:
+      - "H.265 (HEVC) requires both Android device HEVC encoder and Windows Media Foundation HEVC decoder (MediaFoundationH264Decoder.SupportsHevc); falls back to H.264 on unsupported devices or encoder startup failure."
+      - "Gamepad input is strictly focus-gated to the foreground virtual display HWND (no RIDEV_INPUTSINK); supports up to 4 XInput/RawInput HID slots."
+    facts:
+      - "Dedicated Win32 NativeVideoWindow per session runs on its own GetMessageW thread (zero idle CPU), renders D3D11 DXGI_FORMAT_NV12 slices via IMFDXGIDeviceManager (or software NV12 fallback), and supports 8px-aligned flex resize (100ms coalesce) or aspect-locked display0 mirror."
+      - "MediaFoundationH264Decoder pools up to 4 input samples (<=2 MiB total) and requests sync frames on stream/corrupt recovery; AdaptiveBitrateController applies separate USB and Wi-Fi policies."
+
+  CLIPBOARD_AND_FILE_TRANSFER:
+    intent: "Bidirectional Android text clipboard sync and Android shared-storage file transfer (Full only)"
+    keywords: ["clipboard", "file", "transfer", "sdcard", "download", "剪贴板", "文件传输", "传文件"]
+    source: ["Native/Product/Views/PhoneClipboard.cs", "Native/Product/Views/NativeTextClipboard.cs", "SonicRoute.AndroidAudio/AndroidClipboardClient.cs", "android-helper/ClipboardBridge.java", "SonicRoute.AndroidAudio/AndroidFileTransfer.cs", "SonicRoute.AndroidAudio/AndroidFileTransfers.cs"]
+    symbols: ["PhoneClipboard", "AndroidClipboardClient", "NativeTextClipboard", "AndroidFileTransfer", "AndroidFileTransfers"]
+    limits_and_permissions:
+      - "Clipboard sync is opt-in per device, Unicode text only, <= 64 KiB (AndroidClipboardClient.MaxTextBytes), and subject to Android 10+ background clipboard restrictions unless permitted by shell/ADB context."
+      - "File transfer targets Android shared storage (/sdcard, default /sdcard/Download) via ADB sync; rejects unsafe path/control/symlink segments."
+    facts:
+      - "PhoneClipboard suppresses loops via sequence tracking + SonicRoute.RemoteClipboard.v1, ExcludeClipboardContentFromMonitorProcessing, Clipboard Viewer Ignore, CanUploadToCloudClipboard=0, CanIncludeInClipboardHistory=0, KDE password-manager hint, and password-manager process filtering; disabling a phone cancels its in-flight desktop write."
+      - "AndroidFileTransfer uses staged .part temporary files with atomic rename and automatic numeric deduplication, and supports multi-file drop upload on PhoneDevicePageView."
+
+  AIRPLAY_RECEIVER:
+    intent: "Self-built C# AirPlay audio and screen-mirroring receiver with multi-output routing (Full only)"
+    keywords: ["airplay", "apple", "aac-eld", "alac", "mirror", "pin", "firewall", "投屏", "苹果"]
+    source: ["Native/Product/Views/AirPlayPreview.cs", "Native/Product/Views/AirPlayReceiverViewControl.cs", "SonicRoute.AndroidAudio/AirPlay/AirPlayReceiver.cs", "SonicRoute.AndroidAudio/AirPlay/AirPlayDiscovery.cs", "SonicRoute.AndroidAudio/AirPlay/AirPlayAudioOutput.cs", "SonicRoute.AndroidAudio/AirPlay/AirPlayMirrorStream.cs", "SonicRoute.AndroidAudio/AirPlay/AirPlayListenerPorts.cs", "SonicRoute.AndroidAudio/AirPlay/AacEldDecoder.cs"]
+    symbols: ["AirPlayPreview", "AirPlayReceiver", "AirPlayAudioOutput", "AirPlayDiscovery", "AirPlayListenerPorts", "AacEldDecoder"]
+    limits_and_permissions:
+      - "Requires active IPv4 LAN interface (else AirPlayNoNetworkException) and ChaCha20Poly1305 crypto support."
+      - "Store Full MSIX declares inbound domainAndPrivate firewall rules for UDP 5353, UDP 319-320, and TCP/UDP 47120-47183 (bound by AirPlayListenerPorts when packaged). Portable builds bind ephemeral ports and rely on user firewall acceptance."
+    facts:
+      - "Supports PCM, ALAC, AAC-LC, and 44.1/48 kHz stereo AAC-ELD (without SBR; C# filterbank adapted from FFmpeg n8.0 under GPL-3.0-only), plus H.264/HEVC aspect-preserving mirror window (topmost, F11 fullscreen, track metadata/cover)."
+      - "Optional 4-digit pairing PIN (max 6 attempts, excludes 3939). AirPlayAudioOutput implements IMultiOutputAudioSession for simultaneous playback on multiple PC or connected Android outputs."
+
+  AUTOMATION_ENGINE:
+    intent: "Rule triggers, 39 actions, rule chaining, WMI process monitoring, scheduling, execution history"
+    keywords: ["automation", "rule", "trigger", "action", "chain", "schedule", "wmi", "自动化", "规则", "触发器", "动作", "定时"]
+    wiki: "04-自动化规则.md"
+    source: ["Native/Product/Automation/ProductAutomation.cs", "Native/Monitoring/ProcessTraceSubscription.cs", "SonicRoute/AutoRuleService.cs", "SonicRoute/AutoRuleScheduler.cs", "SonicRoute.Core/Models/AutoRule.cs", "SonicRoute.Core/AutoRuleStore.cs", "SonicRoute.Core/ExecutionHistoryStore.cs", "Native/Product/Views/AutomationPageView.cs"]
+    symbols: ["ProductAutomation", "ProcessTraceSubscription", "AutoRuleService.ExecuteAsync", "AutoRuleScheduler", "AutoRuleTrigger", "AutoRuleAction", "ExecutionHistoryStore"]
+    facts:
+      - "6 Triggers (0..5) x 39 Actions (0..38); Action 17 ExecuteRule enables nested rule chaining; Actions 37/38 mute/toggle mic for runtime current app (capture session required)."
+      - "Process rules use MTA native COM WMI (Win32_ProcessStartTrace / Win32_ProcessStopTrace) with 2s..30s backoff recovery; optional 1s ProcessSnapshotService fallback activates only when WMI is unavailable or BackgroundPollingFallbackEnabled=true. Zero process rules = zero WMI/snapshot overhead."
+      - "Schedules use a single nearest-due one-shot Timer and skip missed times across sleep/shutdown."
+      - "Rules persist as separate JSON files in %LocalAppData%\\SonicRoute\\Automation\\. ExecutionHistory writes rotated JSONL (<=ExecutionHistoryLimitMb MiB) only when ExperimentalMode and ExecutionHistoryEnabled are both true."
+
+  PANEL_TRAY_AND_HOTKEYS:
+    intent: "QuickPanel UI, tray wheel, OSD, global keyboard/mouse hotkeys, custom icons"
+    keywords: ["panel", "tray", "wheel", "icon", "quickpanel", "hotkey", "osd", "面板", "托盘", "滚轮", "快捷键", "图标"]
+    wiki: ["01-使用指南.md", "03-快捷键.md"]
+    source: ["Native/Product/Views/QuickPanelWindow.cs", "Native/Product/Views/OutputVolumesPopupWindow.cs", "Native/Product/Views/OsdWindow.cs", "Native/Product/Views/TrayMenuController.cs", "Native/Product/Shell/Tray.cs", "Native/Product/Shell/Mouse.cs", "Native/Product/Audio/PanelPeakMeter.cs", "Native/Product/Ui/NativeAppIconService.cs", "SonicRoute/HotkeyActions.cs", "SonicRoute/HotkeyService.cs", "Native/Product/Automation/NativeMouseBindings.cs"]
+    symbols: ["QuickPanelWindow", "OutputVolumesPopupWindow", "OsdWindow", "TrayMenuController", "PanelPeakMeter", "HotkeyActions.All", "NativeAppIconService"]
+    facts:
+      - "14 built-in global hotkey actions (HotkeyActions.All) + arbitrary Rule:{Id} bindings via RegisterHotKey and shared WH_MOUSE_LL hook (MButton, XButton1/2, WheelUp/Down; Esc cancels recording). Device hotkeys keep original single-direction actions; tray modifier-wheel directions are separate."
+      - "Tray wheel (defaults: TrayWheelEverywhere=false, PanelChangeSystemDefault=true): normal wheel -> current app volume; Shift+wheel -> system default output volume; Alt+wheel -> cycle current app output; Alt+Shift+wheel -> cycle system default output. Hotkeys queue non-blocking device switches with 45ms fast-complete / 500ms min-pending OSD thresholds."
+      - "QuickPanel height: 350..850 DIP (constrained by work area). Deferred OutputVolumesPopupWindow (QuickPanelShowAllOutputVolumes=false default; PanelOutputVolumesRetainedOnly=false filters with HiddenOutputDevices) subscribes only while expanded; quick-panel endpoint volume/mute avoids redundant OSD."
+      - "Peak meter runs at 50ms in Native AOT (33ms AudioMeterService in Legacy) only while visible and ShowAppPeakMeter=true."
+      - "Custom PNG/JPEG/ICO drop import stores managed PNGs in %LocalAppData%\\SonicRoute\\Icons\\ via NativeAppIconService."
+
+  CLI_AND_CONTROL_IPC:
+    intent: "Rule CLI (sr / --run-rule) and isolated Native AOT control IPC (--control)"
+    keywords: ["cli", "sr", "command", "control", "stream deck", "ahk", "pipe", "命令行", "管道"]
+    wiki: "05-命令行执行规则.md"
+    source: ["Native/Product/Program.cs", "Native/Product/Protocol/ProductInstance.cs", "Native/Product/Protocol/CandidateEnvironment.cs", "Native/Product/HostCommands.cs", "SonicRoute/RuleCommandLine.Parse.cs", "SonicRoute/RuleCommandLine.Selection.cs", "SonicRoute/RuleCommandLine.Wire.cs", "SonicRoute/Resources/RuleCommand.ps1"]
+    symbols: ["Program.Start", "ProductInstance", "RuleCommandLine", "CandidateEnvironment"]
+    facts:
+      - "Rule execution: sr <RuleName|RuleId> (invokes %LocalAppData%\\SonicRoute\\Command\\sr.cmd -> sr-client.ps1; targets running instance, exits 6 if absent; supports --full/--lite/--legacy) OR SonicRoute.exe --run-rule <selector> (cold-boots temporary host if absent)."
+      - "Rule pipe: \\\\.\\pipe\\SonicRoute.RuleCommand.{CommandEdition}.{SessionId}.{UserSid}; 250ms (sr) / 5000ms (--run-rule) connect timeout, 10s write timeout, waits for completion; exit codes 0..8."
+      - "Isolated Dev/Test Control CLI (--control <verb> [args]): active only when CandidateEnvironment.IsIsolated=true (exits 2 if unisolated) over \\\\.\\pipe\\SonicRoute.NativeControl.{CommandEdition}.{SessionId}.{UserSid}; supports status, activate, panel, osd, language, current, devices, apps, volume, volume-queue, volume-flush, route, outputs-get, outputs-set, outputs-clear-saved, mirror-status, cycle-output, output-state, automation-status, exit, restart, install."
+
+  UPDATE_AND_RELEASE:
+    intent: "Portable self-update Protocol 2/1, SHA-256 verification, Store isolation, release & packaging pipelines"
+    keywords: ["update", "download", "rollback", "manifest", "protocol", "sha256", "store", "msix", "更新", "回滚", "商店包"]
+    source: ["SonicRoute/Updates/UpdateService.cs", "SonicRoute/Updates/UpdateTransport.cs", "SonicRoute/Updates/UpdateProtocol.cs", "SonicRoute/Updates/UpdateInstaller.cs", "SonicRoute/Updates/UpdateBootstrap.cs", "Native/Product/Protocol/ProductProtocol.cs", "packaging/Updates/Build-PortableRelease.ps1", "packaging/Updates/ReleaseLayout.ps1", "packaging/Store/Build-Package.ps1", "packaging/Updates/README.md", "packaging/Store/README.md"]
+    symbols: ["UpdateService", "UpdateProtocol.ValidatePackage", "UpdateBootstrap.BeforeStartup", "ProductProtocol.InstallCachedAsync"]
+    facts:
+      - "Portable auto-check defaults off; if enabled and >=24h since LastUpdateCheckUtc, startup warmup + single 15s delay performs one async check against GitHub stable releases/latest (no recurring timer; drafts/prereleases rejected; download and install require user action). Store editions disable the updater completely."
+      - "Protocol 2 enforces exact edition, runtime (net10/net48), and architecture (x64/arm64) matching; unsigned packages verify SHA-256 + byte length + PE architecture/Native AOT export/version against official GitHub HTTPS release metadata. Release-note text lives only in the open Settings view."
+      - "Original Protocol 1 Lite means NET8-only (discontinued after v1.29; manual migration to NET10 or Legacy x64); v1.24 has no native updater."
+      - "Trusted local EXE spawns worker mode to backup, swap, restart, and roll back on failure; fails cleanly on protected paths without silent elevation; user data is never touched."
+
+  VERSION_ARCHIVE_AND_CHANGELOG:
+    intent: "Release milestones from v1.24 through v1.36 and v2.00 dev"
+    keywords: ["changelog", "history", "version", "v1.36", "v2.00", "v1.32", "v1.24", "更新日志", "版本历史"]
+    wiki: "09-版本历史.md"
+    source: ["docs/release-v1.36.md", "docs/release-v2.00.md"]
+    symbols: ["v1.36"]
+    facts:
+      - "v2.00 (dev on master): .NET 10 Native AOT + Win32/Direct2D/DirectWrite UI, redesigned Apps routing canvas + per-forward Q15 gain, adaptive UiDockRail, unified Devices tab, Windows DNS-SD Android background browse, --control isolated IPC."
+      - "v1.36 (published 2026-11-24): Shared Apps/QuickPanel multi-output selections (Ctrl/Shift/Ctrl+Shift), persistent sidebar collapse, AudioDeviceNotificationHub, AirPlay multi-output, Android 11+ Opus/PCM + 3 latency modes, AdaptiveBitrateController, Store AUMID & AirPlay firewall rules."
+      - "v1.34-v1.35: Multi-PC playback selection & restart restore, shared WH_MOUSE_LL hook, optimistic QuickPanel/external switching, 45ms/500ms OSD thresholds, Android file browser/transfer, clipboard cancellation on phone disable."
+      - "v1.32-v1.33: Pure C# ADB/TLS1.3/SPAKE2/MediaFoundation/D3D11 backend (removing adb.exe/scrcpy/FFmpeg/SDL2), self-built C# AirPlay audio/mirror receiver (PCM/ALAC/AAC-LC/AAC-ELD), H.265 + H.264 fallback, focus-gated 4-slot gamepad, unified QR+PIN pairing & mDNS recovery, StoreLite MSIX, GPL-3.0-only transition (2026-11-17)."
+      - "v1.24-v1.31: .NET 10 & Protocol 2 updater (v1.25; NET8 retired v1.29), single QuickPanel + output volume popup (v1.27-v1.29), phone audio + virtual displays + 39 automation actions (v1.30), display0 mirror + 64 KiB text clipboard sync + 9 locales (v1.31)."
+```
+
+## 5. Resource, Idle-CPU & Memory Policy
+
+```yaml
+RESOURCE_AND_PERFORMANCE:
+  event_driven_first: "WinEventHook (only while foreground tracking needed), CoreAudio IMMNotificationClient/IAudioSessionNotification (AudioDeviceNotificationHub / DeviceNotificationHub), Win32 device/power/session/theme/time broadcasts, MTA WMI process trace, Windows DnsServiceBrowse."
+  coalescing_and_caching:
+    - "CoalescedVolumeWriter batches rapid slider/drag volume writes (90ms coalesce) on app, (Flow,Id) endpoint, and external source streams."
+    - "AppsCanvasLayoutSave debounces at 450ms; CanvasWireGeometryCache reuses ID2D1PathGeometry when endpoints move <0.25f and prunes unused wires every frame; AudioService device enumeration uses 3s generation-invalidated cache."
+  active_samplers_and_animations:
+    - "MainWindowShell & QuickPanelWindow run 16ms frame timers ONLY during active transitions (sidebar 180ms, quick-panel entrance 210ms, drag edge scroll) and stop immediately on completion or hide."
+    - "QuickPanel peak meter samples only while visible & ShowAppPeakMeter=true: 50ms in Native AOT (PanelPeakMeter), 33ms in Legacy/WPF (AudioMeterService); fades out then pauses until audio activity notifications."
+  window_close_and_reclaim:
+    - "Closing MainWindowShell hides it and calls OnHidden() -> ReleaseRenderResources() (releases D2D target & GDI DIB) and page OnDeactivated() (unsubscribes UI events & releases geometry/icon transients)."
+    - "Native AOT / Full does NOT force SetProcessWorkingSetSize whole-process trimming and protects active phone/audio/display sessions. Legacy (net48, SONICROUTE_IDLE_WORKING_SET_TRIM) retains a single SetProcessWorkingSetSize(-1,-1) 1.5s after closing all UI (30s cooldown)."
+```
+
+## 6. Build, Verification & Isolated Testing
+
+```powershell
+# Build Native AOT Full & Lite (default output: ../outputs/native-product/candidate/<Edition>-<Arch>/)
+# Fails if any IL2xxx/IL3xxx trimming/AOT diagnostics appear.
+./Native/Build-Product.ps1 -Edition Full -Architecture x64
+./Native/Build-Product.ps1 -Edition Lite -Architecture x64
+
+# Build full release matrix (Native AOT Full/Lite x64+ARM64 + Legacy x64 ZIP + Protocol 2 manifest)
+./packaging/Updates/Build-PortableRelease.ps1 -OutputDirectory ../outputs/release-candidate
+
+# Package unsigned Store MSIX (Full or Lite x64 Native AOT)
+./packaging/Store/Build-Package.ps1 -Edition Full
+
+# Verify 10 generated READMEs, Core dual-target build, and 9-locale JSON contracts
+node docs/readme/generate.cjs --check
+dotnet build SonicRoute.Core/SonicRoute.Core.csproj -c Release
+dotnet run --project packaging/Tests/SerializationChecks/Checks.csproj -c Release -f net10.0-windows
+
+# Isolated candidate run (never touches user %LocalAppData%\SonicRoute\ or grabs running hotkeys)
+$exe = "../outputs/native-product/candidate/Full-x64/SonicRoute.exe"
+$env:SONICROUTE_CANDIDATE_ROOT = (Resolve-Path "../outputs/native-product").Path
+$env:SONICROUTE_CANDIDATE_ID = "dev-isolated"
+$env:SONICROUTE_DISABLE_DEFAULT_HOTKEYS = "1"
+$env:SONICROUTE_CANDIDATE_METRICS = "1"   # Optional: writes last-exit.json COM/MTA/GC receipt on exit
+Start-Process -FilePath $exe -WindowStyle Hidden
+& $exe --control status
+& $exe --control exit
+```
+
+- **Additional test suites**: `Native/ProductChecks/Test-ProductMirrors.ps1`, `Native/ProductChecks/Test-ProductUpdate.ps1`, `Native/Measurements/Measure-Product.ps1`, `checks/AndroidAudioChecks`, `checks/AndroidUiChecks`, `checks/EditionChecks`, `checks/ReliabilityChecks`, `packaging/Tests/*`, `tools/SonicRoute.BenchmarkLab`.
+
+## 7. Domain Enums, CLI Exit Codes & Data Paths
+
+```yaml
 CLI_AND_SHORT_COMMAND_SPEC:
-  command_invocation: "sr <RuleName|RuleId> (invokes %LocalAppData%\\SonicRoute\\Command\\sr.cmd wrapping sr-client.ps1) OR SonicRoute.exe --run-rule <selector>"
+  command_invocation: "sr <RuleName|RuleId> (invokes %LocalAppData%\\SonicRoute\\Command\\sr.cmd -> sr-client.ps1) OR SonicRoute.exe --run-rule <selector>"
   pipe_endpoint: "\\\\.\\pipe\\SonicRoute.RuleCommand.{CommandEdition}.{SessionId}.{UserSid}"
-  stream_deck_ahk: "Call sr <RuleName|RuleId> or sr.cmd; waits for completion and returns rule execution result and corresponding exit code"
+  edition_flags: "sr defaults to Full -> Lite -> Legacy -> Store -> StoreLite; --full/--lite/--legacy selects portable edition."
   exit_codes:
     0: { code: ok, desc: "Execution succeeded without step failures" }
     1: { code: step_failed, desc: "One or more rule steps failed" }
-    2: { code: invalid_arguments, desc: "Empty selector or invalid command arguments" }
+    2: { code: invalid_arguments, desc: "Empty selector, invalid arguments, or unisolated --control" }
     3: { code: rule_not_found, desc: "Rule ID or name not found in rules store" }
-    4: { code: ambiguous_rule, desc: "Selector matches multiple rules (duplicate name or ID)" }
+    4: { code: ambiguous_rule, desc: "Selector matches multiple rules" }
     5: { code: rule_busy, desc: "Target rule is currently executing" }
-    6: { code: server_unavailable, desc: "Named pipe server unavailable, including an absent running instance" }
+    6: { code: server_unavailable, desc: "Named pipe server unavailable (instance not running)" }
     7: { code: canceled, desc: "Execution canceled or app shutdown in progress" }
     8: { code: internal_error, desc: "Unhandled exception during execution" }
-
-KNOWLEDGE_RETRIEVAL_ROUTER:
-  ROUTE_CORE_AUDIO:
-    intent: "Per-app audio routing, default audio devices, sound splitting"
-    keywords: ["route", "split", "headset", "speaker", "device", "endpoint", "render", "capture", "分流", "设备", "耳机", "音箱"]
-    wiki: "02-功能特性.md"
-    source: ["SonicRoute.Core/AudioService.cs", "SonicRoute.Core/Interop/AudioPolicyConfig.cs", "SonicRoute.Core/Interop/PolicyConfigClient.cs"]
-    symbols: ["AudioService.ApplyEndpoint", "AudioPolicyConfig.SetDefaultEndPoint", "SystemDefaultDeviceService.SetDefault"]
-    facts:
-      - "Routing is driverless via undocumented Windows COM Windows.Media.Internal.AudioPolicyConfig."
-      - "Windows stores native per-app endpoint preferences in the PropertyStore. SonicRoute handles playback on additional selected outputs."
-      - "GetApps enumerates non-expired WASAPI sessions. GetPersistedEndpoint separately reads per-app routing; a missing preference follows the system default. There is no universal default/property-store/session resolution chain."
-      - "ResetAllAppRouting first uses the native global route-clear call, with a per-running-process/session compatibility fallback. That fallback does not prove that exited apps were reset."
-
-  AUTOMATION_ENGINE:
-    intent: "Automation triggers, action execution, recipe creation, rule chaining"
-    keywords: ["automation", "rule", "trigger", "action", "chain", "recipe", "schedule", "自动化", "规则", "触发器", "动作", "配方"]
-    wiki: "04-自动化规则.md"
-    source: ["SonicRoute/AutoRuleService.cs", "SonicRoute/AutoRuleScheduler.cs", "SonicRoute.Core/Models/AutoRule.cs", "SonicRoute.Core/AutoRuleStore.cs"]
-    symbols: ["AutoRuleService.ExecuteAsync", "AutoRuleTrigger", "AutoRuleAction", "AutoRuleStore.LoadAll"]
-    facts:
-      - "6 Triggers (0..5) × 39 source Actions (0..38); stable release metadata remains separate."
-      - "Action 17 ExecuteRule enables nested rule chaining."
-      - "Source actions 37/38 set or toggle microphone mute for the runtime current app using the existing current-app resolver. A capture session is required; global and specified-app microphone actions remain separate."
-      - "Steps execute in order with DelayMs before each step and optional StopOnFailure. Detection is independent of the serialized process/foreground execution queue; single-rule reentry is rejected and obsolete queued requests are revalidated."
-      - "Schedules use one-shot timers and validate current plan identity; missed times are not replayed."
-      - "Rules stored as separate JSON files in %LocalAppData%\\SonicRoute\\Automation\\."
-
-  CLI_AND_IPC:
-    intent: "Command-line execution, Stream Deck, AHK, named pipe IPC"
-    keywords: ["cli", "sr", "command", "stream deck", "ahk", "pipe", "terminal", "命令行", "终端", "管道"]
-    wiki: "05-命令行执行规则.md"
-    source: ["SonicRoute/RuleCommandLine.cs", "SonicRoute/Program.cs"]
-    symbols: ["RuleCommandLine.PipeName", "RuleCommandLine.SendAsync", "RuleCommandLine.ExecuteAsync", "RuleCommandServer"]
-    facts:
-      - "Short command sr.cmd invokes sr-client.ps1 (requires running instance in same session/user; exits 6 if unstarted)."
-      - "Direct CLI SonicRoute.exe --run-rule cold-boots a headless temporary execution host if no instance is running."
-      - "IPC via Named Pipe SonicRoute.RuleCommand.{Edition}.{SessionId}.{UserSid}."
-      - "Exit codes 0..8 (0=ok, 1=step_failed, 2=invalid_arguments, 3=rule_not_found, etc.)."
-      - "Waits for rule completion; no fixed execution timeout (10s write timeout)."
-      - "sr defaults to Full, Lite, Legacy, then Store; --full/--lite/--legacy selects that portable edition. There is no separate sr.exe; use the registered sr.cmd or the application executable."
-
-  PANEL_AND_TRAY:
-    intent: "QuickPanel UI, tray volume scroll wheel, custom icons, blind control"
-    keywords: ["panel", "tray", "wheel", "icon", "quickpanel", "height", "blind", "面板", "托盘", "滚轮", "盲操", "图标"]
-    wiki: "01-使用指南.md"
-    source: ["SonicRoute/TrayWheelService.cs", "SonicRoute/QuickPanelModernWindow.xaml.cs", "SonicRoute/QuickPanelModernWindow.OutputVolumes.cs", "SonicRoute.Core/OutputVolumeMonitor.cs", "SonicRoute/MainWindow.AppIcons.cs", "SonicRoute/CustomAppIconStore.cs"]
-    symbols: ["TrayWheelService.Start", "QuickPanelModernWindow", "CustomAppIconStore.Prepare", "CustomAppIconStore.Load"]
-    facts:
-      - "One quick panel (QuickPanelModernWindow); the old application/classic panel is removed. Quick panel styles do not imply a second legacy panel implementation."
-      - "QuickPanel height setting: 350 to 850 WPF device-independent units, additionally constrained by available work area."
-      - "v1.28 defaults: TrayWheelEverywhere=false (own tray icon only); PanelChangeSystemDefault=true. Saved explicit preferences are retained. Normal tray wheel adjusts current-app volume."
-      - "v1.28 adds Alt+wheel for current-app output and Alt+Shift+wheel for system default playback; up selects previous, down selects next. Existing registered wheel shortcuts take priority."
-      - "v1.29 adds Shift+wheel to adjust system default playback volume in the same configured tray area. It shares the system-volume hotkey handler, configured step, endpoint readback and OSD; no new polling or setting."
-      - "v1.29 adds a deferred output-volume popup: expand beside/above the unchanged owner to control real output endpoint master volumes and mute. Height follows displayed rows, capped by the owner and work area. QuickPanelShowAllOutputVolumes defaults false and remembers explicit clicks."
-      - "PanelOutputVolumesRetainedOnly defaults false and independently filters the extra popup using HiddenOutputDevices. The popup loads only while expanded; collapse cancels its own reads/rendering and releases controls/subscriptions. Healthy notifications read only changed endpoints; visible notification/read failures retain bounded recovery."
-      - "Quick panel device volume/mute changes do not show redundant OSD; hotkey and tray feedback remain."
-      - "Drop one PNG/JPEG/ICO onto the Import icon button for the selected app in the full interface; it reuses the file-picker import path and stores managed PNGs in the Icons directory."
-
-  GLOBAL_HOTKEYS:
-    intent: "Global keyboard/mouse shortcuts, mic mute toggle, volume hotkeys"
-    keywords: ["hotkey", "shortcut", "bind", "key", "mouse hook", "esc", "快捷键", "热键", "按键", "静音快捷键"]
-    wiki: "03-快捷键.md"
-    source: ["SonicRoute/HotkeyService.cs", "SonicRoute/MouseHotkeyHook.cs", "SonicRoute/HotkeyActions.cs"]
-    symbols: ["HotkeyService.Reload", "MouseHotkeyHook", "HotkeyActions.All", "HotkeyActions.DisplayName"]
-    facts:
-      - "Registered via Win32 RegisterHotKey API with WH_MOUSE_LL hook for mouse button/wheel binds."
-      - "Global registration invokes action-specific targets. Current-app actions use the configured shared current-app selection; system-default and all-app actions have separate targets. These are not three generic per-binding scope modes."
-      - "Device hotkeys retain the original single-direction actions and stored IDs; the experimental previous/next hotkey split was reverted. Tray modifier-wheel directions are separate."
-      - "Esc cancels recording; conflict detector prevents duplicate binding."
-
-  TROUBLESHOOT_ROUTING_FAILURES:
-    intent: "App route not working, sound still in default device, admin process, EAC/Vanguard"
-    keywords: ["fail", "not working", "no sound", "admin", "vanguard", "eac", "anticheat", "失效", "不生效", "没声音", "管理员", "反作弊"]
-    wiki: "06-常见问题.md"
-    source: ["SonicRoute.Core/AudioService.cs", "SonicRoute.Core/ProcessSnapshotService.cs"]
-    symbols: ["AudioService.GetApps", "AudioService.InvalidateAppsCache", "ProcessSnapshotService.Capture"]
-    facts:
-      - "Record the affected application, privilege levels, audio mode and returned HRESULT. Permission restrictions can affect process metadata or audio operations, but an icon fallback does not prove routing is blocked or that elevation will fix it."
-      - "Protected games require per-application evidence. Trying a route before launch is a possible workaround, not a guaranteed fix; do not assert that all anti-cheat drivers block this COM API."
-      - "Start the target and play audio to establish a session. Inactive WASAPI sessions can still exist; GetApps excludes expired sessions and is not a list of every installed or running application."
-
-  TROUBLESHOOT_RUNTIMES_AND_CRASHES:
-    intent: "App crash on launch, missing runtime, .NET 10 / .NET 8, Store MSIX vs Portable"
-    keywords: ["crash", "runtime", "net10", "net8", "net48", "store", "portable", "msix", "闪退", "运行库", "打不开", "报错"]
-    wiki: "08-版本相关.md"
-    source: ["SonicRoute/AppRuntimeIdentity.cs", "SonicRoute.Core/Compat/WindowsVersion.cs"]
-    symbols: ["AppRuntimeIdentity.Current", "AppRuntimeIdentity.CommandEdition", "WindowsVersion.Build"]
-    facts:
-      - "Published WPF 1.36 Full and Lite use .NET 10 Desktop Runtime for the matching x64 or ARM64 architecture. Current Native AOT Full and Lite development executables include their runtime."
-      - "Legacy x64 uses .NET Framework 4.8. NET8 editions are discontinued."
-      - "The current Store pipeline packages the Full Native AOT x64 executable. The repository build version and the live Store version are tracked separately."
-      - "OS requirement: Windows 10 Build 19041+ (v2004) or Windows 11."
-
-  RESOURCE_AND_PERFORMANCE:
-    intent: "CPU usage, memory footprint, background timers, polling frequency"
-    keywords: ["cpu", "memory", "resource", "poll", "leak", "lag", "占用", "性能", "卡顿", "内存", "后台"]
-    wiki: "07-技术实现.md"
-    source: ["SonicRoute.Core/AudioMeterService.cs", "SonicRoute/ForegroundChangeSource.cs", "SonicRoute/App.BackgroundMonitoring.cs"]
-    symbols: ["AudioMeterService.Start", "AudioMeterService.Stop", "ForegroundChangeSource"]
-    facts:
-      - "Event-driven first architecture using WinEventHook and CoreAudio events."
-      - "Enabled process-start/exit rules use WMI events, with a 1-second snapshot fallback when enabled or events are unavailable. WMI recovery backs off from 2 to 30 seconds; no process rules means no dedicated process listener/snapshot timer."
-      - "Enabled visible quick-panel meters sample active sessions and fade-out at 33ms. With no active session after fade-out, they wait for notifications; an active silent stream still samples. Conditional failure recovery is retained; close stops and disposes the meter."
-      - "Closing windows releases UI work. Full preserves active phone work and never trims the whole-process working set; eligible idle reclaim may request nonblocking Optimized GC. Lite/Legacy can request one working-set trim after 1.5 seconds with a 30-second cooldown. A smaller working set does not establish a smaller heap or lower CPU."
-
-  SOURCE_ARCHITECTURE_AND_BUILD:
-    intent: "Codebase architecture, COM interop, multi-target compile"
-    keywords: ["source", "build", "architecture", "compile", "csproj", "com interop", "架构", "编译", "源码", "工程"]
-    wiki: "07-技术实现.md"
-    source: ["SonicRoute.Native.slnx", "Native/Product/Product.csproj", "Native/Build-Product.ps1", "SonicRoute.Core/SonicRoute.Core.csproj", "build/Version.props", "global.json"]
-    symbols: ["SonicRoute", "SonicRoute.Core"]
-    facts:
-      - "Native AOT Full and Lite build from Native/Product/Product.csproj via Native/Build-Product.ps1, with separate output directories by edition and architecture. The v1.36 tag identifies the frozen WPF baseline."
-      - "SonicRoute.Legacy uses the shared application source with a net48/x64 shell. SDK selection is maintained in global.json; development versions come only from build/Version.props."
-
-  UPDATE_AND_RELEASE:
-    intent: "Update checks, downloads, installation/rollback, runtime isolation and release workflow"
-    keywords: ["update", "download", "rollback", "manifest", "protocol", "sha256", "更新", "回滚", "校验"]
-    source: ["SonicRoute/Updates/UpdateService.cs", "SonicRoute/Updates/UpdateTransport.cs", "SonicRoute/Updates/UpdateProtocol.cs", "SonicRoute/Updates/UpdateInstaller.cs", "SonicRoute/Updates/UpdateBootstrap.cs", "packaging/Updates/README.md", "packaging/Store/README.md"]
-    symbols: ["UpdateService.StartAsync", "UpdateService.CheckAsync", "UpdateProtocol.ValidatePackage"]
-    facts:
-      - "Portable auto-check is off by default. If enabled and due (at least 24h since the last attempt), startup warmup and one 15s delay precede a single async check; there is no recurring update poll. Manual checks are in Settings."
-      - "Only the fixed official GitHub stable latest release is accepted; draft/prerelease and nonnumeric tags are rejected. Download and installation each require user action; there is no forced unattended update."
-      - "Protocol 2 explicitly matches edition, runtime and architecture. NET10, NET8, Legacy and ARM64/x64 never silently cross channels. Store identity disables the portable updater, including worker entry points."
-      - "NET8 maintenance ended. NET8 builds are discontinued and will not be provided for subsequent releases. Migration is manual through the official download page: x64 may choose NET10 or Legacy; ARM64 is directed to NET10 ARM64. Missing assets do not authorize another runtime or architecture."
-      - "The original protocol-1 Lite contract means NET8 only; ambiguous dual-runtime protocol-1 metadata is refused. Old protocol-1 clients reject protocol 2. Version 1.24 has no native updater and first upgrades manually or through Store."
-      - "GitHub asset digests, SHA256SUMS, manifest hashes/sizes, PE architecture, version and edition/runtime must agree. SHA-256 is integrity checking, not independent publisher authentication; portable packages/manifests are unsigned and trust official GitHub over system-validated HTTPS."
-      - "The local trusted executable runs worker mode to wait, back up, replace, restart and roll back failures; downloaded scripts are never executed. Protected paths fail before exit, without silent elevation. Existing user config, rules, icons and other data are not installation targets."
-      - "Interrupted or hung-process recovery may retain a journal and backups requiring a later retry/manual recovery. Startup acknowledgement is not a guarantee that every feature works; consult the updater README for recovery instructions."
-      - "Release-note text belongs to the open settings view and is released through existing window cleanup, not a persistent notes cache. Verified package/installation metadata can be reused."
-
-  CONFIG_AND_STORAGE:
-    intent: "Configuration file locations, rules backup, custom icon cache, history"
-    keywords: ["config", "path", "storage", "rules.json", "backup", "location", "配置", "路径", "备份", "目录"]
-    wiki: "01-使用指南.md"
-    source: ["SonicRoute.Core/AppDataRoot.cs", "SonicRoute.Core/ConfigService.cs", "SonicRoute.Core/AutoRuleStore.cs"]
-    symbols: ["AppDataRoot.DirectoryPath", "ConfigService.ConfigPath", "AutoRuleStore.RulesDir"]
-    facts:
-      - "Root dir: %LocalAppData%\\SonicRoute\\"
-      - "Config: %LocalAppData%\\SonicRoute\\config.json (atomic write via temp file)"
-      - "Rules dir: %LocalAppData%\\SonicRoute\\Automation\\*.json"
-      - "Command dir: %LocalAppData%\\SonicRoute\\Command\\ (sr.cmd, sr-client.ps1)"
-      - "Icons dir: %LocalAppData%\\SonicRoute\\Icons\\"
-      - "Optional execution history: ExecutionHistory/{CommandEdition}, only when experimental mode and execution history are enabled. SONICROUTE_DATA_DIRECTORY can override the root with an absolute path for isolated tooling."
-
-  VERSION_ARCHIVE_AND_CHANGELOG:
-    intent: "Release history, changelog, v1.36 upgrade notes"
-    keywords: ["changelog", "history", "version", "update", "v1.36", "v1.25", "v1.24", "更新日志", "版本历史"]
-    wiki: "09-版本历史.md"
-    source: ["docs/release-v1.36.md"]
-    symbols: ["v1.36"]
-    facts:
-      - "v1.36 routing: The quick panel and Apps page share playback selections. Ctrl-click toggles an output. Shift-click adds a range while retaining existing selections, including hidden outputs. For a Windows app, Ctrl+Shift-click a PC output to make it the primary device while keeping other outputs. The two button styles distinguish direct Windows playback from additional mirrored outputs."
-      - "v1.36 desktop: The main navigation remembers its expanded or collapsed state. AudioDeviceNotificationHub shares device notifications, CoalescedVolumeWriter batches writes, and idle window cleanup and atomic configuration backups were refined."
-      - "v1.36 Full: One incoming AirPlay audio stream can play on multiple PC or connected Android outputs. Capturing Android playback requires Android 11 (API 30) or later and support on the device. Each phone can send Opus (default) or uncompressed PCM to the PC. The latency modes are Ultra-low latency, Balanced (default), and Stable. Audio settings apply when the next audio stream starts."
-      - "v1.36 virtual display: AdaptiveBitrateController has separate USB and Wi-Fi policies and adjusts the video bitrate when the Android encoder accepts runtime changes. Video startup constrains the requested frame rate to encoder capabilities. The Windows decoder reuses Media Foundation input samples and can request a sync frame to recover."
-      - "v1.36 Store packaging: Both Store variants set the taskbar AppUserModelID. The Full MSIX declares inbound AirPlay rules for domain and private network profiles (UDP 5353 and 319-320, TCP/UDP 47120-47183)."
-      - "v1.35: All editions unify QuickPanel optimistic switching for PC microphone inputs (eCapture, single-select independent of playback) and single-output external/AirPlay rows without disabling buttons, update row output names optimistically across PC/Android/AirPlay (preserving default suffix on PC default rows), harden SystemDevCombo rollback/concurrency, run device-switching hotkeys via a non-blocking queue with 45ms fast-completion / 500ms minimum-pending OSD thresholds and 9-locale switching strings, and keep explicitly selected LocalAppOutputMirrors intact when native sessions move between selected endpoints. Full preserves CanChangeActiveOutputs across mode switches, instruments output startup phases without slowing virtual display input, cancels a disabled source phone's in-flight desktop clipboard write while keeping other devices active, and pre-allocates Remote/Cloud clipboard flags before EmptyClipboard."
-      - "v1.34: Full, Lite, and Legacy support selecting multiple PC playback devices per app and restoring that selection on playback after restart. Tray volume adjustment and mouse shortcuts share one system mouse hook. Full synchronizes Android USB/Wi-Fi state across both device panels, reconnects from quick phone panel refresh, respects custom names in Android app output menus, and adds Android file browsing and transfer."
-      - "v1.33: Full adds a self-built C# AirPlay audio and aspect-preserving screen mirror receiver (PCM/ALAC/AAC-LC and 44.1/48 kHz stereo AAC-ELD without SBR, optional PIN, media metadata/cover, topmost/F11 fullscreen, and drag-and-drop/Quick Panel routing to PC or Android speaker/Bluetooth outputs), adds H.265 (HEVC) with same-connection H.264 fallback and keyframe/corrupt-frame guards, adds Audio/Video decoder selectors (Auto, Concentus Opus, Windows D3D11/software) with visible-only on-demand encoder queries (up to 4 phones cached), enforces foreground-only gamepad gating and SIMD phone PCM16 conversion, combines QR (2-min auto-refresh) and manual pairing in one card with one-shot LAN mDNS discovery and unified device-settings reconnect, quick phone panel refresh, and app-sidebar refresh (verifying active ADB identity first, filtering expired ports via mDNS + short TCP probes, recovering updated IP/port by saved identity and overwriting saved address only after identity verification while preserving manual drafts on failure), device settings restore on re-add/USB restore, and pairing identity/deadline hardening; across all editions (Full/Lite/Legacy), adds two independent persistent Mic OSD toggles, a single-row experimental Configuration management card (Export/Import/Clear), >20-row app list virtualization, coalesced OSD rendering, ImageDataStream PNG input release and retired GPU texture cleanup (Full idle reclaim removes explicit close-window GC requests in favor of natural runtime collection; Lite/Legacy retain single window-close working-set trim), config.json.bak protection, single-instance restart handoff, multi-key mouse arbitration, on-demand error diagnostics, standalone Store Lite MSIX support (9N37LQ8SMLF6), and GPL-3.0-only migration (from 2026-11-17) with an offline viewer."
-      - "v1.32: Full merges the pure C# Android backend (DirectAdbTransport/WinUsbAdbTransport/Spake25519/SspiPairingTls, MediaFoundation H.264/D3D11/Win32 NativeVideoWindow, and self-written Android server) removing external adb.exe, scrcpy, FFmpeg, and SDL2 binaries, adds focus-gated XInput/RawInput HID gamepad passthrough (up to 4 slots) to virtual displays, tightens the phone companion panel gap from 12 to 6 DIP, adds automatic Windows default playback device following for phone System Output, commits six C# pipeline fixes and SmartVolume curve tuning, and pools ADB/media/catalog caches with idle LOH compaction; across all editions (Full/Lite/Legacy), fixes tray long-name submenu overlap and adds bounded icon decode, 8s idle OSD release, and per-window theme dictionary loading."
-      - "v1.31: Full restores aspect-preserving display0 main-display screen mirror with shared phone icon assets and GPU D3D11 rendering, adds per-device bidirectional text clipboard sync (64KiB cap, loop suppression), introduces friendly localized encoder labels with Android 29+ hardware detection and offline vendor fallback, adds 24/32/50 Mbps presets and a 120 fps limit option, uses 20ms PCM blocks and a bounded AudioTrack startup threshold, completes nine-language localization (838 keys) and fixes settings page crash on read-only binding; Lite/Legacy remain PC-only without phone modules."
-      - "v1.30: Full adds optional Android phone audio routing, explicit phone speaker/Bluetooth output control, quick-panel phone peak meters, default-on SmartVolume and per-app virtual displays; desktop adds compact/full quick-panel app row layout options, 39 automation actions (current-app mic mute), config import preview and coalesced volume writes; Lite/Legacy exclude phone modules and NET8 builds are discontinued."
-      - "v1.29: Expandable output endpoint volume panel, independent retained-device filter, deferred loading and event-driven incremental refresh; Shift wheel controls system volume. JSON/language and audio-meter work was reduced without a whole-app CPU claim."
-      - "v1.28: Inline application renaming, shared routing card, independent mute/activity and hidden-panel markers; Alt wheel changes app output, Alt+Shift wheel changes system output. Existing device hotkeys remain."
-      - "v1.27: One quick panel, session notification lifecycle, reliable mute hotkey targets, custom device titles, shared scrollbars and reusable settings rows. v1.26: Protected-app icon fallback and runtime-specific persistence."
-      - "v1.25: .NET 10 default, native updater, 37 actions, drag icon, 850px panel."
-      - "v1.24: Automation starter templates, optional recent execution details and per-app custom icons; later protected-app icon fixes are documented in v1.26."
 
 DOMAIN_ENUM_REGISTRY:
   AutoRuleTrigger:
     0: { name: Hotkey, scope: GLOBAL_INPUT, desc: "Key combination or mouse button" }
-    1: { name: AppStart, scope: PROCESS_EVENT, desc: "Process creation detected via Trace/Snapshot" }
-    2: { name: AppSwitch, scope: FOREGROUND_EVENT, desc: "Foreground process changes and matches the configured application" }
-    3: { name: AppExit, scope: PROCESS_EVENT, desc: "Process termination detected" }
-    4: { name: Schedule, scope: TIME_EVENT, desc: "Single/Daily/Weekly schedule" }
-    5: { name: Startup, scope: LIFECYCLE_EVENT, desc: "SonicRoute app boot completion (once per run)" }
+    1: { name: AppStart, scope: PROCESS_EVENT, desc: "Process creation via WMI Trace / fallback snapshot" }
+    2: { name: AppSwitch, scope: FOREGROUND_EVENT, desc: "Foreground window process change" }
+    3: { name: AppExit, scope: PROCESS_EVENT, desc: "Process termination via WMI Trace / fallback snapshot" }
+    4: { name: Schedule, scope: TIME_EVENT, desc: "Once / Daily / Weekly one-shot schedule" }
+    5: { name: Startup, scope: LIFECYCLE_EVENT, desc: "SonicRoute boot completion (once per run)" }
 
   AutoRuleAction:
     0: { name: SetSystemOutput, target: DEFAULT_RENDER_DEVICE, param: DeviceID }
     1: { name: SetSystemInput, target: DEFAULT_CAPTURE_DEVICE, param: DeviceID }
-    2: { name: SetSystemVolume, target: SYSTEM_MASTER_VOLUME, param: 0..100 }
+    2: { name: SetSystemVolume, target: SYSTEM_MASTER_VOLUME, param: "0..100" }
     3: { name: ToggleSystemMute, target: SYSTEM_MASTER_VOLUME, param: TOGGLE }
-    4: { name: SetAppVolume, target: APP_PLAYBACK_SESSION, param: 0..100 }
+    4: { name: SetAppVolume, target: APP_PLAYBACK_SESSION, param: "0..100" }
     5: { name: ToggleAppMute, target: APP_PLAYBACK_SESSION, param: TOGGLE }
     6: { name: SetAppOutput, target: APP_PLAYBACK_ROUTING, param: DeviceID }
     7: { name: SetAppInput, target: APP_CAPTURE_ROUTING, param: DeviceID }
@@ -258,13 +382,13 @@ DOMAIN_ENUM_REGISTRY:
     21: { name: AdjustPlaybackDeviceVolume, target: SPECIFIC_RENDER_ENDPOINT, param: "DeviceID, DeltaPercent" }
     22: { name: SetPlaybackDeviceMute, target: SPECIFIC_RENDER_ENDPOINT, param: "DeviceID, BOOL_EXPLICIT" }
     23: { name: TogglePlaybackDeviceMute, target: SPECIFIC_RENDER_ENDPOINT, param: "DeviceID, TOGGLE" }
-    24: { name: SetDefaultInputVolume, target: RUNTIME_DEFAULT_CAPTURE, param: 0..100 }
+    24: { name: SetDefaultInputVolume, target: RUNTIME_DEFAULT_CAPTURE, param: "0..100" }
     25: { name: AdjustDefaultInputVolume, target: RUNTIME_DEFAULT_CAPTURE, param: DeltaPercent }
     26: { name: SetDefaultInputMute, target: RUNTIME_DEFAULT_CAPTURE, param: BOOL_EXPLICIT }
     27: { name: ToggleDefaultInputMute, target: RUNTIME_DEFAULT_CAPTURE, param: TOGGLE }
     28: { name: SetAppInputMute, target: APP_CAPTURE_SESSION, param: "ProcessName, BOOL_EXPLICIT" }
     29: { name: ToggleAppInputMute, target: APP_CAPTURE_SESSION, param: "ProcessName, TOGGLE" }
-    30: { name: SetAllAppsVolume, target: ALL_ACTIVE_PLAYBACK_SESSIONS, param: 0..100 }
+    30: { name: SetAllAppsVolume, target: ALL_ACTIVE_PLAYBACK_SESSIONS, param: "0..100" }
     31: { name: AdjustAllAppsVolume, target: ALL_ACTIVE_PLAYBACK_SESSIONS, param: DeltaPercent }
     32: { name: SetAllAppsMute, target: ALL_ACTIVE_PLAYBACK_SESSIONS, param: BOOL_EXPLICIT }
     33: { name: ToggleAllAppsMute, target: ALL_ACTIVE_PLAYBACK_SESSIONS, param: TOGGLE }
@@ -276,31 +400,42 @@ DOMAIN_ENUM_REGISTRY:
 
 DATA_PATHS_&_CONFIG_SCHEMA:
   root_dir: "%LocalAppData%\\SonicRoute\\"
-  config_file: "%LocalAppData%\\SonicRoute\\config.json"
+  config_file: "%LocalAppData%\\SonicRoute\\config.json (+ config.json.bak; atomic temp write)"
+  saved_playback: "%LocalAppData%\\SonicRoute\\playback-outputs.json (SavedPlaybackStore)"
   rules_dir: "%LocalAppData%\\SonicRoute\\Automation\\*.json"
   command_dir: "%LocalAppData%\\SonicRoute\\Command\\ (sr.cmd, sr-client.ps1)"
   icons_dir: "%LocalAppData%\\SonicRoute\\Icons\\"
-  history_dir: "%LocalAppData%\\SonicRoute\\ExecutionHistory\\{CommandEdition}\\ (optional)"
+  history_dir: "%LocalAppData%\\SonicRoute\\ExecutionHistory\\{CommandEdition}\\ (optional; recent.jsonl + previous.jsonl)"
   updates_dir: "%LocalAppData%\\SonicRoute\\Updates\\"
-  root_override: "SONICROUTE_DATA_DIRECTORY (absolute path; otherwise the default root above)"
+  phone_data_full: "android-phone.json, android-audio.json, phone-clipboard.json, android-file-receive-folder.txt, PhoneRuntime\\ (extracted jar)"
+  root_override: "SONICROUTE_DATA_DIRECTORY (absolute path) or SONICROUTE_CANDIDATE_ROOT + SONICROUTE_CANDIDATE_ID (isolated candidate root)"
   pipe_pattern: "\\\\.\\pipe\\SonicRoute.RuleCommand.{CommandEdition}.{SessionId}.{UserSid}"
+```
 
+## 8. Agent Troubleshooting Matrix & Development Constraints
+
+```yaml
 QUERY_DECISION_MATRIX_FOR_AGENTS:
-  WHEN user_says_routing_fails:
-    CHECK_1: "Identify target, selected device, app privilege level and HRESULT; distinguish missing icon/process metadata from an actual route-write failure."
-    CHECK_2: "For protected games record the title/audio mode and test independently; pre-launch routing is only a possible workaround, not a confirmed universal fix."
-    CHECK_3: "Establish a WASAPI session by starting the app and playing audio; inactive, expired and absent sessions are different states."
-  WHEN user_asks_cli_or_scripting:
-    SYNTAX: "sr <RuleName|RuleID> OR sr.cmd <RuleName|RuleID>"
-    IPC_PROTOCOL: "Named pipe SonicRoute.RuleCommand.{Edition}.{SessionId}.{UserSid} (same session/user). Connect timeout 250ms (sr) / 5000ms (--run-rule); write timeout 10s; no fixed execution timeout."
-    EXIT_CODE_MAP: "0=ok, 1=step_failed, 2=invalid_arguments, 3=rule_not_found, 4=ambiguous_rule, 5=rule_busy, 6=server_unavailable, 7=canceled, 8=internal_error."
+  WHEN user_says_routing_or_mirror_fails:
+    CHECK_1: "Verify app has an active WASAPI session (AudioService / ProductAudio excludes expired sessions). Distinguish icon/process metadata failure from actual AudioPolicyConfig HRESULT failure."
+    CHECK_2: "For multi-output mirrors / capture forwarding, verify OS is Windows 10 Build 20348+ (VAD\\Process_Loopback); check if another SonicRoute edition holds Local\\SonicRoute.AudioMirror.{pid}."
+    CHECK_3: "For protected/anti-cheat games, record game title, privilege level, and audio mode; pre-launch routing is only a possible workaround, not a guaranteed fix."
+  WHEN user_says_phone_or_airplay_fails:
+    CHECK_1: "Confirm edition is Full (Lite/Legacy/StoreLite exclude SonicRoute.AndroidAudio completely)."
+    CHECK_2: "Android playback capture requires Android 11 (API 30+); USB UsbInterfaceInUse indicates external adb.exe or another host holds the WinUSB interface; Wi-Fi discovery requires matching LAN subnet & wireless debugging enabled."
+    CHECK_3: "AirPlay requires active IPv4 LAN interface and inbound LAN firewall allowance (UDP 5353, 319-320, TCP/UDP 47120-47183)."
   WHEN user_asks_runtime_error:
-    ERROR_MISSING_NET_DESKTOP:
-      CAUSE: "For framework-dependent WPF packages, the base .NET Runtime does not include Windows Desktop Runtime."
-      FIX: "Download .NET Desktop Runtime (x64/ARM64) from official Microsoft link."
-    ALTERNATIVE: "On x64, Legacy uses .NET Framework 4.8 instead of .NET Desktop Runtime. ARM64 users should use matching ARM64 Lite/runtime; do not recommend a nonexistent Legacy ARM64 build."
-  WHEN user_asks_cpu_consumption:
-    RESPONSE_FACT: "System events drive detection, with necessary 1-second process fallback and conditional failure recovery. Active visible meters still sample at 33ms; inactive sessions wait for notifications. No whole-app CPU or memory improvement is claimed from local call-count checks."
+    NATIVE_AOT_v200: "Native AOT Full and Lite bundles include the runtime; no .NET Desktop Runtime install is needed."
+    WPF_v136_RELEASE: "Published WPF v1.36 Full and Lite require .NET 10 Desktop Runtime (matching x64 or ARM64); base .NET Runtime alone fails."
+    LEGACY_v136_OR_v200: "Legacy x64 requires .NET Framework 4.8 and full ZIP extraction; there is no ARM64 Legacy build."
+  WHEN user_asks_cpu_or_memory:
+    RESPONSE_FACT: "Event-driven notifications drive updates. Process rules use native WMI with optional 1s fallback. Peak meters run only while QuickPanel is visible and enabled (50ms Native / 33ms Legacy). Hiding MainWindowShell releases D2D/DIB targets; Native AOT/Full never forces SetProcessWorkingSetSize."
+
+DEVELOPMENT_CONSTRAINTS:
+  - "AOT & Trimming: Product.csproj enforces PublishAot=true and JsonSerializerIsReflectionEnabledByDefault=false. Register all new persisted/IPC JSON types in PersistenceJsonContext / HostJson / AndroidJsonContext / UpdateManifestContext; never introduce WPF, WinForms, XAML, NAudio, or System.Management into Native/."
+  - "Single Version & README Source: Edit only build/Version.props for dev version; update docs/readme/shared.json + docs/readme/locales/* + renderAI() in docs/readme/generate.cjs and pass node docs/readme/generate.cjs --check (enforced by CI)."
+  - "Reuse & Idle-CPU Rules: Reuse LayeredWindow, D2dRenderer, UiPrimitives, UiDockRail, ProductAudio, ProductRouting, and CoalescedVolumeWriter; avoid new background polling timers and release UI/D2D/subscription resources on window close/deactivation."
+  - "Isolated Testing: Never overwrite user %LocalAppData%\\SonicRoute\\ or kill running user SonicRoute processes; always test candidates with SONICROUTE_CANDIDATE_ROOT + SONICROUTE_CANDIDATE_ID + SONICROUTE_DISABLE_DEFAULT_HOTKEYS=1."
 ```
 
 <div align="right"><sub><a href="https://github.com/kunkunkunQoQ/SonicRoute/wiki/AI" title="AI Context">🤖 Wiki AI Knowledge Base</a></sub></div>
