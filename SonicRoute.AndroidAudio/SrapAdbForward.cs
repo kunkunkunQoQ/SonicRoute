@@ -56,6 +56,7 @@ internal sealed class SrapAdbForward : IAsyncDisposable
     private async Task BridgeAsync()
     {
         using var direction = CancellationTokenSource.CreateLinkedTokenSource(stop.Token);
+        var socket = accepted.Client;
         var local = accepted.GetStream();
         var send = local.CopyToAsync(remote, direction.Token);
         var receive = remote.CopyToAsync(local, direction.Token);
@@ -63,7 +64,7 @@ internal sealed class SrapAdbForward : IAsyncDisposable
         {
             await Task.WhenAny(send, receive).ConfigureAwait(false);
             // Propagate EOF to TLS while the caller still waits on the main session.
-            accepted.Client.Shutdown(SocketShutdown.Both);
+            socket.Shutdown(SocketShutdown.Both);
         }
         catch (Exception ex) when (ex is ObjectDisposedException or SocketException) { }
         finally

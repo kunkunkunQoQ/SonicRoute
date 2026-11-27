@@ -133,7 +133,7 @@ internal sealed class AndroidConnectionManager(AndroidPhoneStore store, Func<And
                 || store.FindProfile(adbDevice)?.Id != adbId || store.FindProfile(appDevice)?.Id != appId
                 || !ReferenceEquals(app.Session(appDevice), session)) throw new SrapException("stale_session");
         }
-        void Lost() => scope.Cancel();
+        void Lost() { try { scope.Cancel(); } catch (ObjectDisposedException) { } }
         void OnChange()
         {
             try { Validate(); }
