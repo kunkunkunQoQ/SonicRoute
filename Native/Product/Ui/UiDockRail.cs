@@ -110,6 +110,7 @@ internal sealed class UiDockRail(string itemPrefix, Action invalidate)
             var center = new UiPoint(_listRect.X + PivotInset, y + rowHeight * 0.5f);
             var compact = GetShape(center, size, 0f, size);
             hit.AddRotated(item.Id, compact);
+            hit.Describe(item.Id, item.Status == null ? item.Label : item.Label + " · " + item.Status, UiAccessibleRole.ListItem, item.Selected);
             if (item.Id == raisedId)
             {
                 const float overlayPadding = 4f;

@@ -5,10 +5,16 @@ namespace SonicRoute.Native.Ui;
 
 internal sealed class UiMenuItem
 {
+    private static int _nextAccessibleId;
+    private string? _accessibleId;
+    private bool? _checked;
+    internal string AccessibleId => _accessibleId ??= "menu.item." + System.Threading.Interlocked.Increment(ref _nextAccessibleId);
+    internal bool MatchesAccessibleId(string id) => _accessibleId == id;
+    internal bool? CheckedState => _checked;
     public string Text { get; set; } = "";
     public Action? Click { get; init; }
     public bool IsSeparator { get; init; }
-    public bool Checked { get; init; }
+    public bool Checked { get => _checked == true; init => _checked = value; }
     public bool Enabled { get; init; } = true;
     public UiIcon? Icon { get; init; }
     public string? Tooltip { get; set; }
@@ -52,6 +58,10 @@ internal sealed class PopupMenuWindow : LayeredWindow
     private bool _alignBottomUp;
     private bool TrayStyle => _schedule != null;
     protected override UiHitMap InputMap => _hit;
+    protected override string? AccessibleFocusId => _focusedIndex >= 0 && _focusedIndex < _items.Count
+        ? _items[_focusedIndex].AccessibleId : null;
+    protected override bool AccessibleWindowFocused => _subMenu is not { IsVisible: true } &&
+        AccessibilityApi.GetFocus() == GetRootMenu().Handle;
 
     private PopupMenuWindow(UiThemePalette theme, List<UiMenuItem> items, nint owner, PopupMenuWindow? parentMenu,
         Func<TimeSpan, Action, IDisposable>? schedule = null)
@@ -245,7 +255,13 @@ internal sealed class PopupMenuWindow : LayeredWindow
             if (highlighted && item.Enabled)
                 g.FillRoundedRect(r, 4f, _theme.NavHover);
 
-            if (!string.IsNullOrEmpty(item.Tooltip))
+            if (_hit.AccessibilityEnabled)
+            {
+                string id = item.AccessibleId;
+                _hit.Add(id, r, UiCursorKind.Arrow, item.Tooltip);
+                _hit.Describe(id, item.Text, UiAccessibleRole.MenuItem, item.CheckedState, item.Enabled);
+            }
+            else if (!string.IsNullOrEmpty(item.Tooltip))
                 _hit.Add("menu.tip." + i, r, UiCursorKind.Arrow, item.Tooltip);
             if (TrayStyle)
             {
@@ -437,6 +453,20 @@ internal sealed class PopupMenuWindow : LayeredWindow
     protected override void OnActivated(bool active)
     {
         if (!active && _parentMenu == null && !_closingAll) CloseChain();
+    }
+
+    protected override void PerformAccessibleItem(string id, bool activate)
+    {
+        int index = _items.FindIndex(item => item.MatchesAccessibleId(id));
+        if (index < 0 || !_items[index].Enabled || _items[index].IsSeparator) return;
+        CancelPendingHover();
+        _focusedIndex = _hoverIndex = index;
+        if (activate) { ActivateItem(index); return; }
+        CloseSubMenu();
+        GetRootMenu().RequestFocus();
+        var rect = _itemRects[index];
+        _scroll.EnsureVisible(rect.Y, rect.Bottom, 4f);
+        Invalidate();
     }
 
     protected override void OnClosed()

@@ -27,7 +27,7 @@ internal sealed partial class PhoneClipboard : IDisposable
         "keeperpasswordmanager", "dashlane", "lastpass", "identities", "robotaskbaricon"
     };
 
-    private readonly Func<IAndroidClipboardClient> _openClipboard;
+    private readonly Func<AndroidDevice, IAndroidClipboardClient> _openClipboard;
     private readonly NativeApplicationWindow _window;
     private readonly IMainThread _owner;
     private readonly string? _settingsPath;
@@ -44,7 +44,8 @@ internal sealed partial class PhoneClipboard : IDisposable
     private ClipboardPreferences? _pendingSave;
 
     private CancellationTokenSource? _lifetime;
-    private Channel<string>? _outgoing;
+    private readonly record struct OutgoingText(string Text, long Revision);
+    private Channel<OutgoingText>? _outgoing;
     private AndroidDevice? _device;
     private IAndroidClipboardClient? _client;
     private IDisposable? _retry;
@@ -57,7 +58,7 @@ internal sealed partial class PhoneClipboard : IDisposable
     internal event Action? Changed;
 
     internal PhoneClipboard(
-        Func<IAndroidClipboardClient> openClipboard,
+        Func<AndroidDevice, IAndroidClipboardClient> openClipboard,
         NativeApplicationWindow window,
         IMainThread owner,
         string? settingsPath = null,
@@ -205,7 +206,7 @@ internal sealed partial class PhoneClipboard : IDisposable
 
         if (enabled)
         {
-            var target = _resolveOnline?.Invoke(device) ?? (string.Equals(device.State, "device", StringComparison.Ordinal) ? device : null);
+            var target = _resolveOnline?.Invoke(device) ?? (!device.IsApp && string.Equals(device.State, "device", StringComparison.Ordinal) ? device : null);
             if (target != null) StartBridge(target);
             else SetStatus(L10n.T("Phone.ClipboardWaitingPhone"));
         }
@@ -247,13 +248,13 @@ internal sealed partial class PhoneClipboard : IDisposable
         }
         _ownsClipboardInterest = 1;
         var lifetime = new CancellationTokenSource();
-        var outgoing = Channel.CreateBounded<string>(new BoundedChannelOptions(1)
+        var outgoing = Channel.CreateBounded<OutgoingText>(new BoundedChannelOptions(1)
         {
             FullMode = BoundedChannelFullMode.DropOldest,
             SingleReader = true,
             SingleWriter = false
         });
-        var client = _openClipboard();
+        var client = _openClipboard(device);
         _device = device;
         _client = client;
         _lifetime = lifetime;
@@ -267,6 +268,8 @@ internal sealed partial class PhoneClipboard : IDisposable
 
     private void StopBridge(string? endStatus)
     {
+        _lastText = null;
+        _lastWriteSequence = 0;
         if (Interlocked.Exchange(ref _enabled, 0) == 0)
         {
             _retry?.Dispose(); _retry = null;
@@ -292,8 +295,9 @@ internal sealed partial class PhoneClipboard : IDisposable
         if (Volatile.Read(ref _enabled) == 0) return;
         uint sequence = GetClipboardSequenceNumber();
         if (sequence != 0 && sequence == _lastWriteSequence) return;
-        if (ExcludedFromSharing()) return;
-        string? text = ReadUnicodeText();
+        if (sequence == 0) return;
+        string? text = ReadUnicodeText(sequence, true, out bool excluded);
+        if (excluded) return;
         if (text == null)
         {
             if (IsClipboardFormatAvailable(CfUnicodeText) != 0 && _readRetry++ < 4)
@@ -301,12 +305,13 @@ internal sealed partial class PhoneClipboard : IDisposable
             return;
         }
         _readRetry = 0;
-        if (!AndroidClipboardClient.IsSupported(text) || string.Equals(text, _lastText, StringComparison.Ordinal)) return;
+        if (GetClipboardSequenceNumber() != sequence || !AndroidClipboardClient.IsSupported(text) ||
+            string.Equals(text, _lastText, StringComparison.Ordinal) || _client == null) return;
         _lastText = text;
-        _outgoing?.Writer.TryWrite(text);
+        _outgoing?.Writer.TryWrite(new(text, _client.Revision));
     }
 
-    private async Task WatchLoopAsync(AndroidDevice device, IAndroidClipboardClient client, ChannelWriter<string> outgoing,
+    private async Task WatchLoopAsync(AndroidDevice device, IAndroidClipboardClient client, ChannelWriter<OutgoingText> outgoing,
         CancellationTokenSource lifetime)
     {
         CancellationToken token = lifetime.Token;
@@ -373,15 +378,15 @@ internal sealed partial class PhoneClipboard : IDisposable
         }
     }
 
-    private async Task SendLoopAsync(IAndroidClipboardClient client, ChannelReader<string> reader, CancellationToken token)
+    private async Task SendLoopAsync(IAndroidClipboardClient client, ChannelReader<OutgoingText> reader, CancellationToken token)
     {
         try
         {
-            await foreach (string text in reader.ReadAllAsync(token).ConfigureAwait(false))
+            await foreach (var item in reader.ReadAllAsync(token).ConfigureAwait(false))
             {
                 try
                 {
-                    await client.SendAsync(text, client.Revision, token).ConfigureAwait(false);
+                    await client.SendAsync(item.Text, item.Revision, token).ConfigureAwait(false);
                     _owner.TryPost(() =>
                     {
                         if (Volatile.Read(ref _enabled) != 0 && ReferenceEquals(_client, client))
@@ -407,22 +412,25 @@ internal sealed partial class PhoneClipboard : IDisposable
         if (Volatile.Read(ref _enabled) == 0 || !ReferenceEquals(_client, client) || !AndroidClipboardClient.IsSupported(text)
             || string.Equals(text, _lastText, StringComparison.Ordinal)) return;
         uint sequence = GetClipboardSequenceNumber();
-        string? current = ReadUnicodeText();
+        string? current = ReadUnicodeText(sequence, true, out _);
         if (string.Equals(current, text, StringComparison.Ordinal)) { _lastText = text; return; }
         if (!WriteUnicodeText(text, sequence)) { SetStatus(L10n.T("Phone.ClipboardDesktopUnavailable")); return; }
         _lastText = text;
         SetStatus(L10n.T("Phone.ClipboardConnected"));
     }
 
-    private string? ReadUnicodeText()
+    private string? ReadUnicodeText(uint sequence, bool sharedSource, out bool excluded)
     {
+        excluded = false;
         if (OpenClipboard(_window.Handle) == 0) return null;
         try
         {
+            if (GetClipboardSequenceNumber() != sequence) return null;
+            if (sharedSource && (excluded = ExcludedWhileOpen())) return null;
             if (IsClipboardFormatAvailable(CfUnicodeText) == 0) return null;
             nint memory = GetClipboardData(CfUnicodeText);
             nuint bytes = memory == 0 ? 0 : GlobalSize(memory);
-            if (bytes < 2 || bytes > (nuint)(AndroidClipboardClient.MaxTextBytes * sizeof(char) + sizeof(char))) return null;
+            if (bytes < 2 || (bytes & 1) != 0 || bytes > (nuint)(AndroidClipboardClient.MaxTextBytes * sizeof(char) + sizeof(char))) return null;
             nint pointer = GlobalLock(memory);
             if (pointer == 0) return null;
             try
@@ -430,6 +438,7 @@ internal sealed partial class PhoneClipboard : IDisposable
                 int chars = (int)(bytes / 2);
                 int length = 0;
                 while (length < chars && Marshal.ReadInt16(pointer, length * 2) != 0) length++;
+                if (length == chars) return null;
                 string text = Marshal.PtrToStringUni(pointer, length) ?? "";
                 return AndroidClipboardClient.IsSupported(text) ? text : null;
             }
@@ -442,20 +451,16 @@ internal sealed partial class PhoneClipboard : IDisposable
     {
         if (!NativeTextClipboard.TryWrite(_window.Handle, text, expectedSequence, RemoteFormat, CloudFormat, out uint sequence)) return false;
         _lastWriteSequence = sequence;
-        return true;
+        return GetClipboardSequenceNumber() == sequence && string.Equals(ReadUnicodeText(sequence, false, out _), text, StringComparison.Ordinal) &&
+            GetClipboardSequenceNumber() == sequence;
     }
 
-    private bool ExcludedFromSharing()
+    private bool ExcludedWhileOpen()
     {
-        if (OpenClipboard(_window.Handle) == 0) return false;
-        bool excluded;
-        try
-        {
-            excluded = IsClipboardFormatAvailable(15) != 0 || IsClipboardFormatAvailable(RemoteFormat) != 0
-                || IsClipboardFormatAvailable(ExcludeFormat) != 0 || IsClipboardFormatAvailable(IgnoreViewerFormat) != 0
-                || IsClipboardFormatAvailable(PasswordFormat) != 0 || DeniesSharing(CloudFormat) || DeniesSharing(HistoryFormat);
-        }
-        finally { CloseClipboard(); }
+        bool excluded = _device?.IsApp == true && !ContainsOnlyPlainText() ||
+            IsClipboardFormatAvailable(15) != 0 || IsClipboardFormatAvailable(RemoteFormat) != 0
+            || IsClipboardFormatAvailable(ExcludeFormat) != 0 || IsClipboardFormatAvailable(IgnoreViewerFormat) != 0
+            || IsClipboardFormatAvailable(PasswordFormat) != 0 || DeniesSharing(CloudFormat) || DeniesSharing(HistoryFormat);
         if (excluded) return true;
         nint clipboardOwner = GetClipboardOwner();
         if (clipboardOwner == 0 || GetWindowThreadProcessId(clipboardOwner, out uint pid) == 0 || pid == 0) return false;
@@ -477,6 +482,18 @@ internal sealed partial class PhoneClipboard : IDisposable
         if (pointer == 0) return true;
         try { return Marshal.ReadInt32(pointer) != 1; }
         finally { GlobalUnlock(memory); }
+    }
+
+    private static bool ContainsOnlyPlainText()
+    {
+        bool unicode = false;
+        uint format = 0;
+        while ((format = EnumClipboardFormats(format)) != 0)
+        {
+            if (format == CfUnicodeText) unicode = true;
+            else if (format is not (1 or 7 or 16) && format != CloudFormat && format != HistoryFormat) return false;
+        }
+        return Marshal.GetLastPInvokeError() == 0 && unicode;
     }
 
     private void QueueSave()
@@ -550,6 +567,7 @@ internal sealed partial class PhoneClipboard : IDisposable
     }
 
     [LibraryImport("user32", EntryPoint = "OpenClipboard", SetLastError = true)] private static partial int OpenClipboard(nint owner);
+    [LibraryImport("user32", SetLastError = true)] private static partial uint EnumClipboardFormats(uint format);
     [LibraryImport("user32", EntryPoint = "CloseClipboard")] private static partial int CloseClipboard();
     [LibraryImport("user32", EntryPoint = "GetClipboardData", SetLastError = true)] private static partial nint GetClipboardData(uint format);
     [LibraryImport("user32", EntryPoint = "IsClipboardFormatAvailable")] private static partial int IsClipboardFormatAvailable(uint format);

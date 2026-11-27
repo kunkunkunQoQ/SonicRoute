@@ -14,15 +14,32 @@ internal static partial class Program
         await using (var manager = new AndroidVirtualDisplayManager(Create))
         {
             var first = (RetiringDisplay)await manager.OpenAsync(device, app, 0, 0);
+            var appChannel = device with { Serial = new string('A', 64), IsApp = true, BoundAdbKey = AndroidDeviceIdentity.Key(device) };
+            bool rejected = false;
+            try { await manager.OpenAsync(appChannel, app, 0, 0); } catch (SrapException e) when (e.Code == "unsupported") { rejected = true; }
+            Check(rejected && clients.Count == 1 && manager.Count == 1, "an App attachment cannot create or reuse the same phone's interactive ADB window");
+            var selected = device with { ConnectionTarget = "generation-1" };
+            Check(!AndroidConnectionManager.IsRequestedAdbDisplayAttachment(selected, appChannel) &&
+                !AndroidConnectionManager.IsRequestedAdbDisplayAttachment(selected, selected with { ConnectionTarget = "generation-2" }) &&
+                AndroidConnectionManager.IsRequestedAdbDisplayAttachment(selected, selected),
+                "an asynchronous interactive-window resolution accepts only its selected ADB generation");
             first.BlockDisposal = true;
-            bool lockAvailable = false;
-            first.OnCancel = () => lockAvailable = Task.Run(() => manager.Count).Wait(TimeSpan.FromSeconds(1));
+            var registryProbe = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            first.OnCancel = () =>
+            {
+                var query = Task.Factory.StartNew(() => manager.Count, CancellationToken.None,
+                    TaskCreationOptions.LongRunning, TaskScheduler.Default);
+                registryProbe.TrySetResult(query.Wait(TimeSpan.FromSeconds(3)));
+            };
             var close = manager.CloseApplicationAsync(device, app.Package);
             var replacement = await manager.OpenAsync(device, app, 0, 0).WaitAsync(safety.Token);
             await first.DisposalEntered.Task.WaitAsync(safety.Token);
             Check(!ReferenceEquals(first, replacement) && clients.Count == 2 && manager.Count == 2,
                 "close followed immediately by open creates a fresh client while retaining ownership of old resources");
-            first.ReleaseDisposal.TrySetResult(); await close.WaitAsync(safety.Token);
+            bool lockAvailable;
+            try { lockAvailable = await registryProbe.Task.WaitAsync(safety.Token); }
+            finally { first.ReleaseDisposal.TrySetResult(); }
+            await close.WaitAsync(safety.Token);
             Check(lockAvailable, "cancellation callbacks can query the registry from another thread without a lock cycle");
             Check(manager.Count == 1 && ReferenceEquals(await manager.OpenAsync(device, app, 0, 0), replacement),
                 "old cleanup cannot remove the newly opened entry sharing the same identity");

@@ -92,12 +92,7 @@ internal static partial class Program
         Check(outputs.GetProperty("outputs").GetArrayLength() > 0 && apps.GetProperty("apps").GetArrayLength() > 0, "live audio endpoints and app catalogue");
         int percent = (await session.ReadVolumeAsync(stop)).GetProperty("percent").GetInt32();
         Check(percent is >= 0 and <= 100, "live system media volume readback");
-        try
-        {
-            var volume = await session.SetVolumeAsync(percent, stop);
-            Check(volume.GetProperty("percent").GetInt32() == percent, "live system media volume write and readback at original level");
-        }
-        catch (SrapException ex) { ReportAndroidError("system media volume write", ex); }
+        await SrapVerifyVolumeStepAsync(session, stop);
         uint track = await session.StartTrackAsync("current", stop);
         try
         {

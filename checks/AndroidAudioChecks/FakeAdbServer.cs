@@ -22,6 +22,7 @@ internal sealed class FakeAdbServer : IAsyncDisposable
     private readonly Dictionary<string, List<byte>> _bySink = new();
     public Func<string, Task>? BeforeRouteReport { get; set; }
     public byte[]? CaptureWire { get; init; }
+    internal IPEndPoint? AliasListener { get; set; }
     private int _capturePid = 5000;
     private readonly ConcurrentDictionary<int, (string Command, TaskCompletionSource Exited)> _captures = new();
     public int LiveCaptures => _captures.Count;
@@ -198,6 +199,23 @@ internal sealed class FakeAdbServer : IAsyncDisposable
                 await stream.WriteAsync("OKAY"u8.ToArray(), token).ConfigureAwait(false);
                 string service = await ReadSmartRequestAsync(stream, token).ConfigureAwait(false);
                 Commands.Enqueue(service);
+
+                if (AliasListener is { Address: var address } alias && IPAddress.IsLoopback(address)
+                    && service == "tcp:" + alias.Port.ToString(CultureInfo.InvariantCulture))
+                {
+                    using var peer = new TcpClient();
+                    await peer.ConnectAsync(alias, token);
+                    await stream.WriteAsync("OKAY"u8.ToArray(), token);
+                    using var bridge = CancellationTokenSource.CreateLinkedTokenSource(token);
+                    var remote = peer.GetStream();
+                    var outbound = stream.CopyToAsync(remote, bridge.Token);
+                    var inbound = remote.CopyToAsync(stream, bridge.Token);
+                    await Task.WhenAny(outbound, inbound);
+                    bridge.Cancel();
+                    try { await Task.WhenAll(outbound, inbound); }
+                    catch (Exception ex) when (ex is IOException or SocketException or OperationCanceledException) { }
+                    return;
+                }
 
                 if (service == "sync:")
                 {

@@ -1,0 +1,6 @@
+<ripple xmlns:android="http://schemas.android.com/apk/res/android" android:color="@color/sonic_ripple">
+    <item><selector>
+        <item android:state_checked="true"><layer-list><item android:width="48dp" android:height="28dp" android:gravity="top|center_horizontal" android:top="4dp"><shape><solid android:color="@color/sonic_selection" /><corners android:radius="14dp" /></shape></item></layer-list></item>
+        <item android:drawable="@android:color/transparent" />
+    </selector></item>
+</ripple>

@@ -24,8 +24,52 @@ internal static partial class Program
         if (fileLog != null) { Console.SetOut(fileLog); Console.SetError(fileLog); }
         try
         {
+            if (args is ["--srap-ui-fixture", var uiDirectory]) { await SrapUiFixtureAsync(uiDirectory); return 0; }
             if (args is ["--srap-stage2a", var fixtureDirectory]) { await SrapStage2ACheckAsync(fixtureDirectory); return 0; }
             if (args is ["--srap-stage2b", var aliasDirectory, var aliasVectors]) { await SrapAliasChecksAsync(aliasDirectory, aliasVectors); return 0; }
+            if (args is ["--srap-clipboard", var clipDirectory, var clipVectors]) { await SrapClipboardChecksAsync(clipDirectory, clipVectors); return 0; }
+            if (args is ["--srap-live-clipboard", var liveClipboardDirectory]) { await SrapLiveClipboardAsync(liveClipboardDirectory); return 0; }
+            if (args is ["--srap-pcm", var pcmDirectory, var pcmVectors]) { await SrapPcmChecksAsync(pcmDirectory, pcmVectors); return 0; }
+            if (args is ["--srap-capture", var srapCaptureDirectory]) { await SrapCaptureChecksAsync(srapCaptureDirectory); return 0; }
+            if (args is ["--srap-live-alias", var aliasData, var adbTransportId, var conflictPreference])
+            { await SrapLiveAliasAsync(aliasData, adbTransportId, conflictPreference); return 0; }
+            if (args is ["--srap-live-volume", var srapVolumeDirectory])
+            { await RunWithTrustedPhoneAsync(srapVolumeDirectory, SrapVerifyVolumeStepAsync); return 0; }
+            if (args is ["--srap-volume", var srapVolumeFixture]) { await SrapVolumeChecksAsync(srapVolumeFixture); return 0; }
+            if (args is ["--srap-business", var businessDir, var businessVectors]) { await SrapBusinessVectorsAsync(businessDir, businessVectors); return 0; }
+            if (args is ["--srap-browse-recovery", var browseDir]) { await SrapBrowseRecoveryAsync(browseDir); return 0; }
+            if (args is ["--srap-media-state", var mediaDir, var mediaVectors]) { await SrapMediaStateFixtureAsync(mediaDir, mediaVectors); return 0; }
+            if (args.Length is 2 or 3 && args[0] == "--srap-live-media")
+            {
+                string package = (args.Length == 2 ? "fixture" : args[2]) switch
+                {
+                    "fixture" or "fixture-control" => "org.sonicroute.app", "mt" => "bin.mt.plus", _ => throw new ArgumentException("Choose a supported test player.")
+                };
+                await RunWithTrustedPhoneAsync(args[1], async (s, ct) => {
+                    await SrapVerifyMediaStateAsync(s, package, ct);
+                    if (args.Length == 3 && args[2] == "fixture-control") await ControlOwnedMediaFixtureAsync(s, ct);
+                });
+                return 0;
+            }
+            if (args is ["--srap-stream-ownership", var streamDirectory, var streamKind])
+            { await SrapStreamOwnershipAsync(streamDirectory, streamKind); return 0; }
+            if (args.Length is 2 or 3 && args[0] == "--srap-live-soak")
+            {
+                int seconds = args.Length == 2 ? 180 : int.Parse(args[2], System.Globalization.CultureInfo.InvariantCulture);
+                if (seconds is < 3 or > 1800) throw new ArgumentOutOfRangeException(nameof(seconds), "Choose 3 to 1800 seconds.");
+                await RunWithTrustedPhoneAsync(args[1], (s, ct) => SrapVerifySoakAsync(s, seconds, ct), TimeSpan.FromSeconds(seconds + 45));
+                return 0;
+            }
+            if (args is ["--srap-soak-check", var soakFixture]) { await SrapSoakFixtureAsync(soakFixture); return 0; }
+            if (args is ["--srap-live-capture", var srapLiveCaptureDirectory])
+            { await RunWithTrustedPhoneAsync(srapLiveCaptureDirectory, SrapVerifyCaptureAsync); return 0; }
+            if (args is ["--srap-live-screen", var srapLiveScreenDirectory])
+            { await RunWithTrustedPhoneAsync(srapLiveScreenDirectory, SrapVerifyScreenAsync); return 0; }
+            if (args is ["--srap-live-files", var srapLiveFilesDirectory])
+            { await RunWithTrustedPhoneAsync(srapLiveFilesDirectory, (session, token) => SrapVerifyFilesAsync(session, srapLiveFilesDirectory, token)); return 0; }
+            if (args is ["--srap-screen-frames"]) { SrapScreenFramesCheck(); return 0; }
+            if (args.Length is 2 or 3 && args[0] == "--srap-live-pcm")
+            { await SrapLivePcmAsync(args[1], args.Length == 3 ? args[2] : "current"); return 0; }
             if (args is ["--srap-live", var liveDirectory]) { await SrapLiveAsync(liveDirectory); return 0; }
             if (args is ["--srap-live-revoke", var revokeDirectory]) { await SrapLiveRevokeAsync(revokeDirectory); return 0; }
             if (args is ["--gemini-android-contract", var output, var vectors])
@@ -91,7 +135,13 @@ internal static partial class Program
             if (args.Length > 0 && args[0] is "--catalog" or "--live") { await DeviceAsync(args); return 0; }
             await ModulesAsync(); Console.WriteLine($"PASS {_checks} focused assertions"); return 0;
         }
-        catch (Exception ex) { Console.Error.WriteLine(ex); return 1; }
+        catch (Exception ex)
+        {
+            if (ex is SrapException { WireReason: { } reason } && reason.All(c => char.IsAsciiLetterOrDigit(c) || c == '_'))
+                Console.Error.WriteLine("SRAP reason=" + reason);
+            Console.Error.WriteLine(ex);
+            return 1;
+        }
     }
     private static async Task PackageAsync(string[] args)
     {

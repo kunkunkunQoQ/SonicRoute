@@ -1,0 +1,3 @@
+# packageName|media.get request params JSON|successful result JSON
+org.sonicroute.app|{"packageName":"org.sonicroute.app","fields":"state"}|{"packageName":"org.sonicroute.app","playing":true}
+bin.mt.plus|{"packageName":"bin.mt.plus","fields":"state"}|{"packageName":"bin.mt.plus","playing":false}

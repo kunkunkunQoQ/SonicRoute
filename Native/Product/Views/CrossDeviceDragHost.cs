@@ -43,7 +43,7 @@ internal static class CrossDeviceDragHost
                 await host.Phone.ReturnAndroidToPhoneAsync(device, app.Package).ConfigureAwait(false);
             else if (shared is { } keepPhoneAudio)
                 await host.Phone.Sources.AddAsync(device, app, keepPhoneAudio).ConfigureAwait(false);
-            else
+            else if (!device.IsApp)
                 await host.Phone.OpenDisplayAsync(device, app, x, y).ConfigureAwait(false);
         }
         catch (Exception ex)

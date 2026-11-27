@@ -1,0 +1,22 @@
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:id="@+id/page" android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical">
+    <TextView android:id="@+id/brand_header" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="@dimen/screen_padding"
+        android:minHeight="50dp" android:gravity="center_vertical" android:importantForAccessibility="no" android:drawableStart="@drawable/brand_header_icon"
+        android:drawablePadding="8dp" android:drawableTint="@color/sonic_ink" android:text="@string/app_name" android:textColor="@color/sonic_ink" android:textSize="17sp" android:fontFamily="sans-serif-medium" />
+    <ScrollView android:id="@+id/content_scroll" android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:fillViewport="true" android:saveEnabled="false" android:scrollbars="vertical">
+        <org.sonicroute.app.PageColumn android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_gravity="center_horizontal" android:orientation="vertical" android:paddingHorizontal="@dimen/screen_padding" android:paddingTop="4dp" android:paddingBottom="22dp">
+            <include layout="@layout/route_audio_page" />
+            <include layout="@layout/route_devices_page" />
+            <include layout="@layout/route_pc_page" />
+            <include layout="@layout/route_rules_page" />
+            <include layout="@layout/route_settings_page" />
+        </org.sonicroute.app.PageColumn>
+    </ScrollView>
+    <View android:layout_width="match_parent" android:layout_height="1dp" android:background="@color/sonic_line" android:importantForAccessibility="no" />
+    <RadioGroup android:id="@+id/navigation" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center" android:background="@color/sonic_surface" android:saveEnabled="false">
+        <RadioButton android:id="@+id/nav_audio" style="@style/SonicRoute.Tab" android:drawableTop="@drawable/ic_audio" android:text="@string/nav_audio" android:saveEnabled="false" />
+        <RadioButton android:id="@+id/nav_devices" style="@style/SonicRoute.Tab" android:drawableTop="@drawable/ic_devices" android:text="@string/nav_devices" android:saveEnabled="false" />
+        <RadioButton android:id="@+id/nav_pc" style="@style/SonicRoute.Tab" android:drawableTop="@drawable/ic_pc" android:text="@string/nav_pc" android:saveEnabled="false" />
+        <RadioButton android:id="@+id/nav_rules" style="@style/SonicRoute.Tab" android:drawableTop="@drawable/ic_rules" android:text="@string/nav_rules" android:saveEnabled="false" />
+        <RadioButton android:id="@+id/nav_settings" style="@style/SonicRoute.Tab" android:drawableTop="@drawable/ic_settings" android:text="@string/nav_settings" android:saveEnabled="false" />
+    </RadioGroup>
+</LinearLayout>

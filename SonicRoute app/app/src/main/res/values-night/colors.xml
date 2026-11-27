@@ -1,0 +1,15 @@
+<resources>
+    <color name="sonic_background">#16151C</color>
+    <color name="sonic_surface">#1D1B24</color>
+    <color name="sonic_ink">#F3EFF8</color>
+    <color name="sonic_secondary">#C2BACB</color>
+    <color name="sonic_disabled">#888390</color>
+    <color name="sonic_accent">#C9B4FF</color>
+    <color name="sonic_selection">#393044</color>
+    <color name="sonic_line">#393440</color>
+    <color name="sonic_ripple">#30C9B4FF</color>
+    <color name="sonic_button">#7152BB</color>
+    <color name="sonic_level">#372753</color>
+    <color name="sonic_level_ink">#FFFFFF</color>
+    <color name="sonic_level_secondary">#E5D9FB</color>
+</resources>

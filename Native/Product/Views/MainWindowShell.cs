@@ -641,6 +641,7 @@ internal sealed partial class MainWindowShell : LayeredWindow, IViewHostActions
         string id = "nav." + tab;
         _hit.Add(id, rect, UiCursorKind.Hand, _config.MainSidebarCollapsed || _sidebarAnimating ? label : null);
         bool selected = _currentTab == tab;
+        _hit.Describe(id, label, UiAccessibleRole.PageTab, selected);
         bool hot = _hit.IsHover(id);
 
         if (selected) g.FillRoundedRect(rect, UiMetrics.NavItemRadius, _theme.NavSelected);

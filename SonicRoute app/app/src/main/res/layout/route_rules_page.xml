@@ -1,0 +1,8 @@
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:id="@+id/panel_rules" style="@style/SonicRoute.Column" android:visibility="gone">
+    <TextView style="@style/SonicRoute.Title" android:text="@string/nav_rules" />
+    <TextView style="@style/SonicRoute.Heading" android:layout_marginTop="4dp" android:text="@string/rules_title" />
+    <TextView android:id="@+id/rules_empty" style="@style/SonicRoute.Body" android:text="@string/rule_empty_hint" />
+    <LinearLayout android:id="@+id/rule_list" style="@style/SonicRoute.Column" />
+    <Button android:id="@+id/add_rule" style="@style/SonicRoute.Primary" android:text="@string/rule_add" android:drawableStart="@drawable/ic_plus" android:layout_marginTop="10dp" />
+    <TextView android:id="@+id/rules_scope" style="@style/SonicRoute.Body" android:text="@string/rule_runtime_hint" android:layout_marginTop="14dp" />
+</LinearLayout>

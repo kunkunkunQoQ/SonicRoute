@@ -11,6 +11,8 @@ internal sealed class SrapPhoneTransport : IAsyncDisposable
 {
     private sealed record Attachment(AndroidDevice Device, string Fingerprint, SrapSession Session);
     private readonly AndroidPhoneStore store;
+    private readonly Func<CancellationToken, IAsyncEnumerable<bool>> watchServices;
+    private readonly Func<bool> hasDiscoveryInterface;
     private readonly Lazy<SrapIdentity> identity;
     private readonly CancellationTokenSource lifetime = new();
     private readonly CancellationToken token;
@@ -23,13 +25,17 @@ internal sealed class SrapPhoneTransport : IAsyncDisposable
     private CancellationTokenSource? browsing;
     private Task? worker;
     private Task? browser;
+    private long networkRevision;
     private bool started;
     private bool closed;
     internal event Action? Changed;
 
-    internal SrapPhoneTransport(AndroidPhoneStore store, string directory)
+    internal SrapPhoneTransport(AndroidPhoneStore store, string directory,
+        Func<CancellationToken, IAsyncEnumerable<bool>>? watchServices = null, Func<bool>? hasDiscoveryInterface = null)
     {
         this.store = store;
+        this.watchServices = watchServices ?? AndroidMdnsDiscovery.WatchAppsAsync;
+        this.hasDiscoveryInterface = hasDiscoveryInterface ?? AndroidMdnsDiscovery.HasDiscoveryInterface;
         identity = new(() => new(directory));
         token = lifetime.Token;
     }
@@ -124,20 +130,29 @@ internal sealed class SrapPhoneTransport : IAsyncDisposable
         finally { dialing.Release(); }
     }
 
-    internal void Close(string id)
+    internal void Close(string id, bool reconnect = false)
     {
         Attachment? attachment;
         lock (gate) online.Remove(id, out attachment);
-        if (attachment == null) return;
-        attachment.Session.Dispose();
-        Changed?.Invoke();
+        if (attachment != null)
+        {
+            attachment.Session.Dispose();
+            Changed?.Invoke();
+        }
+        if (reconnect) Signal();
     }
 
     internal void RevokeTrust(string id, string fingerprint)
     {
-        lock (gate) revoked.Add((id, fingerprint));
-        Close(id);
-        store.RevokeAppTrust(id, fingerprint);
+        Attachment? removed = null;
+        lock (gate)
+        {
+            revoked.Add((id, fingerprint));
+            if (online.TryGetValue(id, out var live) && live.Fingerprint == fingerprint) online.Remove(id, out removed);
+        }
+        removed?.Session.Dispose();
+        try { store.RevokeAppTrust(id, fingerprint); }
+        finally { if (removed != null) Changed?.Invoke(); }
     }
 
     internal Task BindAliasAsync(SrapSession session, string pin, string profileId, SrapAdbAttachment attachment,
@@ -248,8 +263,7 @@ internal sealed class SrapPhoneTransport : IAsyncDisposable
             if (trusted.Count != 0 && browsing == null)
             {
                 browsing = CancellationTokenSource.CreateLinkedTokenSource(token);
-                var browseToken = browsing.Token;
-                browser = Task.Run(() => BrowseAsync(browseToken));
+                StartBrowseLocked();
                 worker ??= Task.Run(RestoreAsync);
                 NetworkChange.NetworkAddressChanged += NetworkChanged;
             }
@@ -265,16 +279,50 @@ internal sealed class SrapPhoneTransport : IAsyncDisposable
         Signal();
     }
 
-    private void NetworkChanged(object? sender, EventArgs e) => Signal();
+    private void NetworkChanged(object? sender, EventArgs e) => OnNetworkAddressChanged();
+
+    internal void OnNetworkAddressChanged()
+    {
+        lock (gate)
+        {
+            if (closed || browsing == null) return;
+            networkRevision++;
+            if (browser == null && hasDiscoveryInterface()) StartBrowseLocked();
+        }
+        Signal();
+    }
+
+    private void StartBrowseLocked()
+    {
+        var active = browsing!.Token;
+        long revision = networkRevision;
+        browser = Task.Run(() => BrowseAsync(active, revision));
+    }
+
     private void Signal() => wake.Writer.TryWrite(true);
 
-    private async Task BrowseAsync(CancellationToken cancel)
+    private async Task BrowseAsync(CancellationToken cancel, long revision)
     {
         try
         {
-            await foreach (var _ in AndroidMdnsDiscovery.WatchAppsAsync(cancel).ConfigureAwait(false)) Signal();
+            await foreach (var _ in watchServices(cancel).ConfigureAwait(false)) Signal();
         }
         catch (OperationCanceledException) when (cancel.IsCancellationRequested) { }
+        catch (Exception error) when (error is IOException or SocketException or NetworkInformationException or EntryPointNotFoundException)
+        { System.Diagnostics.Trace.WriteLine("SRAP DNS-SD browse ended: " + error.GetType().Name); }
+        finally
+        {
+            lock (gate)
+            {
+                if (!closed && browsing != null && browsing.Token == cancel)
+                {
+                    browser = null;
+                    // A real network event can race a failing registration. Retry
+                    // at most once for that event, even if registration fails again.
+                    if (revision != networkRevision && hasDiscoveryInterface()) StartBrowseLocked();
+                }
+            }
+        }
     }
 
     private async Task RestoreAsync()

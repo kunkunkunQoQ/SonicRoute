@@ -1,0 +1,25 @@
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:id="@+id/panel_pc" style="@style/SonicRoute.Column" android:visibility="gone">
+    <TextView style="@style/SonicRoute.Title" android:text="@string/pc_page_title" />
+    <ViewStub android:id="@+id/pc_consent_stub" android:inflatedId="@+id/pc_consent" android:layout="@layout/route_pc_consents" android:layout_width="match_parent" android:layout_height="wrap_content" />
+    <TextView style="@style/SonicRoute.Heading" android:layout_marginTop="4dp" android:text="@string/pc_receiver" />
+    <TextView android:id="@+id/lan_status" style="@style/SonicRoute.Body" android:accessibilityLiveRegion="polite" />
+    <org.sonicroute.app.ActionStrip android:layout_width="match_parent" android:layout_height="wrap_content">
+    <Button android:id="@+id/btn_lan_toggle" style="@style/SonicRoute.ConnectionAction" android:text="@string/action_lan_start" />
+    <Button android:id="@+id/btn_lan_pair" style="@style/SonicRoute.ConnectionAction" android:text="@string/action_pair_open" />
+    </org.sonicroute.app.ActionStrip>
+    <TextView android:id="@+id/lan_invite_text" style="@style/SonicRoute.Body" android:visibility="gone" />
+    <Button android:id="@+id/btn_lan_copy_invite" style="@style/SonicRoute.Primary" android:text="@string/action_copy_invite" android:layout_marginTop="6dp" android:visibility="gone" />
+    <TextView style="@style/SonicRoute.Heading" android:text="@string/pc_paired" />
+    <TextView android:id="@+id/lan_peers_status" style="@style/SonicRoute.Body"  />
+    <LinearLayout android:id="@+id/lan_peers_container" style="@style/SonicRoute.Column" />
+    <View android:layout_width="match_parent" android:layout_height="1dp" android:layout_marginTop="8dp" android:background="@color/sonic_line" android:importantForAccessibility="no" />
+    <TextView style="@style/SonicRoute.Heading" android:text="@string/pc_sharing" />
+    <TextView android:id="@+id/pc_sharing_hint" style="@style/SonicRoute.Body" android:text="@string/pc_sharing_hint"  />
+    <Button android:id="@+id/share_screen" style="@style/SonicRoute.BackendButton" android:text="@string/share_screen" android:drawableStart="@drawable/ic_screen" android:drawableEnd="@drawable/ic_next" />
+    <TextView android:id="@+id/share_screen_status" style="@style/SonicRoute.Body"  />
+    <Button android:id="@+id/capture_playback" style="@style/SonicRoute.BackendButton" android:text="@string/capture_title" android:drawableStart="@drawable/ic_music" android:drawableEnd="@drawable/ic_next" />
+    <TextView android:id="@+id/capture_playback_status" style="@style/SonicRoute.Body"  />
+    <View android:layout_width="match_parent" android:layout_height="1dp" android:layout_marginTop="8dp" android:background="@color/sonic_line" android:importantForAccessibility="no" />
+    <Button android:id="@+id/pc_details_toggle" style="@style/SonicRoute.BackendButton" android:text="@string/pc_details" android:drawableEnd="@drawable/ic_next" />
+    <TextView android:id="@+id/pc_details" style="@style/SonicRoute.Body" android:visibility="gone" android:textIsSelectable="true" />
+</LinearLayout>

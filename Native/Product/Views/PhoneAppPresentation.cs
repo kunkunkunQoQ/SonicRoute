@@ -5,6 +5,14 @@ namespace SonicRoute.Native.Product.Views;
 
 internal static class PhoneAppPresentation
 {
+    internal static string ConnectionLabel(AndroidPhoneProfile profile, AndroidDevice? online)
+    {
+        if (online?.IsApp == true) return L10n.T("Phone.SrapConnected");
+        if (online != null) return $"ADB · {(online.IsWifi ? "Wi-Fi" : "USB")} · {L10n.T("Phone.ConnectedStatus")}";
+        if (profile.LastDevice?.IsApp != true) return L10n.T("Phone.Disconnected");
+        return profile.AppTrustRevoked ? L10n.T("Phone.Srap.not_paired") : "SonicRoute App · " + L10n.T("Phone.Disconnected");
+    }
+
     internal static string OutputLabel(AndroidOutputSink sink, string phoneName) => sink.Kind switch
     {
         AndroidOutputSinkKind.Current => L10n.T("Phone.NativeAudioOutput"),

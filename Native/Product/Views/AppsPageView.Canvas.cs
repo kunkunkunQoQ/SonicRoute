@@ -1197,6 +1197,9 @@ internal sealed partial class AppsPageView
         UiPrimitives.DrawVolumeSlider(g, t, hit, "canvas.app.vol", masterSliderRect,
             volumeKnown ? shownVol / 100f : 0f, 0f, _selectedMuted, showPeak: false,
             enabled: volReady, compact: true, dimUnavailable: app.IsExternalOffline);
+        if (hit.AccessibilityEnabled)
+            hit.DescribeVolume("canvas.app.vol", masterSliderRect, titleText, volReady, volumeKnown ? shownVol : null,
+                app.Identity, (_, value) => { ApplyAppSliderVolume((int)Math.Round(value)); _actions.Host.FlushVolumeWrites(); });
 
         // Native output port directly to the right of App Master Volume row
         UiColor nativePortColor = nativeDropHot
@@ -1267,6 +1270,9 @@ internal sealed partial class AppsPageView
             _sliderWorldRects[fSliderId] = fSliderR;
             UiPrimitives.DrawVolumeSlider(g, t, hit, fSliderId, fSliderR,
                 fwdVol / 100f, 0f, gain.Muted, showPeak: false, enabled: fwdReady, compact: true);
+            if (hit.AccessibilityEnabled)
+                hit.DescribeVolume(fSliderId, fSliderR, fwdName, fwdReady, fwdVol, app.Identity,
+                    (_, value) => ApplyForwardVolume(capturedFid, (int)Math.Round(value)));
 
             // Forwarding port on right edge of App Node
             if (_appForwardPortsWorld.TryGetValue(fid, out var fwdPort))
@@ -1470,6 +1476,9 @@ internal sealed partial class AppsPageView
             UiPrimitives.DrawVolumeSlider(g, t, hit, sliderId, sliderR,
                 node.IsAvailable ? shownVol / 100f : 0f, 0f, node.Muted, showPeak: false,
                 enabled: node.IsAvailable, compact: true, dimUnavailable: !node.IsAvailable);
+            if (hit.AccessibilityEnabled)
+                hit.DescribeVolume(sliderId, sliderR, node.PrimaryName, node.IsAvailable, node.IsAvailable ? shownVol : null,
+                    node.DeviceId, (_, value) => { ApplyDeviceSliderVolume(node, (int)Math.Round(value)); _actions.Host.FlushVolumeWrites(); });
         }
 
         // Left-edge connection port: extend generously to the left at low zoom, cap right inside card at 12u so mute button (card.X + 14) is never overlapped

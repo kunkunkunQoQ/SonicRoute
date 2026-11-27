@@ -49,7 +49,7 @@ internal sealed class AndroidConnectionManager(AndroidPhoneStore store, Func<And
         return saved.IdentityFingerprint == null || saved.IdentityFingerprint == live.IdentityFingerprint;
     }
 
-    internal AndroidManagedConnection Get(AndroidDevice? requested, AndroidDevice? avoidTransport = null)
+    internal AndroidManagedConnection Get(AndroidDevice? requested, AndroidDevice? avoidTransport = null, bool preferVerifiedAdb = false)
     {
         if (requested == null) return new(null, AndroidManagedConnectionState.Unknown, null);
         if (IsRetiring(requested)) return new(null, AndroidManagedConnectionState.Removed, null);
@@ -81,7 +81,7 @@ internal sealed class AndroidConnectionManager(AndroidPhoneStore store, Func<And
             .OrderBy(d => AndroidDeviceIdentity.SameTransport(d, avoidTransport))
             .ThenByDescending(d => d.Serial == saved.Serial).ThenBy(d => d.IsWifi).ThenBy(d => d.Serial, StringComparer.Ordinal).FirstOrDefault();
         if (live != null) return new(profile, AndroidManagedConnectionState.Connected,
-            profile.PreferAppTransport && boundApp != null ? boundApp : live);
+            !preferVerifiedAdb && profile.PreferAppTransport && boundApp != null ? boundApp : live);
         if (matches.Any(d => d.State == "device" && store.IsRemoved(d))) return new(profile, AndroidManagedConnectionState.IdentityConflict, null);
         if (matches.Any(d => d.State == "device") || raw.Any(d => d.State == "device" && d.Serial == saved.Serial))
             return new(profile, AndroidManagedConnectionState.IdentityConflict, null);
@@ -90,9 +90,59 @@ internal sealed class AndroidConnectionManager(AndroidPhoneStore store, Func<And
     }
 
     internal AndroidDevice? Resolve(AndroidDevice? requested) => Get(requested).Device;
-    internal AndroidDevice? ResolveKey(string key) => store.Profiles
-        .Where(p => p.LastDevice != null && AndroidDeviceIdentity.Key(p.LastDevice) == key)
-        .Select(p => Resolve(p.LastDevice)).OfType<AndroidDevice>().FirstOrDefault();
+    internal static bool IsRequestedAdbDisplayAttachment(AndroidDevice requested, AndroidDevice resolved) =>
+        !requested.IsApp && !resolved.IsApp && (requested.ConnectionTarget == null ||
+            requested.ConnectionTarget == resolved.ConnectionTarget && AndroidDeviceIdentity.SameTransport(requested, resolved));
+
+    internal async Task<AndroidApp> ResolveRetainedDisplayAppAsync(AndroidDevice device, AndroidApp app,
+        Func<AndroidDevice, string, CancellationToken, Task<IReadOnlyList<AndroidApp>>> readPackage, CancellationToken token)
+    {
+        if (device.IsApp) throw new SrapException("unsupported");
+        if (app.IsDeviceAudio || app.Uid != 0) return app;
+        var profile = store.FindProfile(device);
+        if (device.ConnectionTarget == null || profile is not { AppPublicKeySha256: { } fingerprint, LastDevice.IsApp: false, AppTrustRevoked: false }
+            || !profile.RetainedApps.Any(a => a.Uid == 0 && a.Package == app.Package))
+            throw AndroidError.WithCode(new IOException("Refresh the ADB app catalog."), AndroidErrorCode.DisplayAppUidChanged);
+        void CheckAttachment()
+        {
+            token.ThrowIfCancellationRequested();
+            if (!IsCurrent(device) || store.FindProfile(device) is not { AppTrustRevoked: false } current || current.Id != profile.Id
+                || current.AppPublicKeySha256 != fingerprint || !store.HasUniqueAppOwner(current.Id, fingerprint)
+                || !current.RetainedApps.Any(a => a.Uid == 0 && a.Package == app.Package))
+                throw new SrapException("stale_session");
+        }
+        CheckAttachment();
+        using var scope = CancellationTokenSource.CreateLinkedTokenSource(token, OperationToken(device));
+        var entries = await readPackage(device, app.Package, scope.Token).ConfigureAwait(false);
+        CheckAttachment();
+        if (entries.Count != 1 || entries[0].Package != app.Package || entries[0].Uid <= 0)
+            throw AndroidError.WithCode(new IOException("Refresh the ADB app catalog."), AndroidErrorCode.DisplayAppUidChanged);
+        // The interactive client still verifies this UID again at launch.
+        return app with { Uid = entries[0].Uid };
+    }
+    internal AndroidDevice? VerifiedAdbForDisplay(AndroidDevice device)
+    {
+        if (!device.IsApp || app?.Session(device) == null) return null;
+        var selected = Get(device);
+        if (!ReferenceEquals(selected.Device, device) || selected.Profile is not { LastDevice.IsApp: false, AppTrustRevoked: false } profile ||
+            profile.AppPublicKeySha256 != device.Serial || !store.HasUniqueAppOwner(profile.Id, device.Serial)) return null;
+        return Get(profile.LastDevice, preferVerifiedAdb: true).Device is { IsApp: false } live ? live : null;
+    }
+    internal void SelectVerifiedAdbForDisplay(AndroidDevice device, AndroidDevice previouslyShown)
+    {
+        var current = VerifiedAdbForDisplay(device);
+        if (current == null || !AndroidDeviceIdentity.SameTransport(current, previouslyShown) ||
+            current.ConnectionTarget != previouslyShown.ConnectionTarget || store.FindProfile(device) is not { } profile)
+            throw new SrapException("stale_session");
+        SelectAppTransport(profile.Id, device.Serial, false);
+    }
+    internal AndroidDevice? ResolveKey(string key)
+    {
+        var owners = store.Profiles.Where(p => p.LastDevice != null && (AndroidDeviceIdentity.Key(p.LastDevice) == key
+            || !p.AppTrustRevoked && p.AppPublicKeySha256 is { } pin && key == "app:" + pin && store.HasUniqueAppOwner(p.Id, pin)))
+            .Take(2).ToArray();
+        return owners.Length == 1 ? Resolve(owners[0].LastDevice) : null;
+    }
     internal IReadOnlyList<AndroidDevice> OnlineDevices => store.Profiles.Select(p => Resolve(p.LastDevice)).OfType<AndroidDevice>().ToArray();
 
     internal bool IsCurrent(AndroidDevice device)
@@ -124,7 +174,7 @@ internal sealed class AndroidConnectionManager(AndroidPhoneStore store, Func<And
         if (adb == null || app == null || !AdbClient.SupportsAliasForward(adbDevice)) throw new SrapException("unsupported");
         var session = app.Session(appDevice) ?? throw new SrapException("stale_session");
         long revision = store.LibraryRevision;
-        var attachment = await adb.CaptureAliasAttachmentAsync(adbDevice, cancel).ConfigureAwait(false);
+        await using var attachment = await adb.CaptureAliasAttachmentAsync(adbDevice, cancel).ConfigureAwait(false);
         using var scope = CancellationTokenSource.CreateLinkedTokenSource(cancel);
         void Validate()
         {
@@ -162,9 +212,11 @@ internal sealed class AndroidConnectionManager(AndroidPhoneStore store, Func<And
 
     internal void SelectAppTransport(string id, string fingerprint, bool? preferApp)
     {
+        var previous = store.Profiles.FirstOrDefault(p => p.Id == id);
         store.SetAppTransportPreference(id, fingerprint, preferApp);
+        if (preferApp == previous?.PreferAppTransport) return;
         Revoke(id);
-        if (preferApp == null) app?.Close(id);
+        if (preferApp != true) app?.Close(id, reconnect: preferApp == false);
     }
 
     internal CancellationToken OperationToken(AndroidDevice device)
@@ -259,11 +311,13 @@ internal sealed class AndroidConnectionManager(AndroidPhoneStore store, Func<And
 
     internal bool Remove(string profileId, out IReadOnlyList<AndroidDevice> aliases)
     {
-        var saved = store.Profiles.FirstOrDefault(p => p.Id == profileId)?.LastDevice;
+        var profile = store.Profiles.FirstOrDefault(p => p.Id == profileId);
+        var saved = profile?.LastDevice;
         if (saved == null) { aliases = []; return false; }
         // Capture all verified aliases for both tombstones and owned-session cleanup.
         aliases = saved.IsApp ? [saved] : (CurrentRaw ?? discovery().Devices ?? []).Where(d => VerifiedMatch(saved, d)
             || saved.ConnectionTarget != null && AndroidDeviceIdentity.SameTransport(saved, d)).Append(saved).Distinct().ToArray();
+        if (!saved.IsApp && app?.Resolve(profile!) is { } bound) aliases = [.. aliases, bound];
         BeginRetirement(aliases);
         if (!saved.IsApp) discovery().RetirePendingScan();
         try

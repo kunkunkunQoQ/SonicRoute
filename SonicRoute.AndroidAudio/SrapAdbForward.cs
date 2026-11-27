@@ -4,8 +4,8 @@ using System.Net.Sockets;
 
 namespace SonicRoute.AndroidAudio;
 
-// Only a captured in-process ADB connection can open this one-use forward. The client
-// socket is allocated by its owner too, so another local process cannot take its place.
+// Both loopback sockets belong to this request. No entry is added to an ADB
+// daemon's global forward table.
 internal sealed class SrapAdbForward : IAsyncDisposable
 {
     private readonly TcpListener listener;
@@ -13,6 +13,7 @@ internal sealed class SrapAdbForward : IAsyncDisposable
     private readonly Stream remote;
     private readonly CancellationTokenSource stop = new();
     private readonly Task bridge;
+    private Task? cleanup;
     internal Socket Client { get; }
     internal IPEndPoint Endpoint { get; }
 
@@ -75,7 +76,12 @@ internal sealed class SrapAdbForward : IAsyncDisposable
         }
     }
 
-    public async ValueTask DisposeAsync()
+    public ValueTask DisposeAsync()
+    {
+        lock (this) return new(cleanup ??= CloseAsync());
+    }
+
+    private async Task CloseAsync()
     {
         // These are owned handles, never a port lookup or a global ADB rule.
         try
@@ -94,15 +100,28 @@ internal sealed class SrapAdbForward : IAsyncDisposable
     }
 }
 
-internal sealed class SrapAdbAttachment(AdbMuxConnection connection)
+internal abstract class SrapAdbAttachment : IAsyncDisposable
 {
-    internal bool IsConnected => connection.IsConnected;
-    internal event Action Disconnected { add => connection.Disconnected += value; remove => connection.Disconnected -= value; }
+    private int opened;
+    internal abstract bool IsConnected { get; }
+    internal abstract event Action? Disconnected;
+    protected abstract Task<Stream> OpenLoopbackAsync(string service, CancellationToken token);
+    public virtual ValueTask DisposeAsync() => ValueTask.CompletedTask;
 
     internal async Task<SrapAdbForward> OpenForwardAsync(int port, CancellationToken token)
     {
-        if (port is < 1 or > 65535 || !IsConnected) throw new SrapException("stale_session");
-        var remote = await connection.OpenStreamAsync("tcp:" + port.ToString(CultureInfo.InvariantCulture), token).ConfigureAwait(false);
+        if (port is < 1 or > 65535 || !IsConnected || Interlocked.Exchange(ref opened, 1) != 0)
+            throw new SrapException("stale_session");
+        // AOSP's device-side tcp:<decimal port> service connects to loopback.
+        var remote = await OpenLoopbackAsync("tcp:" + port.ToString(CultureInfo.InvariantCulture), token).ConfigureAwait(false);
         return await SrapAdbForward.OpenAsync(remote, token).ConfigureAwait(false);
     }
+}
+
+internal sealed class DirectSrapAdbAttachment(AdbMuxConnection connection) : SrapAdbAttachment
+{
+    internal override bool IsConnected => connection.IsConnected;
+    internal override event Action? Disconnected { add => connection.Disconnected += value; remove => connection.Disconnected -= value; }
+    protected override async Task<Stream> OpenLoopbackAsync(string service, CancellationToken token) =>
+        await connection.OpenStreamAsync(service, token).ConfigureAwait(false);
 }

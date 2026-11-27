@@ -1,0 +1,15 @@
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:id="@+id/panel_audio" style="@style/SonicRoute.Column">
+    <TextView style="@style/SonicRoute.Title" android:text="@string/nav_audio" />
+    <LinearLayout style="@style/SonicRoute.Column" android:background="@drawable/level_panel" android:padding="18dp">
+        <TextView android:id="@+id/system_volume_output" android:layout_width="wrap_content" android:layout_height="wrap_content" android:labelFor="@id/system_volume_slider" android:text="@string/system_volume_title" android:textSize="14sp" android:textColor="@color/sonic_level_secondary" android:fontFamily="sans-serif-medium" />
+        <TextView android:id="@+id/volume_percent" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textSize="37sp" android:fontFamily="sans-serif-medium" android:textColor="@color/sonic_level_ink" android:includeFontPadding="false" />
+        <SeekBar android:id="@+id/system_volume_slider" android:layout_width="match_parent" android:layout_height="48dp" android:max="100" android:saveEnabled="false" android:paddingHorizontal="10dp" android:thumbTint="@color/sonic_level_ink" android:progressTint="@color/sonic_level_ink" android:progressBackgroundTint="@color/sonic_level_secondary" android:contentDescription="@string/system_volume_title" />
+        <TextView android:id="@+id/system_volume_label" android:layout_width="match_parent" android:layout_height="wrap_content" android:textSize="13sp" android:textColor="@color/sonic_level_secondary" />
+    </LinearLayout>
+    <Button android:id="@+id/native_app_route" style="@style/SonicRoute.BackendButton" android:layout_marginTop="10dp" android:text="@string/audio_output_action" android:drawableStart="@drawable/ic_route" android:drawableEnd="@drawable/ic_next" />
+    <View android:layout_width="match_parent" android:layout_height="1dp" android:layout_marginTop="8dp" android:background="@color/sonic_line" android:importantForAccessibility="no" />
+    <TextView style="@style/SonicRoute.Heading" android:text="@string/media_section" />
+    <TextView android:id="@+id/media_status" style="@style/SonicRoute.Body" android:text="@string/media_hint"  />
+    <Button android:id="@+id/media_access" style="@style/SonicRoute.ActionButton" android:text="@string/media_grant"  />
+    <LinearLayout android:id="@+id/media_sessions" style="@style/SonicRoute.Column" />
+</LinearLayout>

@@ -16,6 +16,7 @@ internal sealed partial class PhoneDevicePageView
     private void DrawOverlayAction(D2dTarget g, UiThemePalette theme, string id, UiRect rect, string label, bool enabled)
     {
         if (enabled) _hit.Add(id, rect, UiCursorKind.Hand);
+        _hit.DescribeControl(id, rect, label, UiAccessibleRole.Button, null, enabled);
         bool focused = enabled && _hit.ShowFocus && _hit.FocusId == id;
         float opacity = enabled ? 1f : 0.5f;
         var fill = enabled && _hit.IsHover(id) ? theme.NavHover : theme.Overlay;
@@ -28,19 +29,10 @@ internal sealed partial class PhoneDevicePageView
     private float RenderConnectionView(D2dTarget g, UiThemePalette t, float x, float y, float w)
     {
         float androidWidth = PhoneTextWidth("Android", 13f) + 42f;
-        float airPlayWidth = PhoneTextWidth("AirPlay", 13f) + 42f;
-        float appWidth = PhoneTextWidth("SonicRoute App", 13f) + 42f;
-        UiPrimitives.DrawRadioButton(g, t, _hit, "phone.connchoice.android", new UiRect(x, y, androidWidth, 28f),
-            !_airPlayConnectionChoice && !_appConnectionChoice, "Android", 13f);
-        bool wrapMethods = w < androidWidth + airPlayWidth + appWidth;
-        UiPrimitives.DrawRadioButton(g, t, _hit, "phone.connchoice.app",
-            new UiRect(wrapMethods ? x : x + androidWidth + airPlayWidth, wrapMethods ? y + 28f : y, appWidth, 28f),
-            _appConnectionChoice, "SonicRoute App", 13f);
-        UiPrimitives.DrawRadioButton(g, t, _hit, "phone.connchoice.airplay", new UiRect(x + androidWidth, y, airPlayWidth, 28f), _airPlayConnectionChoice, "AirPlay", 13f);
-        if (wrapMethods) y += 28f;
-        y += 36f;
-
-        if (_appConnectionChoice) return RenderAppConnection(g, t, x, y, w);
+        UiPrimitives.DrawRadioButton(g, t, _hit, "phone.connchoice.android", new UiRect(x, y, androidWidth, 32f), !_airPlayConnectionChoice, "Android", 13f);
+        UiPrimitives.DrawRadioButton(g, t, _hit, "phone.connchoice.airplay", new UiRect(x + androidWidth + 4f, y,
+            PhoneTextWidth("AirPlay", 13f) + 42f, 32f), _airPlayConnectionChoice, "AirPlay", 13f);
+        y += 38f;
 
         if (_airPlayConnectionChoice)
         {
@@ -50,6 +42,7 @@ internal sealed partial class PhoneDevicePageView
             return bounds.Bottom + 10f;
         }
 
+        y = RenderAppConnection(g, t, x, y, w);
         const float pad = 13f, qrSide = 166f;
         float inner = MathF.Max(1f, w - 2 * pad);
         bool stacked = inner < 350f;
@@ -63,11 +56,15 @@ internal sealed partial class PhoneDevicePageView
         string addrLabel = L10n.T("Phone.PairingAddressLabel"), codeLabel = L10n.T("Phone.PairingCodeLabel");
         float addrH = PhoneTextHeight(addrLabel, right), codeH = PhoneTextHeight(codeLabel, right);
         float codeColumnH = 20f + 4f + codeGuideH + 8f + addrH + 6f + 32f + 8f + codeH + 6f + 38f + 8f + 28f;
-        float cardH = (stacked ? qrH + 14f + codeColumnH : MathF.Max(qrH, codeColumnH)) + 2 * pad;
+        float cardH = (stacked ? qrH + 14f + codeColumnH : MathF.Max(qrH, codeColumnH)) + 2 * pad + 26f;
         var card = new UiRect(x, y, w, cardH);
         UiPrimitives.DrawCard(g, t, card, 12f);
-        float qx = x + pad, qy = y + pad;
-        g.DrawText(L10n.T("Phone.QrPairTitle"), new UiRect(qx, qy, left, 20f), t.TextPrimary, 14f, 600);
+        float qx = x + pad, qy = y + pad + 26f;
+        string wireless = L10n.T("Phone.AdbMethod");
+        var wirelessHeading = new UiRect(qx, y + pad, inner, 20f);
+        g.DrawText(wireless, wirelessHeading, t.TextPrimary, DeviceHeadingSize, 600);
+        _hit.DescribeText("phone.adb.heading", wirelessHeading, wireless);
+        g.DrawText(L10n.T("Phone.QrPairTitle"), new UiRect(qx, qy, left, 20f), t.TextPrimary, 12.5f, 600);
         g.DrawText(qrGuide, new UiRect(qx, qy + 24f, left, qGuideH), t.TextSecondary, 12f, wrap: true);
         var qr = new UiRect(qx + (left - qrSide) / 2f, qy + 32f + qGuideH, qrSide, qrSide);
         if (CanShowQr) _hit.Add("phone.qrrefresh", qr, UiCursorKind.Hand, L10n.T("Phone.QrRefreshHint"));
@@ -81,18 +78,20 @@ internal sealed partial class PhoneDevicePageView
 
         float cx = stacked ? qx : qx + left + 16f;
         float cy = stacked ? qy + qrH + 14f : qy;
-        g.DrawText(L10n.T("Phone.CodePairTitle"), new UiRect(cx, cy, right, 20f), t.TextPrimary, 14f, 600);
+        g.DrawText(L10n.T("Phone.CodePairTitle"), new UiRect(cx, cy, right, 20f), t.TextPrimary, 12.5f, 600);
         g.DrawText(codeGuide, new UiRect(cx, cy + 24f, right, codeGuideH), t.TextSecondary, 12f, wrap: true);
         cy += 32f + codeGuideH;
         g.DrawText(addrLabel, new UiRect(cx, cy, right, addrH), t.TextPrimary, 12f, wrap: true);
         var address = new UiRect(cx, cy + addrH + 6f, right, 32f);
         UiPrimitives.DrawTextBox(g, t, _hit, "phone.pairaddr", address, _pairAddress, focused: _actions.ActiveInlineEditTag == "phone.pairaddr", enabled: !_busy);
+        _hit.DescribeControl("phone.pairaddr", address, addrLabel, UiAccessibleRole.TextBox, null, !_busy);
         cy = address.Bottom + 8f;
         g.DrawText(codeLabel, new UiRect(cx, cy, right, codeH), t.TextPrimary, 12f, wrap: true);
         var code = new UiRect(cx, cy + codeH + 6f, right, 38f);
         UiPrimitives.DrawTextBox(g, t, _hit, "phone.paircode", code, _pairCode, focused: _actions.ActiveInlineEditTag == "phone.paircode", mono: true, fontSize: 18f, enabled: !_busy);
+        _hit.DescribeControl("phone.paircode", code, codeLabel, UiAccessibleRole.TextBox, null, !_busy, isPassword: true);
         DrawOverlayAction(g, t, "phone.pairbtn", new UiRect(cx, code.Bottom + 8f, right, 28f),
-            L10n.T("Phone.PairAndConnect"), enabled: !_busy);
+            L10n.T("Phone.PairAndConnect"), enabled: !_busy && HasPairingInput);
 
         string directGuide = L10n.T("Phone.DirectConnectDesc"), searchText = L10n.T("Phone.SearchSavedDevices"), connectText = L10n.T("Phone.ConnectShort");
         float directHintH = PhoneTextHeight(directGuide, inner);
@@ -107,13 +106,16 @@ internal sealed partial class PhoneDevicePageView
         g.DrawText(directGuide, new UiRect(qx, dy + 22f, inner, directHintH), t.TextSecondary, 12f, wrap: true);
         var manual = new UiRect(qx, dy + 30f + directHintH, MathF.Max(1f, inner - searchW - connectW - 16f), 32f);
         if (_savedChoice == null)
+        {
             UiPrimitives.DrawTextBox(g, t, _hit, "phone.connaddr", manual, _connectAddress, focused: _actions.ActiveInlineEditTag == "phone.connaddr", enabled: !_busy);
+            _hit.DescribeControl("phone.connaddr", manual, L10n.T("Phone.DirectConnectTitle"), UiAccessibleRole.TextBox, null, !_busy);
+        }
         else
             UiPrimitives.DrawComboBox(g, t, _hit, "phone.saved", manual, SavedLabel(_savedChoice), enabled: !_busy);
         UiPrimitives.DrawSecondaryButton(g, t, _hit, "phone.searchsaved", new UiRect(manual.Right + 8f, manual.Y, searchW, 32f),
             searchText, fontSize: 11f, enabled: !_busy && !_manualSearch);
         UiPrimitives.DrawSecondaryButton(g, t, _hit, "phone.connbtn", new UiRect(direct.Right - pad - connectW, manual.Y, connectW, 32f),
-            connectText, fontSize: 11f, enabled: !_busy && (!_manualSearch || _savedChoice == null));
+            connectText, fontSize: 11f, enabled: !_busy && (_savedChoice != null ? !_manualSearch : !string.IsNullOrWhiteSpace(_connectAddress)));
         dy = manual.Bottom;
         if (searchStatus != null)
             g.DrawText(searchStatus, new UiRect(qx, dy + 6f, inner, searchH - 6f), t.TextSecondary, 12f, wrap: true);

@@ -33,7 +33,8 @@ namespace SonicRoute.Core
 
         // Callers with large JSON snapshots can serialize directly, without allocating
         // another complete UTF-16 string. All callers keep the same atomic replacement.
-        internal static void Write(string path, Action<Stream> write)
+        internal static void Write(string path, Action<Stream> write) => Write(path, write, null);
+        internal static void Write(string path, Action<Stream> write, Action? beforeCommit)
         {
             string temporary = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
             string rollback = temporary + ".rollback";
@@ -50,6 +51,7 @@ namespace SonicRoute.Core
                 {
                     try
                     {
+                        beforeCommit?.Invoke();
                         if (File.Exists(path)) File.Replace(temporary, path, rollback);
                         else File.Move(temporary, path);
                         committed = true;

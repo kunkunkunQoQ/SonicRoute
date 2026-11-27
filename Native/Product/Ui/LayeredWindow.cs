@@ -27,7 +27,7 @@ internal delegate bool UiHitTestHandler(int xPx, int yPx, out int htCode);
 /// Layered Win32 window base supporting per-pixel premultiplied Direct2D rendering,
 /// crisp DPI scaling, pointer/wheel/keyboard input, and on-demand frame timer animations (zero idle CPU).
 /// </summary>
-internal abstract unsafe class LayeredWindow : IDisposable
+internal abstract unsafe partial class LayeredWindow : IDisposable
 {
     private const string WindowClassName = "SonicRoute.NativeUi.LayeredWindow";
     private const uint CsDblClks = 0x0008;
@@ -347,6 +347,7 @@ internal abstract unsafe class LayeredWindow : IDisposable
         if (Handle == 0) return;
         ReleasePointerCapture();
         _visible = false;
+        ReleaseAccessibility();
         StopAnimationTimer();
         ShowWindow(Handle, SwHide);
         OnHidden();
@@ -647,6 +648,9 @@ internal abstract unsafe class LayeredWindow : IDisposable
         try
         {
             OnRender(_target, width, height);
+            if (_accessibility != null && InputMap is { } map)
+                _accessibility.Publish(map, new UiRect(0, 0, width, height), DpiScale, InputOffsetY,
+                    AccessibleFocusId, AccessibleWindowFocused);
             if (InputMap is { ShowFocus: true } focus && focus.TryGetFocus(out var focused, out var visible) &&
                 focused.Id != RenderOverlayFocusId)
             {
@@ -923,6 +927,20 @@ internal abstract unsafe class LayeredWindow : IDisposable
             case WmEraseBkgnd:
                 return 1;
 
+            case 0x0317: // WM_PRINT
+            case 0x0318: // WM_PRINTCLIENT
+                if (win._visible && win._memDc != 0 && wParam != 0 && (msg == 0x0318 || (lParam & 4) != 0))
+                    BitBlt((nint)wParam, 0, 0, Math.Min(win.WidthPx, win._bufWidthPx), Math.Min(win.HeightPx, win._bufHeightPx),
+                        win._memDc, 0, 0, 0x00cc0020); // SRCCOPY, the last presented client surface.
+                return 0;
+
+            case 0x003D when unchecked((int)lParam) == -25 && win.IsVisible && win.InputMap is { } accessibleMap: // WM_GETOBJECT / UiaRootObjectId
+                return win.ReturnAccessibleProvider(wParam, lParam, accessibleMap);
+
+            case AccessibleActionMessage:
+                win._accessibility?.Dispatch(win);
+                return 0;
+
             case WmPaint:
                 ValidateRect(hwnd, 0);
                 if (!win._presentingBounds) win.RenderNow();
@@ -962,6 +980,7 @@ internal abstract unsafe class LayeredWindow : IDisposable
                     if (!win.IsMinimized)
                     {
                         win.IsMinimized = true;
+                        win.ReleaseAccessibility();
                         win.OnWindowStateChanged(minimized: true, maximized: false);
                     }
                     return 0;
@@ -1131,6 +1150,10 @@ internal abstract unsafe class LayeredWindow : IDisposable
                 }
                 return 0;
 
+            case WmSetFocus:
+                if (win._accessibility != null) win.Invalidate();
+                break;
+
             case WmCancelMode:
             case WmKillFocus:
                 win.OnFocusLost();
@@ -1139,6 +1162,7 @@ internal abstract unsafe class LayeredWindow : IDisposable
                     oldFocus.HideFocus();
                     win.Invalidate();
                 }
+                else if (win._accessibility != null) win.Invalidate();
                 win.ReleasePointerCapture();
                 break;
 
@@ -1226,6 +1250,7 @@ internal abstract unsafe class LayeredWindow : IDisposable
 
             case WmDestroy:
                 win.ReleasePointerCapture();
+                win.ReleaseAccessibility();
                 Instances.Remove(hwnd);
                 win._visible = false;
                 win.ReleaseRenderResources();
@@ -1374,6 +1399,7 @@ internal abstract unsafe class LayeredWindow : IDisposable
     [DllImport("user32.dll")] private static extern int ReleaseDC(nint hwnd, nint dc);
     [DllImport("gdi32.dll")] private static extern nint CreateCompatibleDC(nint hdc);
     [DllImport("gdi32.dll")] private static extern bool DeleteDC(nint hdc);
+    [DllImport("gdi32.dll")] private static extern bool BitBlt(nint dest, int x, int y, int width, int height, nint source, int sx, int sy, uint operation);
     [DllImport("gdi32.dll")] private static extern nint CreateDIBSection(nint hdc, ref BitmapInfoHeader bmi, uint usage, out nint bits, nint section, uint offset);
     [DllImport("gdi32.dll")] private static extern bool GdiFlush();
     [DllImport("gdi32.dll")] private static extern nint SelectObject(nint hdc, nint obj);

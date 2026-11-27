@@ -1,0 +1,4 @@
+<TextView xmlns:android="http://schemas.android.com/apk/res/android" android:id="@android:id/text1"
+    android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="@dimen/touch_min_height"
+    android:maxLines="3" android:ellipsize="end" android:gravity="center_vertical" android:paddingHorizontal="10dp"
+    android:paddingVertical="6dp" android:textSize="15sp" android:textColor="@color/sonic_ink" />

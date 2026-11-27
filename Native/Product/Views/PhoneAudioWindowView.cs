@@ -55,6 +55,8 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
     private string _searchText = "";
     private IReadOnlyList<AndroidApp>? _filteredAppsSource;
     private string? _filteredAppsQuery;
+    private string? _filteredGrant;
+    private bool _filteredAppChannel;
     private AndroidApp[] _filteredApps = [];
     private string? _activeProfileId;
     private AndroidDevice? _activeDevice;
@@ -813,6 +815,10 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
         var seekSlider = new UiRect(posRect.Right, seekY, durRect.X - posRect.Right, 20f);
         UiPrimitives.DrawValueSlider(g, _theme, _hit, "companion.seek", seekSlider, progress01,
             enabled: canSeek);
+        if (_hit.AccessibilityEnabled)
+            _hit.DescribeRange("companion.seek", seekSlider, L10n.T("Phone.MediaPlaybackPosition"), canSeek,
+                durationMs > 0 ? Math.Round(posMs / 1000, 1) : null, durationMs / 1000d, 0.1, 1,
+                string.Concat(_activeDevice?.Serial, "\0", _mediaState?.Package, "\0", _mediaState?.Title), SetAccessibleSeek);
 
         y = mediaCard.Bottom + 6f;
 
@@ -840,6 +846,7 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
 
         // Keep whole-phone audio first and the retained apps in their saved order.
         var apps = GetFilteredApps(profile);
+        string? capturePackage = online?.IsApp == true ? phone.Operations.AppCapture(online)?.Package : null;
         const float itemH = 50f;
         const float itemGap = 4f;
         _scroll.ViewportHeight = listRect.Height;
@@ -873,7 +880,8 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
 
                 string rowName = app.IsDeviceAudio ? phone.Store.GetProfileDisplayName(profile) : app.Name;
                 string rowSub = PhoneAppPresentation.Description(app);
-                _hit.Add(rowId, rowRect, UiCursorKind.Hand, rowName);
+                bool grantNeeded = online?.IsApp == true && capturePackage != app.Package;
+                _hit.Add(rowId, rowRect, UiCursorKind.Hand, grantNeeded ? L10n.T("Phone.SrapCaptureGrant") : rowName);
                 bool selected = _selectedPackage == app.Package;
                 UiColor bg = selected ? _theme.NavSelected : hot ? _theme.NavHover : isPlayingApp ? _theme.Overlay : _theme.SurfaceBgAlpha;
                 UiColor border = hot || selected ? _theme.Accent : UiColor.Transparent;
@@ -974,14 +982,21 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
             ? L10n.T("Phone.DeviceSelector") : phone.Store.GetProfileDisplayName(profile);
         string status = _airPlaySelected ? AirPlayReceiverViewControl.GetStageLabel(_host.AirPlay.Status)
             : L10n.T(_catalogRefresh != null ? "Phone.StatusLoading" : online == null ? "Phone.Disconnected" : "Phone.ConnectedStatus");
-        _hit.Add("companion.device", card, UiCursorKind.Hand, _refreshError ?? _dropStatusMessage ?? name);
+        string connection = _airPlaySelected ? status : PhoneAppPresentation.ConnectionLabel(profile, online);
+        string accessibleName = name + " · " + connection;
+        if (!_airPlaySelected && _catalogRefresh == null && online?.IsApp == true) status = "App · " + status;
+        _hit.Add("companion.device", card, UiCursorKind.Hand, _refreshError ?? _dropStatusMessage ?? accessibleName);
+        _hit.Describe("companion.device", accessibleName, UiAccessibleRole.ComboBox);
         g.FillRoundedRect(card, 8f, _theme.SurfaceBgAlpha);
         g.DrawRoundedRect(card, 8f, _hit.IsHover("companion.device") ? _theme.Accent : _theme.Border);
         var icon = new UiRect(card.X + 7f, card.CenterY - 8f, 16f, 16f);
         if (_airPlaySelected && _host.AirPlay.Source != null)
             _hit.Add("companion.airplaygrip", icon, UiCursorKind.Hand, L10n.T("Phone.AirPlayDragToWindows"));
         g.DrawIcon(_airPlaySelected ? UiIcon.AirPlay : UiIcon.Phone, icon, _theme.TextPrimary, 1.5f);
-        float statusX = card.Right - 85f;
+        float statusRight = card.Right - 29f;
+        float measuredStatus = D2dSharedContext.Instance.MeasureText(status, UiMetrics.FontFamily, 10f, 400, 400f, footerH, false).Width;
+        float statusWidth = Math.Clamp(measuredStatus + 3f, 32f, Math.Max(32f, card.Width * .45f));
+        float statusX = statusRight - statusWidth - (!_airPlaySelected && online is { IsApp: false } ? 16f : 0f);
         g.DrawText(name, new UiRect(card.X + 28f, card.Y, MathF.Max(1f, statusX - card.X - 30f), footerH),
             _theme.TextPrimary, 11f, 700);
         float labelLeft = statusX;
@@ -1004,7 +1019,7 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
             }
             labelLeft += 16f;
         }
-        g.DrawText(status, new UiRect(labelLeft, card.Y, statusX + 56f - labelLeft, footerH), _theme.TextSecondary, 10f, 400, UiTextAlign.Trailing);
+        g.DrawText(status, new UiRect(labelLeft, card.Y, statusRight - labelLeft, footerH), _theme.TextSecondary, 10f, 400, UiTextAlign.Trailing);
         g.DrawIcon(UiIcon.ChevronDown, new UiRect(right - 21f, card.CenterY - 5f, 10f, 10f), _theme.TextSecondary, 1.5f);
     }
 
@@ -1023,7 +1038,7 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
         if (leftDown && (app != null || airId != null))
         {
             if (_dragIcon == null && MathF.Abs(xDip - _pressX) <= 6f && MathF.Abs(yDip - _pressY) <= 6f) return;
-            if (_panel is not { IsVisible: true } || (app != null && !AndroidDeviceIdentity.Matches(_pressDevice, _activeDevice)) ||
+            if (_panel is not { IsVisible: true } || (app != null && !AndroidDeviceIdentity.SameTransport(_pressDevice, _activeDevice)) ||
                 (airId != null && (!_host.HasAirPlay || _host.AirPlay.Source?.Id != airId)))
             {
                 ReleasePointerCapture();
@@ -1042,7 +1057,7 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
             else _dragIcon.Follow(pt.X, pt.Y);
             bool overReturn = OverReturnTarget(pt.X, pt.Y);
             if (overReturn != _returnHovered) { _returnHovered = overReturn; Invalidate(); }
-            _panel.UpdatePhoneDrop(pt.X, pt.Y, airPlay: airId != null);
+            _panel.UpdatePhoneDrop(pt.X, pt.Y, airPlay: airId != null, sharedOnly: _pressDevice?.IsApp == true);
             return;
         }
         if (leftDown && _seeking)
@@ -1092,11 +1107,12 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
             _pressX = e.X;
             _pressY = e.Y;
         }
-        if (hit is { } row && row.Id.StartsWith(AppPrefix, StringComparison.Ordinal) && _activeDevice is { IsApp: false })
+        if (hit is { } row && row.Id.StartsWith(AppPrefix, StringComparison.Ordinal) && _activeDevice is { } active)
         {
             string package = row.Id[AppPrefix.Length..];
-            _pressApp = GetFilteredApps().FirstOrDefault(a => a.Package == package);
-            _pressDevice = _activeDevice;
+            _pressApp = !active.IsApp || _host.Phone.Operations.AppCapture(active)?.Package == package
+                ? GetFilteredApps().FirstOrDefault(a => a.Package == package) : null;
+            _pressDevice = active;
             _pressX = e.X;
             _pressY = e.Y;
         }
@@ -1123,7 +1139,7 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
         if (_dragIcon != null)
         {
             ViewNative.GetCursorPos(out var pt);
-            bool? shared = _panel?.UpdatePhoneDrop(pt.X, pt.Y, airPlay: airId != null);
+            bool? shared = _panel?.UpdatePhoneDrop(pt.X, pt.Y, airPlay: airId != null, sharedOnly: device?.IsApp == true);
             bool returnToPhone = OverReturnTarget(pt.X, pt.Y);
             bool outside = !CrossDeviceDragHost.ContainsScreenPoint(this, pt.X, pt.Y) && !CrossDeviceDragHost.ContainsScreenPoint(_panel, pt.X, pt.Y);
             CancelAppDrag();
@@ -1133,12 +1149,12 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
                     _ = RouteExternalAppAsync(new AudioAppInfo { ProcessId = 0, ExternalSourceId = air.Id }, AudioService.SystemDefaultDeviceId);
                 else if (outside) _host.AirPlay.ShowMirror();
             }
-            else if (device != null && app != null && AndroidDeviceIdentity.Matches(device, _activeDevice) && (shared.HasValue || outside || returnToPhone))
+            else if (device != null && app != null && AndroidDeviceIdentity.SameTransport(device, _activeDevice) && (shared.HasValue || outside || returnToPhone))
                 _ = CrossDeviceDragHost.FinishAndroidDropAsync(_host, device, app, shared, pt.X, pt.Y, returnToPhone);
             return;
         }
         CancelAppDrag();
-        if (device != null && !AndroidDeviceIdentity.Matches(device, _activeDevice)) { _hit.ActiveId = null; return; }
+        if (device != null && !AndroidDeviceIdentity.SameTransport(device, _activeDevice)) { _hit.ActiveId = null; return; }
         if (_seeking)
         {
             _hit.ActiveId = null;
@@ -1230,8 +1246,8 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
             _seekPositionMs = Math.Clamp(vk switch
             {
                 0x24 => 0d, 0x23 => state.DurationMs,
-                0x25 => _seekPositionMs - 0.1d, 0x27 => _seekPositionMs + 0.1d,
-                0x21 => _seekPositionMs + 1d, _ => _seekPositionMs - 1d
+                0x25 => _seekPositionMs - 100d, 0x27 => _seekPositionMs + 100d,
+                0x21 => _seekPositionMs + 1000d, _ => _seekPositionMs - 1000d
             }, 0d, state.DurationMs);
             Invalidate();
             return true;
@@ -1297,6 +1313,16 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
             _mediaState = state with { PositionMs = target, ReceivedTimestamp = Stopwatch.GetTimestamp() };
             UpdateSeekAnimationTimer();
         }).ConfigureAwait(false);
+    }
+
+    private void SetAccessibleSeek(string id, double seconds)
+    {
+        if (_seeking || _mediaState is not { CanSeek: true, DurationMs: > 0 } state) return;
+        _seeking = true;
+        _seekPackage = state.Package;
+        _seekTitle = state.Title;
+        _seekPositionMs = Math.Clamp(seconds * 1000, 0, state.DurationMs);
+        _ = CommitMediaSeekAsync();
     }
 
     private async Task RefreshCatalogAsync()
@@ -1396,15 +1422,23 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
         profile ??= _host.Phone.Store.Profile;
         if (profile.LastDevice == null) return Array.Empty<AndroidApp>();
         var source = profile.QuickPanelApps;
-        if (ReferenceEquals(_filteredAppsSource, source) && _filteredAppsQuery == _searchText) return _filteredApps;
+        bool appChannel = (_activeDevice ?? profile.LastDevice).IsApp;
+        string? granted = _activeDevice is { IsApp: true } peer ? _host.Phone.Operations.AppCapture(peer)?.Package : null;
+        if (ReferenceEquals(_filteredAppsSource, source) && _filteredAppsQuery == _searchText
+            && _filteredGrant == granted && _filteredAppChannel == appChannel) return _filteredApps;
 
         string query = _searchText.Trim();
-        _filteredApps = (query.Length == 0 ? source : source.Where(a =>
+        IEnumerable<AndroidApp> items = source;
+        if (granted != null && !source.Any(a => a.Package == granted))
+            items = items.Prepend(profile.RetainedApps.FirstOrDefault(a => a.Package == granted) ?? new AndroidApp(granted, granted, 0, ""));
+        if (query.Length != 0) items = items.Where(a =>
             a.Name.Contains(query, StringComparison.CurrentCultureIgnoreCase) ||
-            a.Package.Contains(query, StringComparison.OrdinalIgnoreCase)))
-            .Prepend(AndroidApp.DeviceAudio).ToArray();
+            a.Package.Contains(query, StringComparison.OrdinalIgnoreCase));
+        _filteredApps = (appChannel ? items : items.Prepend(AndroidApp.DeviceAudio)).ToArray();
         _filteredAppsSource = source;
         _filteredAppsQuery = _searchText;
+        _filteredGrant = granted;
+        _filteredAppChannel = appChannel;
         return _filteredApps;
     }
 

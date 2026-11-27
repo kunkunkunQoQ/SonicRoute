@@ -55,6 +55,7 @@ public sealed class AndroidAudioManager : IAsyncDisposable
     private readonly AndroidAudioSettingsStore? _settings;
     private readonly Func<AndroidDevice, string, bool>? _smartVolume;
     private readonly Func<AndroidDevice, bool>? _mayCapture;
+    private readonly Func<AndroidDevice, AppCapturePermission?>? _appCapture;
     private readonly CancellationToken _lifetime;
     private bool _disposed, _shuttingDown;
     internal void BeginShutdown() { lock (_gate) _shuttingDown = true; }
@@ -74,8 +75,9 @@ public sealed class AndroidAudioManager : IAsyncDisposable
         : this(factory, settings, smartVolume, null) { }
 
     internal AndroidAudioManager(Func<AndroidAudioSession> factory, AndroidAudioSettingsStore? settings,
-        Func<AndroidDevice, string, bool>? smartVolume, Func<AndroidDevice, bool>? mayCapture, CancellationToken lifetime = default)
-    { _factory = factory; _settings = settings; _smartVolume = smartVolume; _mayCapture = mayCapture; _lifetime = lifetime; }
+        Func<AndroidDevice, string, bool>? smartVolume, Func<AndroidDevice, bool>? mayCapture, CancellationToken lifetime = default,
+        Func<AndroidDevice, AppCapturePermission?>? appCapture = null)
+    { _factory = factory; _settings = settings; _smartVolume = smartVolume; _mayCapture = mayCapture; _lifetime = lifetime; _appCapture = appCapture; }
 
     public Task<AndroidAudioSource> AddAsync(AndroidDevice device, AndroidApp app, bool keepPhoneAudio = true, string? outputId = null, bool displayOwned = false) =>
         AddCore(device, app, keepPhoneAudio, outputId, displayOwned, null);
@@ -86,6 +88,8 @@ public sealed class AndroidAudioManager : IAsyncDisposable
     private Task<AndroidAudioSource> AddCore(AndroidDevice device, AndroidApp app, bool keepPhoneAudio, string? outputId,
         bool displayOwned, string?[]? initialOutputs)
     {
+        if (_mayCapture?.Invoke(device) == false) throw new OperationCanceledException();
+        if (device.IsApp) AppCapturePermission.Require(_appCapture?.Invoke(device), app, keepPhoneAudio);
         AndroidAudioSource source;
         var starts = new List<PendingStart>();
         lock (_gate)

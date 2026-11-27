@@ -17,6 +17,8 @@ public sealed class AndroidAudioSession : IAsyncDisposable, SonicRoute.AirPlay.I
     private AndroidAudioState _state = new(CaptureState.Idle);
     private CancellationTokenSource? _run, _pendingRun;
     private IAudioTransport? _transport;
+    internal Func<AndroidDevice, SrapSession>? AppSession { private get; set; }
+    private SrapPcmCapture? _appCapture;
     private IPcmPlayer? _player;
     private AndroidPcmSource? _pcm;
     private readonly PcmOutputMirrors _mirrors;
@@ -39,7 +41,7 @@ public sealed class AndroidAudioSession : IAsyncDisposable, SonicRoute.AirPlay.I
     internal event Action? PlaybackSelectionCommitted;
     public AndroidAudioState State => Volatile.Read(ref _state);
     public AndroidPcmSource? Pcm => Volatile.Read(ref _pcm);
-    public long PacketsDecoded => _receiver?.PacketsDecoded ?? 0;
+    public long PacketsDecoded => _appCapture?.PacketsDecoded ?? _receiver?.PacketsDecoded ?? 0;
     public long TimestampDiscontinuities => _receiver?.TimestampDiscontinuities ?? 0;
     public (long Bytes, long NonSilentBytes, int RoutedType)? PhoneOutputDiagnostics =>
         _player is AndroidPhonePcmPlayer phone ? phone.Diagnostics : null;
@@ -96,6 +98,7 @@ public sealed class AndroidAudioSession : IAsyncDisposable, SonicRoute.AirPlay.I
         try
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
+            if (device.IsApp) AppCapturePermission.Require(AppSession?.Invoke(device).Capabilities.Capture, app, keepPhoneAudio);
             _initialKeepPhoneAudio = keepPhoneAudio;
             bool nativeAlias = IsSourcePhoneCurrent(device, State.OutputId) || _extraIds.Any(id => IsSourcePhoneCurrent(device, id));
             if (nativeAlias)
@@ -145,8 +148,18 @@ public sealed class AndroidAudioSession : IAsyncDisposable, SonicRoute.AirPlay.I
             _renderFailure = null;
             runToken.ThrowIfCancellationRequested();
             Update(s => s with { State = CaptureState.Starting, Device = device, App = app, Error = null, ErrorCode = null });
-            Log($"Start {app.Package}, UID {app.Uid}, phone audio {keepPhoneAudio}, codec {streaming.AudioCodec}, latency {streaming.AudioLatencyMode}");
-            _transport = _transportFactory();
+            if (device.IsApp)
+            {
+                var session = AppSession?.Invoke(device) ?? throw new SrapException("unsupported");
+                AppCapturePermission.Require(session.Capabilities.Capture, app, keepPhoneAudio);
+                _appCapture = new SrapPcmCapture(session, app);
+                Log($"Start {app.Package}, playback capture, {SrapSession.PcmEncoding}, latency {streaming.AudioLatencyMode}");
+            }
+            else
+            {
+                Log($"Start {app.Package}, UID {app.Uid}, phone audio {keepPhoneAudio}, codec {streaming.AudioCodec}, latency {streaming.AudioLatencyMode}");
+                _transport = _transportFactory();
+            }
             _pcm = warmPcm ?? new AndroidPcmSource(streaming.EffectiveAudioLatencyMode);
             _pcm.LatencyMode = streaming.EffectiveAudioLatencyMode;
             var state = State;
@@ -155,7 +168,7 @@ public sealed class AndroidAudioSession : IAsyncDisposable, SonicRoute.AirPlay.I
             _mirrors.SetLevels(_pcm.Volume, _pcm.SmartVolume);
             _mirrors.SetLatencyMode(streaming.EffectiveAudioLatencyMode);
             if (string.IsNullOrEmpty(endpointId)) WatchDefaultOutput();
-            Task<Stream> connecting = timing == null ? _transport.ConnectAsync(device, app, keepPhoneAudio, runToken)
+            Task<Stream>? connecting = _transport == null ? null : timing == null ? _transport.ConnectAsync(device, app, keepPhoneAudio, runToken)
                 : ConnectTimedAsync(_transport, device, app, keepPhoneAudio, runToken, timing);
             if (preparingOutput == null && AndroidOutputIdentity.IsPhoneOutput(endpointId))
             {
@@ -163,7 +176,7 @@ public sealed class AndroidAudioSession : IAsyncDisposable, SonicRoute.AirPlay.I
                 // Capture and phone playback need separate helpers, not sequential startup.
                 preparingOutput = Task.Run(() => CreatePlayer(device, pcm, endpointId, runToken, timing), runToken);
             }
-            Stream stream = await connecting.ConfigureAwait(false);
+            Stream? stream = connecting == null ? null : await connecting.ConfigureAwait(false);
             _player = await (preparingOutput ?? Task.Run(() => CreatePlayer(device, _pcm, endpointId, runToken, timing), runToken)).ConfigureAwait(false);
             AttachOutputFailure(_player, generation);
             _player.Play();
@@ -179,10 +192,15 @@ public sealed class AndroidAudioSession : IAsyncDisposable, SonicRoute.AirPlay.I
             {
                 using var startup = CancellationTokenSource.CreateLinkedTokenSource(runToken);
                 startup.CancelAfter(TimeSpan.FromSeconds(15));
-                uint codecId = await ScrcpyAudioProtocol.ReadCodecIdAsync(stream, startup.Token).ConfigureAwait(false);
-                _receiver = ScrcpyAudioProtocol.CreateReceiver(codecId, streaming.AudioDecoder);
                 var first = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-                _receiveTask = _receiver.ReceivePacketsAsync(stream, _pcm, () => first.TrySetResult(), runToken);
+                if (_appCapture != null)
+                    _receiveTask = _appCapture.ReceiveAsync(_pcm, () => first.TrySetResult(), runToken);
+                else
+                {
+                    uint codecId = await ScrcpyAudioProtocol.ReadCodecIdAsync(stream!, startup.Token).ConfigureAwait(false);
+                    _receiver = ScrcpyAudioProtocol.CreateReceiver(codecId, streaming.AudioDecoder);
+                    _receiveTask = _receiver.ReceivePacketsAsync(stream!, _pcm, () => first.TrySetResult(), runToken);
+                }
                 _ = ObserveReceiveAsync(_receiveTask, generation);
                 Task completed = await Task.WhenAny(first.Task, _receiveTask).WaitAsync(startup.Token).ConfigureAwait(false);
                 await completed.ConfigureAwait(false);
@@ -260,7 +278,7 @@ public sealed class AndroidAudioSession : IAsyncDisposable, SonicRoute.AirPlay.I
             _outputRun?.Dispose(); _outputRun = null;
         }
         StopWatchingDefaultOutput();
-        if (_transport != null) Update(s => s with { State = CaptureState.Stopping });
+        if (_transport != null || _appCapture != null) Update(s => s with { State = CaptureState.Stopping });
         if (_receiveTask != null) { try { await _receiveTask.ConfigureAwait(false); } catch { } }
         if (_player != null) { try { _player.Dispose(); } catch (Exception ex) { Log(ex.Message); } _player = null; }
         if (_transport != null)
@@ -271,7 +289,7 @@ public sealed class AndroidAudioSession : IAsyncDisposable, SonicRoute.AirPlay.I
         }
         _pcm?.Clear(); _pcm = null;
         _run?.Dispose(); _run = null;
-        _receiveTask = null; _receiver = null;
+        _receiveTask = null; _receiver = null; _appCapture = null;
         Update(s => s with { State = CaptureState.Idle, Device = null, App = null, Error = null, ErrorCode = null });
     }
     public void SetVolume(int percent)
@@ -348,12 +366,14 @@ public sealed class AndroidAudioSession : IAsyncDisposable, SonicRoute.AirPlay.I
             for (int i = 0; i < desired.Length; i++)
                 if (IsSourcePhoneCurrent(device, desired[i])) desired[i] = SourcePhoneOutputId;
         bool native = desired.Contains(SourcePhoneOutputId, StringComparer.OrdinalIgnoreCase);
+        if (device?.IsApp == true && explicitSelection && !native) throw new SrapException("unsupported");
         var renderers = desired.Where(id => id != SourcePhoneOutputId).ToArray();
         if (renderers.Length == 0 && native) renderers = [SourcePhoneOutputId];
         var (primary, extras) = PcmOutputMirrors.Select(renderers, State.OutputId);
         bool oldNative = _requestedPhoneAudio;
         bool explicitMode = explicitSelection && _pcm != null || native;
-        if (explicitMode)
+        if (device?.IsApp == true) _requestedPhoneAudio = true;
+        else if (explicitMode)
         {
             _requestedPhoneAudio = native;
         }
@@ -483,7 +503,7 @@ public sealed class AndroidAudioSession : IAsyncDisposable, SonicRoute.AirPlay.I
         var source = State.Device;
         (AndroidDevice Device, string Sink)? target = source != null && AndroidOutputIdentity.IsPhoneOutput(endpointId)
             ? ResolvePhoneOutput(source, endpointId!) : null;
-        bool keepPhoneAudio = _requestedPhoneAudio && !extraSourcePhone && !AndroidDeviceIdentity.Matches(source, target?.Device);
+        bool keepPhoneAudio = source?.IsApp == true || _requestedPhoneAudio && !extraSourcePhone && !AndroidDeviceIdentity.Matches(source, target?.Device);
         if (_pcm != null && _capturePhoneAudio != keepPhoneAudio)
         {
             // Keep capture exclusive when selecting a phone sink, so there is

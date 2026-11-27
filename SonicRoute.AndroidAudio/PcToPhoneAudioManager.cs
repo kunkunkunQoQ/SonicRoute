@@ -20,6 +20,7 @@ public sealed class PcToPhoneAudioManager(Func<AdbClient> adbFactory, Func<int, 
     private readonly Dictionary<Task, ActiveRoute> _retiring = new();
     private bool _disposed;
     public bool EnableLiveStreaming { get; set; } = true;
+    internal Func<AndroidDevice, string, CancellationToken, Action<string, int, string>, Task<IPhonePcmConnection>>? OpenAppPlayback { get; set; }
     public event Action? Changed;
     public event Action<int>? RouteChanged;
     private void NotifyRoute(int pid)
@@ -71,6 +72,8 @@ public sealed class PcToPhoneAudioManager(Func<AdbClient> adbFactory, Func<int, 
         if (processId <= 0) return (false, -1, "无效的应用进程 ID。");
         if (!AndroidOutputIdentity.TryParseDeviceId(targetDeviceId, out string phoneKey, out string sinkKey))
             return (false, -1, "无效的手机播放设备标识。");
+        if (device?.IsApp == true && (OpenAppPlayback == null || device.State != "device"))
+            return (false, -1, "手机 App 音频播放不可用。");
 
         ActiveRoute? previous = null;
         ActiveRoute route;
@@ -80,10 +83,11 @@ public sealed class PcToPhoneAudioManager(Func<AdbClient> adbFactory, Func<int, 
         {
             if (_disposed) return (false, -1, "手机音频服务已停止。");
             if (_routes.TryGetValue(processId, out var existing) && !existing.IsStopped
-                && string.Equals(existing.PhoneKey, phoneKey, StringComparison.OrdinalIgnoreCase))
+                && string.Equals(existing.PhoneKey, phoneKey, StringComparison.OrdinalIgnoreCase)
+                && (device?.IsApp != true && existing.Device?.IsApp != true || device != null && existing.Device != null
+                    && AndroidDeviceIdentity.SameAttachment(device, existing.Device)))
             {
                 existing.TargetDeviceId = targetDeviceId;
-                existing.SinkKey = sinkKey;
                 if (device != null) existing.Device = device;
                 existing.ChangeSilenceMode(silenceLocal, () => SafeAcquireSilenceLease(processId));
                 route = existing;
@@ -99,8 +103,9 @@ public sealed class PcToPhoneAudioManager(Func<AdbClient> adbFactory, Func<int, 
                 }
                 bool canSilence = device is { State: "device" }
                     && !string.Equals(device.Serial, "offline-fixture", StringComparison.Ordinal);
-                if (!silenceLocal) { carriedLease?.Release(restorePreviousEndpoint: false); carriedLease = null; }
-                var lease = carriedLease ?? (silenceLocal && canSilence ? SafeAcquireSilenceLease(processId) : null);
+                if (!silenceLocal || device?.IsApp == true)
+                { carriedLease?.Release(restorePreviousEndpoint: device?.IsApp == true); carriedLease = null; }
+                var lease = carriedLease ?? (silenceLocal && canSilence && device?.IsApp != true ? SafeAcquireSilenceLease(processId) : null);
                 route = new ActiveRoute(processId, targetDeviceId, phoneKey, sinkKey, device, lease, silenceLocal);
                 _routes[processId] = route;
                 if (previous != null) _ = Retire(previous, restorePreviousEndpoint: false);
@@ -109,7 +114,7 @@ public sealed class PcToPhoneAudioManager(Func<AdbClient> adbFactory, Func<int, 
 
         if (samePhoneSwitch)
         {
-            route.RequestSinkSwitch(sinkKey);
+            route.RequestSinkSwitch(sinkKey, () => SafeAcquireSilenceLease(processId));
             if (!route.IsStreamingStarted && EnableLiveStreaming
                 && !string.Equals(route.Device?.Serial, "offline-fixture", StringComparison.Ordinal))
             {
@@ -245,24 +250,24 @@ public sealed class PcToPhoneAudioManager(Func<AdbClient> adbFactory, Func<int, 
         bool unexpectedExit = false;
         try
         {
-            var adb = adbFactory();
             if (device is not { State: "device" })
             {
-                if (device is { ConnectionTarget: not null })
+                if (device is { ConnectionTarget: not null } || device?.IsApp == true || route.PhoneKey.StartsWith("app:", StringComparison.Ordinal))
                     throw AndroidError.WithCode(new IOException("手机连接已改变，请刷新设备。"), AndroidErrorCode.PhoneOffline);
-                device = (await adb.DevicesAsync(token).ConfigureAwait(false)).FirstOrDefault(d => d.State == "device"
+                device = (await adbFactory().DevicesAsync(token).ConfigureAwait(false)).FirstOrDefault(d => d.State == "device"
                     && string.Equals(AndroidDeviceIdentity.Key(d), route.PhoneKey, StringComparison.OrdinalIgnoreCase))
                     ?? throw AndroidError.WithCode(new IOException("手机未连接或离线。"), AndroidErrorCode.PhoneOffline);
             }
-            await using var output = await AndroidAudioOutputConnection.OpenAsync(adb, device, route.SinkKey, token,
-                (phone, sinks) => OutputsObserved?.Invoke(phone, sinks),
-                (key, type, name) =>
-                {
-                    route.RoutedKey = key; route.RoutedType = type; route.RoutedName = name;
-                    RoutedDeviceObserved?.Invoke(route.ProcessId, key, type, name);
-                }).ConfigureAwait(false);
+            void Routed(string key, int type, string name)
+            {
+                route.RoutedKey = key; route.RoutedType = type; route.RoutedName = name;
+                RoutedDeviceObserved?.Invoke(route.ProcessId, key, type, name);
+            }
+            await using IPhonePcmConnection output = device.IsApp
+                ? await (OpenAppPlayback ?? throw new SrapException("unsupported"))(device, route.SinkKey, token, Routed).ConfigureAwait(false)
+                : await AndroidAudioOutputConnection.OpenAsync(adbFactory(), device, route.SinkKey, token,
+                    (phone, sinks) => OutputsObserved?.Invoke(phone, sinks), Routed).ConfigureAwait(false);
             route.Device = device = output.Device;
-            route.EnsureSilenceLease(() => SafeAcquireSilenceLease(route.ProcessId));
             using var capture = CancellationTokenSource.CreateLinkedTokenSource(token);
             void Failed(Exception _) { try { capture.Cancel(); } catch (ObjectDisposedException) { } }
             output.Failed += Failed;
@@ -270,6 +275,7 @@ public sealed class PcToPhoneAudioManager(Func<AdbClient> adbFactory, Func<int, 
             {
                 await route.AttachOutputAsync(output).ConfigureAwait(false);
                 if (output.Completion.IsCompleted) throw await output.Completion.ConfigureAwait(false);
+                route.EnsureSilenceLease(() => SafeAcquireSilenceLease(route.ProcessId));
                 await PcProcessLoopbackCapture.RunMtaCaptureLoopAsync(route.ProcessId, output.Stream, capture.Token,
                     watchingExit ? null : () => StopOwnedRoute(route), (bytes, nonSilent) =>
                     {
@@ -311,7 +317,8 @@ public sealed class PcToPhoneAudioManager(Func<AdbClient> adbFactory, Func<int, 
         private readonly object _routeLock = new();
         private readonly CancellationTokenSource _cts = new();
         private IPcProcessSilenceLease? _silenceLease = silenceLease;
-        private AndroidAudioOutputConnection? _output;
+        private IPhonePcmConnection? _output;
+        private string? _confirmedAppSink;
         private Task _streamTask = Task.CompletedTask;
         private Task? _stopTask;
         public int ProcessId { get; } = processId;
@@ -367,30 +374,49 @@ public sealed class PcToPhoneAudioManager(Func<AdbClient> adbFactory, Func<int, 
             }
         }
 
-        public Task AttachOutputAsync(AndroidAudioOutputConnection output)
+        public async Task AttachOutputAsync(IPhonePcmConnection output)
         {
+            string sink;
             lock (_routeLock)
             {
                 _output = output;
-                return output.SwitchTargetAsync(SinkKey, _cts.Token);
+                sink = SinkKey;
             }
+            await output.SwitchTargetAsync(sink, _cts.Token).ConfigureAwait(false);
+            lock (_routeLock) { if (Device?.IsApp == true && SinkKey == sink) _confirmedAppSink = sink; }
         }
 
         public void DetachOutput() { lock (_routeLock) _output = null; }
 
-        public void RequestSinkSwitch(string sinkKey)
+        public void RequestSinkSwitch(string sinkKey, Func<IPcProcessSilenceLease?> acquire)
         {
             lock (_routeLock)
             {
                 if (IsStopped) return;
+                if (Device?.IsApp == true && SinkKey != sinkKey)
+                {
+                    _confirmedAppSink = null;
+                    var lease = _silenceLease;
+                    _silenceLease = null;
+                    lease?.Release(restorePreviousEndpoint: true);
+                }
                 SinkKey = sinkKey;
-                if (_output != null) _ = SwitchOutputAsync(_output, sinkKey);
+                if (_output != null) _ = SwitchOutputAsync(_output, sinkKey, acquire);
             }
         }
 
-        private async Task SwitchOutputAsync(AndroidAudioOutputConnection output, string sinkKey)
+        private async Task SwitchOutputAsync(IPhonePcmConnection output, string sinkKey, Func<IPcProcessSilenceLease?> acquire)
         {
-            try { await output.SwitchTargetAsync(sinkKey, _cts.Token).ConfigureAwait(false); }
+            try
+            {
+                await output.SwitchTargetAsync(sinkKey, _cts.Token).ConfigureAwait(false);
+                lock (_routeLock)
+                {
+                    if (IsStopped || Device?.IsApp != true || SinkKey != sinkKey || _output != output) return;
+                    _confirmedAppSink = sinkKey;
+                    EnsureSilenceLease(acquire);
+                }
+            }
             catch (OperationCanceledException) when (_cts.IsCancellationRequested) { }
             catch (Exception ex)
             {
@@ -409,7 +435,8 @@ public sealed class PcToPhoneAudioManager(Func<AdbClient> adbFactory, Func<int, 
                 SilenceLocal = exclusive;
                 if (exclusive)
                 {
-                    if (Device is { State: "device" } && Device.Serial != "offline-fixture") _silenceLease ??= factory();
+                    if (Device is { State: "device" } && Device.Serial != "offline-fixture" && (!Device.IsApp || _confirmedAppSink == SinkKey))
+                        _silenceLease ??= factory();
                 }
                 else
                 {
@@ -424,7 +451,7 @@ public sealed class PcToPhoneAudioManager(Func<AdbClient> adbFactory, Func<int, 
         {
             lock (_routeLock)
             {
-                if (IsStopped || !SilenceLocal || _silenceLease != null) return;
+                if (IsStopped || !SilenceLocal || _silenceLease != null || Device?.IsApp == true && _confirmedAppSink != SinkKey) return;
                 _silenceLease = factory();
             }
         }

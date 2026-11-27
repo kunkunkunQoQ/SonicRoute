@@ -93,8 +93,8 @@ $server=$null
 $counters=$null
 $result=$null
 try{
-    $server=Start-Owned -CliArgs @() -Redirect $false
     $deadline=[Diagnostics.Stopwatch]::StartNew()
+    $server=Start-Owned -CliArgs @() -Redirect $false
     while($deadline.Elapsed.TotalSeconds -lt 20){
         if($server.HasExited){throw "Fixture exited early: $($server.ExitCode)"}
         if($Mode -eq 'Wpf'){
@@ -105,6 +105,16 @@ try{
         Start-Sleep -Milliseconds 120
     }
     if($deadline.Elapsed.TotalSeconds -ge 20){throw 'Isolated fixture startup timed out.'}
+    $readyMs=$deadline.Elapsed.TotalMilliseconds
+    $statusLatency=if($Mode -eq 'Native'){
+        @(foreach($sample in 1..3){
+            $statusWatch=[Diagnostics.Stopwatch]::StartNew()
+            $reply=Invoke-Control status | ConvertFrom-Json
+            $statusWatch.Stop()
+            if($reply.Pid -ne $server.Id){throw 'Unexpected process in status response.'}
+            $statusWatch.Elapsed.TotalMilliseconds
+        })
+    }else{@()}
     $null=Read-Gc
     $automation=if($Mode -eq 'Native'){try{Invoke-Control automation-status}catch{$null}}
     $counters=[SonicRouteThreadCounters]::new()
@@ -132,6 +142,7 @@ try{
     $result=[ordered]@{
         Mode=$Mode;Edition=$Edition;Pid=$server.Id;File=$exe;FileSize=(Get-Item $exe).Length;SHA256=(Get-FileHash $exe).Hash
         Windows=[Environment]::OSVersion.VersionString;Desktop=$Desktop;InputConfigSHA256=(Get-FileHash -LiteralPath $ProfilePath).Hash;BackgroundStatus=$automation
+        ReadyFromLaunchMs=$readyMs;StatusRoundTripMs=@($statusLatency)
         Seconds=$wall;CpuMs=$finish.CpuMs-$start.CpuMs;CpuPercentOfOneCore=($finish.CpuMs-$start.CpuMs)/($wall*10)
         ContextSwitchesOnCommonThreads=$count;CommonThreads=$common;ThreadArrivals=$endSwitches.Count-$common;ThreadDepartures=$startSwitches.Count-$common
         ContextSwitchesByThread=@(foreach($threadId in $endSwitches.Keys){if($startSwitches.ContainsKey($threadId)){

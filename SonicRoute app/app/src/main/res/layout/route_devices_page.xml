@@ -1,0 +1,21 @@
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:id="@+id/panel_devices" style="@style/SonicRoute.Column" android:visibility="gone">
+    <TextView style="@style/SonicRoute.Title" android:text="@string/device_page_title" />
+    <TextView android:id="@+id/device_actual_output" style="@style/SonicRoute.Body" android:layout_marginTop="0dp" />
+    <TextView style="@style/SonicRoute.Heading" android:text="@string/device_output_title" />
+    <LinearLayout android:id="@+id/outputs_container" style="@style/SonicRoute.Column" />
+    <org.sonicroute.app.ActionStrip android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp">
+    <Button android:id="@+id/btn_play_toggle" style="@style/SonicRoute.Primary" android:text="@string/action_play_tone"  />
+    <Button android:id="@+id/btn_mute_track" style="@style/SonicRoute.ActionButton" android:text="@string/action_mute_track"  />
+    </org.sonicroute.app.ActionStrip>
+    <TextView android:id="@+id/routed_readback" style="@style/SonicRoute.Body" android:accessibilityLiveRegion="polite" android:visibility="gone" />
+    <TextView android:id="@+id/track_gain_label" style="@style/SonicRoute.Body" android:labelFor="@id/track_gain_slider" android:text="@string/preview_gain" />
+    <SeekBar android:id="@+id/track_gain_slider" android:layout_width="match_parent" android:layout_height="48dp" android:max="100" android:saveEnabled="false" android:contentDescription="@string/preview_gain" />
+    <View android:layout_width="match_parent" android:layout_height="1dp" android:layout_marginTop="8dp" android:background="@color/sonic_line" android:importantForAccessibility="no" />
+    <TextView style="@style/SonicRoute.Heading" android:text="@string/device_connections" />
+    <TextView android:id="@+id/bluetooth_status" style="@style/SonicRoute.Body"  />
+    <org.sonicroute.app.ActionStrip android:layout_width="match_parent" android:layout_height="wrap_content">
+    <Button android:id="@+id/btn_bt_permission" style="@style/SonicRoute.ActionButton" android:text="@string/action_grant_bt"  />
+    <Button android:id="@+id/btn_bt_settings" style="@style/SonicRoute.ActionButton" android:text="@string/action_bt_settings"  />
+    <Button android:id="@+id/btn_refresh_audio" style="@style/SonicRoute.ActionButton" android:text="@string/action_refresh"  />
+    </org.sonicroute.app.ActionStrip>
+</LinearLayout>

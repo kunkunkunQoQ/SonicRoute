@@ -42,7 +42,7 @@ internal readonly record struct UiRotatedRect(UiRect Rect, UiPoint Pivot, float 
 /// <summary>
 /// Per-frame hit-test registry populated during rendering in Z-order (last item added wins on overlap).
 /// </summary>
-internal sealed class UiHitMap
+internal sealed partial class UiHitMap
 {
     private readonly List<(UiHitItem Item, UiRect Visible, int ShapeIndex)> _items = new(64);
     private List<UiRotatedRect>? _rotatedItems;
@@ -135,6 +135,8 @@ internal sealed class UiHitMap
 
     public void Clear()
     {
+        _accessibleItems?.Clear();
+        _rangeSetters?.Clear();
         _overlay = null;
         _items.Clear();
         _rotatedItems?.Clear();
@@ -215,7 +217,13 @@ internal sealed class UiHitMap
     {
         var mapped = MapRect(bounds);
         var visible = _clips.TryPeek(out var clip) ? Intersect(mapped, clip) : mapped;
-        if (!visible.IsEmpty) _items.Add((new UiHitItem(id, mapped, cursor, tooltip), visible, -1));
+        if (!visible.IsEmpty)
+        {
+            _items.Add((new UiHitItem(id, mapped, cursor, tooltip), visible, -1));
+            if (_accessibleItems != null && cursor is UiCursorKind.Hand or UiCursorKind.IBeam &&
+                !string.IsNullOrWhiteSpace(tooltip) && !_accessibleItems.ContainsKey(id))
+                RecordAccessible(id, visible, tooltip, cursor == UiCursorKind.IBeam ? UiAccessibleRole.TextBox : UiAccessibleRole.Button, null, true);
+        }
     }
 
     // Rotated controls are registered in window coordinates.
@@ -398,6 +406,7 @@ internal static class UiPrimitives
         if (hintH > 0)
             g.DrawText(hint, new UiRect(rect.X + 32f, textY + titleH + 3f, textW, hintH), t.TextSecondary, 11.5f, 400, UiTextAlign.Leading, UiVertAlign.Top, wrap: true, ellipsis: false);
         DrawSwitch(g, t, hit, id, new UiRect(rect.Right - 36f, rect.CenterY - 12f, 34f, 24f), isChecked);
+        hit.DescribeControl(id, rect, title, UiAccessibleRole.CheckBox, isChecked, true);
         if (drawBottomBorder)
             g.DrawLine(rect.X, rect.Bottom - .5f, rect.Right, rect.Bottom - .5f, t.Border, 1f, roundCaps: false);
         return rect.Bottom;
@@ -414,6 +423,7 @@ internal static class UiPrimitives
         bool enabled = true, float fontSize = 12.5f, float radius = UiMetrics.ButtonCornerRadius, UiIcon? icon = null, string? tooltip = null)
     {
         if (enabled) hit.Add(id, rect, UiCursorKind.Hand, tooltip);
+        hit.DescribeControl(id, rect, string.IsNullOrEmpty(text) ? tooltip : text, UiAccessibleRole.Button, null, enabled);
         bool hot = enabled && hit.IsHover(id);
         bool down = enabled && hit.IsActive(id);
         UiColor bg = !enabled ? t.AccentDisabled : down ? t.AccentPressed : hot ? t.AccentHover : t.Accent;
@@ -443,6 +453,7 @@ internal static class UiPrimitives
         UiIcon? icon = null, bool active = false, bool danger = false, string? tooltip = null)
     {
         if (enabled) hit.Add(id, rect, UiCursorKind.Hand, tooltip);
+        hit.DescribeControl(id, rect, string.IsNullOrEmpty(text) ? tooltip : text, UiAccessibleRole.Button, active ? true : null, enabled);
         bool hot = enabled && hit.IsHover(id);
         UiColor bg = active ? t.NavSelected : hot ? t.SurfaceAlt : t.SurfaceBg;
         UiColor border = active ? t.Accent : (hot && danger) ? t.Fail : hot ? t.Accent : t.Border;
@@ -473,6 +484,7 @@ internal static class UiPrimitives
         float iconSize = 15f, UiColor? iconColor = null, bool active = false, bool enabled = true, string? tooltip = null, float radius = 6f)
     {
         if (enabled) hit.Add(id, rect, UiCursorKind.Hand, tooltip);
+        hit.DescribeControl(id, rect, tooltip, UiAccessibleRole.Button, active ? true : null, enabled);
         bool hot = enabled && hit.IsHover(id);
         if (active) g.FillRoundedRect(rect, radius, t.NavSelected);
         else if (hot) g.FillRoundedRect(rect, radius, t.NavHover);
@@ -505,6 +517,7 @@ internal static class UiPrimitives
     public static void DrawCheckBox(D2dTarget g, UiThemePalette t, UiHitMap hit, string id, UiRect rect, bool isChecked, string? label, float fontSize = 12.5f, bool enabled = true)
     {
         if (enabled) hit.Add(id, rect, UiCursorKind.Hand);
+        hit.DescribeControl(id, rect, label, UiAccessibleRole.CheckBox, isChecked, enabled);
         bool hot = enabled && hit.IsHover(id);
         if (hot) g.FillRoundedRect(rect, 7f, t.NavHover);
         float opacity = enabled ? 1f : 0.45f;
@@ -529,6 +542,7 @@ internal static class UiPrimitives
     public static void DrawRadioButton(D2dTarget g, UiThemePalette t, UiHitMap hit, string id, UiRect rect, bool selected, string label, float fontSize = 12.5f, bool enabled = true)
     {
         if (enabled) hit.Add(id, rect, UiCursorKind.Hand);
+        hit.DescribeControl(id, rect, label, UiAccessibleRole.RadioButton, selected, enabled);
         bool hot = enabled && hit.IsHover(id);
         float cy = rect.CenterY, cx = rect.X + 16.5f;
         float opacity = enabled ? 1f : 0.45f;
@@ -635,6 +649,7 @@ internal static class UiPrimitives
         ComboAppIcon? appIcon = null, Action? onAppIconLoaded = null, string? tooltip = null)
     {
         if (enabled) hit.Add(id, rect, UiCursorKind.Hand, showTooltip ? tooltip ?? text : null);
+        hit.DescribeControl(id, rect, text, UiAccessibleRole.ComboBox, null, enabled);
         bool hot = enabled && hit.IsHover(id);
         float opacity = enabled ? 1f : 0.5f;
         g.FillRoundedRect(rect, UiMetrics.ComboCornerRadius, t.SurfaceBg.WithAlphaFraction(opacity));
@@ -662,6 +677,7 @@ internal static class UiPrimitives
         bool enabled = true, bool centered = false)
     {
         if (enabled) hit.Add(id, rect, UiCursorKind.IBeam);
+        hit.DescribeControl(id, rect, placeholder, UiAccessibleRole.TextBox, null, enabled);
         bool hot = enabled && hit.IsHover(id);
         g.FillRoundedRect(rect, 8f, readOnlyMultiline ? t.SurfaceAlt : t.SurfaceBg);
         g.DrawRoundedRect(rect, 8f, focused || hot ? t.Accent : t.Border, 1f);

@@ -1,0 +1,13 @@
+<resources>
+    <string name="capture_title">共享应用声音</string>
+    <string name="capture_stop">停止共享声音</string>
+    <string name="capture_connect">连接已配对的电脑后，可共享手机应用的播放声音。</string>
+    <string name="capture_description">手机继续播放。可共享的声音由 Android 与来源应用的录制策略决定。</string>
+    <string name="capture_peer">选择接收声音的电脑</string>
+    <string name="capture_app">选择要共享声音的应用</string>
+    <string name="capture_waiting">已允许 %2$s 接收 %1$s 的声音。请在 90 秒内从电脑开始收听。</string>
+    <string name="capture_active">%1$s 的声音正在共享给 %2$s</string>
+    <string name="capture_expired">请选择只有一个活动连接的电脑，再试一次。</string>
+    <string name="capture_refused">无法开始声音共享，请检查电脑连接及其他正在进行的投屏。</string>
+    <string name="capture_permission">Android 需要录音权限才能共享应用播放的声音。</string>
+</resources>

@@ -1,0 +1,13 @@
+<resources>
+    <string name="capture_title">Share app audio</string>
+    <string name="capture_stop">Stop sharing audio</string>
+    <string name="capture_connect">Connect a trusted computer to share playback.</string>
+    <string name="capture_description">The phone keeps playing. Android and the source app decide which audio can be shared.</string>
+    <string name="capture_peer">Which computer may receive audio?</string>
+    <string name="capture_app">Choose the app to share</string>
+    <string name="capture_waiting">%1$s is ready for %2$s. Start listening on the computer within 90 seconds.</string>
+    <string name="capture_active">Sharing playback from %1$s with %2$s</string>
+    <string name="capture_expired">Select a computer with one active connection, then try again.</string>
+    <string name="capture_refused">Audio sharing could not start. Check the computer connection and any current screen sharing.</string>
+    <string name="capture_permission">Android requires audio recording permission to share app playback.</string>
+</resources>

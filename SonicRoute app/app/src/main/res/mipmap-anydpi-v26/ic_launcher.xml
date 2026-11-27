@@ -1,0 +1,5 @@
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@color/sonic_launcher_ground" />
+    <foreground android:drawable="@drawable/brand_adaptive_fg" />
+    <monochrome android:drawable="@drawable/brand_adaptive_mono" />
+</adaptive-icon>

@@ -1,0 +1,13 @@
+<resources>
+    <string name="connection_channel">SonicRoute 电脑连接</string>
+    <string name="connection_channel_summary">开启电脑连接时显示当前连接状态。</string>
+    <string name="connection_title">SonicRoute 电脑连接已开启</string>
+    <string name="connection_connected">已连接到 %1$s</string>
+    <string name="connection_waiting">等待 Wi-Fi 或局域网恢复 · 已信任 %1$d 台电脑</string>
+    <string name="connection_pairing">配对窗口已在 %1$s 开放</string>
+    <string name="connection_listening">正在监听 %1$s · 已信任的电脑可重新连接</string>
+    <string name="connection_stopped">已关闭</string>
+    <string name="connection_stop">停止连接</string>
+    <string name="local_audio_speaker">手机扬声器</string>
+    <string name="local_audio_follow">跟随系统当前输出</string>
+</resources>

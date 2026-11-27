@@ -43,6 +43,7 @@ internal static class UiSegmentedSwitch
             var segment = segments[i];
             string label = L10n.T(segment.LabelKey);
             hit.Add(segment.Id, cell, UiCursorKind.Hand, tooltips ? label : null);
+            hit.Describe(segment.Id, label, UiAccessibleRole.PageTab, i == selected);
             var color = i == selected ? theme.Accent : theme.TextPrimary;
             float iconX = showLabels ? cell.X + 4f : cell.CenterX - 6.5f;
             g.DrawIcon(segment.Icon, new UiRect(iconX, cell.CenterY - 6.5f, 13f, 13f), color, 1.6f);

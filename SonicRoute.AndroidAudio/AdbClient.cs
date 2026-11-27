@@ -267,8 +267,9 @@ public sealed class AdbClient : IDisposable, IAsyncDisposable
         return (new AdbClient(RuntimeDirectory, transport), fingerprint);
     }
 
-    internal static bool SupportsAliasForward(AndroidDevice device) => !device.IsApp && device.HardwareId != null
-        && device.ConnectionTarget is { } target && AdbTransportTarget.TryParse(target, out bool direct, out _) && direct;
+    internal static bool SupportsAliasForward(AndroidDevice device) => !device.IsApp && device.State == "device" && device.HardwareId != null
+        && device.ConnectionTarget is { } target && AdbTransportTarget.TryParse(target, out bool direct, out _)
+        && (direct || AdbTransportTarget.TrySocketOwner(device, out _));
 
     internal async Task<SrapAdbAttachment> CaptureAliasAttachmentAsync(AndroidDevice device, CancellationToken token)
     {
@@ -276,8 +277,12 @@ public sealed class AdbClient : IDisposable, IAsyncDisposable
         var transport = await ResolveTransportAsync(token).ConfigureAwait(false);
         if (transport is ArbitratedAdbTransport arbiter)
             transport = await arbiter.SelectDeviceAsync(device.ConnectionTarget!, token).ConfigureAwait(false);
-        if (transport is not DirectAdbTransport direct) throw new SrapException("unsupported");
-        return await direct.CaptureAliasAttachmentAsync(device.ConnectionTarget!, token).ConfigureAwait(false);
+        return transport switch
+        {
+            DirectAdbTransport direct => await direct.CaptureAliasAttachmentAsync(device.ConnectionTarget!, token).ConfigureAwait(false),
+            AdbSocketClient socket => await socket.CaptureAliasAttachmentAsync(device, token).ConfigureAwait(false),
+            _ => throw new SrapException("unsupported")
+        };
     }
 
     private async Task<string> DispatchTransportCommandAsync(IAdbTransport transport, string[] arguments, CancellationToken token)

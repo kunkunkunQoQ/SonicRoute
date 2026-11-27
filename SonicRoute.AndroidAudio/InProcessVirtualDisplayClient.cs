@@ -72,6 +72,7 @@ public sealed class InProcessVirtualDisplayClient : IVirtualDisplayClient
     public async Task StartAsync(AndroidDevice device, AndroidApp app, int x, int y, CancellationToken token)
     {
         ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
+        if (device.IsApp) throw new SrapException("unsupported");
         if (device.State != "device")
             throw AndroidError.WithCode(new IOException("手机尚未连接，请刷新设备后重试。"), AndroidErrorCode.DisplayPhoneNotConnected);
 

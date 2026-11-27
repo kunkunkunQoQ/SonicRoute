@@ -42,6 +42,18 @@ internal sealed class CandidateEnvironment
     internal bool IsPackaged { get; }
     internal bool IsIsolated => InstanceId.Length != 0;
 
+#if SONICROUTE_PHONE
+    internal int? IsolatedAdbFixturePort()
+    {
+        if (!IsIsolated || string.IsNullOrEmpty(Environment.GetEnvironmentVariable("SONICROUTE_CANDIDATE_ROOT")) ||
+            string.IsNullOrEmpty(Environment.GetEnvironmentVariable("SONICROUTE_CANDIDATE_ID"))) return null;
+        string? value = Environment.GetEnvironmentVariable("SONICROUTE_TEST_ADB_LOOPBACK_PORT");
+        if (value == null) return null;
+        return int.TryParse(value, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture,
+            out int port) && port is >= 49152 and <= 65535 ? port : throw new ArgumentException("Expected a dynamic loopback test port.");
+    }
+#endif
+
     internal static CandidateEnvironment Open()
     {
         bool packaged = NativePackageIdentity.IsPackaged();

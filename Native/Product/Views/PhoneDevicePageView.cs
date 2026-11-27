@@ -67,6 +67,7 @@ internal sealed partial class PhoneDevicePageView : IViewPage, IViewDockPage
 
     // File transfer & remote browser state
     private string _remoteFolder = AndroidFileTransfer.Downloads;
+    private string? _appReceiveFolder;
     private IReadOnlyList<AndroidStorageFile> _remoteFiles = Array.Empty<AndroidStorageFile>();
     private readonly HashSet<string> _selectedRemoteFiles = new(StringComparer.Ordinal);
 
@@ -87,7 +88,10 @@ internal sealed partial class PhoneDevicePageView : IViewPage, IViewDockPage
     private bool _hevcLoadStarted;
 
     private bool IsConnectionPage => _showConnection;
-    private bool CanShowQr => _active && !_busy && IsConnectionPage && !_airPlayConnectionChoice && !_appConnectionChoice;
+    private bool AndroidConnectionVisible => _active && IsConnectionPage && !_airPlayConnectionChoice;
+    private bool _pauseWirelessPairing;
+    private bool CanShowQr => AndroidConnectionVisible && !_pauseWirelessPairing;
+    private bool HasPairingInput => !string.IsNullOrWhiteSpace(_pairAddress) && _pairCode.Length == 6 && _pairCode.All(char.IsAsciiDigit);
     private bool UseHevc => _streamSettings.VideoDecoder == AndroidStreamSettings.WindowsHevcDecoder;
     public bool NeedsContentAnimationTick => _pinnedOrder.NeedsScrollTick(_scroll, _visibleDeviceRect);
     public bool NeedsAnimationTick => NeedsContentAnimationTick || Dock.NeedsAnimationTick;
@@ -128,8 +132,9 @@ internal sealed partial class PhoneDevicePageView : IViewPage, IViewDockPage
         CloseAndroidPicker();
         _showConnection = connection;
         _airPlayConnectionChoice = airPlay;
-        _appConnectionChoice = false;
         _selectedAppCandidate = null;
+        _appCandidates = [];
+        _appSearchComplete = false;
         if (switchProfile) store.SelectProfile(profileId!);
         _scroll.Offset = 0f;
         CancelEncoderRead();
@@ -164,6 +169,7 @@ internal sealed partial class PhoneDevicePageView : IViewPage, IViewDockPage
         _appIcons.Clear();
         _deviceProfiles = [];
         StopQrPairing();
+        CancelAppDiscovery();
         ResetSavedSearch();
         _pairCode = "";
         CancelEncoderRead();
@@ -186,7 +192,8 @@ internal sealed partial class PhoneDevicePageView : IViewPage, IViewDockPage
         if (targetId != "phone.sendfile" || !_active || _showCatalog || _showFileBrowser || IsConnectionPage || _activeDevice is not { } online || paths.Length == 0) return;
         var phone = _actions.Host.Phone;
         var profile = phone.Store.Profile;
-        EnqueueOrStartFiles(online, profile.Id, paths, profile.ReceiveFolder, pullFrom: null);
+        if (phone.Operations.CanWriteFiles(online))
+            EnqueueOrStartFiles(online, profile.Id, paths, ReceiveFolder(online, profile), pullFrom: null);
     }
 
     public void RefreshData()
@@ -202,6 +209,7 @@ internal sealed partial class PhoneDevicePageView : IViewPage, IViewDockPage
             CancelEncoderRead();
             _streamDeviceKey = null;
             _activeDevice = online;
+            _appReceiveFolder = null;
             _showFileBrowser = false;
             _remoteFiles = Array.Empty<AndroidStorageFile>();
             _selectedRemoteFiles.Clear();
@@ -253,6 +261,7 @@ internal sealed partial class PhoneDevicePageView : IViewPage, IViewDockPage
             float height = PhoneTextHeight(status, usable);
             var footer = new UiRect(contentRect.X + 4f, contentRect.Bottom - 8f - height, usable, height);
             g.DrawText(status, footer, _statusError ? t.Fail : t.TextSecondary, 12f, wrap: true);
+            _hit.DescribeText("phone.status", footer, status);
             contentRect = new UiRect(contentRect.X, contentRect.Y, contentRect.Width, MathF.Max(1f, contentRect.Height - height - 8f));
         }
         _visibleDeviceRect = contentRect;
@@ -304,7 +313,9 @@ internal sealed partial class PhoneDevicePageView : IViewPage, IViewDockPage
         g.FillRoundedRect(iconBox, 8f, t.Overlay);
         g.DrawIcon(UiIcon.Phone, iconBox.Deflate(7f), t.TextSecondary, 1.6f);
 
-        string action = L10n.T(online == null ? "Phone.ConnectShort" : online.IsWifi ? "Phone.Disconnect" : "Phone.StopReceiving");
+        var profile = _actions.Host.Phone.Store.Profile;
+        string action = L10n.T(online != null ? online.IsApp || online.IsWifi ? "Phone.Disconnect" : "Phone.StopReceiving"
+            : profile is { AppTrustRevoked: true, LastDevice.IsApp: true } ? "Phone.SrapPairAgain" : "Phone.Reconnect");
         float actionW = MathF.Max(74f, PhoneTextWidth(action, 12f) + 22f);
         var more = new UiRect(card.Right - DeviceCardPadding - 28f, card.CenterY - DeviceControlHeight / 2f, 28f, DeviceControlHeight);
         var primary = new UiRect(more.X - 6f - actionW, more.Y, actionW, DeviceControlHeight);
@@ -320,11 +331,10 @@ internal sealed partial class PhoneDevicePageView : IViewPage, IViewDockPage
         UiPrimitives.DrawGhostIconButton(g, t, _hit, "phone.rename", new UiRect(renameX + 4f, _renameRect.Y, 26f, 26f),
             UiIcon.Edit, 13f, tooltip: L10n.T("Phone.RenamePhoneAutomation"));
 
-        string connection = online == null ? L10n.T(_actions.Host.Phone.Store.Profile is { AppTrustRevoked: true, LastDevice.IsApp: true } ? "Phone.Srap.not_paired" : "Phone.Disconnected")
-            : online.IsApp ? L10n.T("Phone.SrapConnected")
-            : $"{(online.IsWifi ? "Wi-Fi" : "USB")} · {L10n.T("Phone.ConnectedStatus")}";
+        string connection = PhoneAppPresentation.ConnectionLabel(profile, online);
         g.FillEllipse(nameX + 4f, y + 46f, 3.5f, 3.5f, online == null ? t.TextSecondary : t.Success);
         g.DrawText(connection, new UiRect(nameX + 14f, y + 37f, MathF.Max(1f, nameAreaW - 14f), 18f), t.TextSecondary, 11.5f);
+        _hit.DescribeText("phone.connection.status", new UiRect(nameX, y + 35f, nameAreaW, 22f), name + " · " + connection);
 
         UiPrimitives.DrawSecondaryButton(g, t, _hit, online == null ? "phone.connect" : "phone.disconnect",
             primary, action, enabled: !_busy, fontSize: 12f, tooltip: action);
@@ -343,12 +353,19 @@ internal sealed partial class PhoneDevicePageView : IViewPage, IViewDockPage
         if ((online ?? detail)?.IsApp == true)
         {
             y = RenderAppControls(g, t, x, y, w, online);
-            return RenderQuickPanelApps(g, t, x, y, w, phone, profile, online != null && phone.Operations.CanListApps(online));
+            y = RenderQuickPanelApps(g, t, x, y, w, phone, profile, online != null && phone.Operations.CanListApps(online));
+            y = RenderFileTransferCard(g, t, x, y, w, phone, profile, online);
+            return RenderClipboardCard(g, t, x, y, w, phone, detail);
         }
         y = RenderStreamingCard(g, t, x, y, w, detail != null);
         y = RenderQuickPanelApps(g, t, x, y, w, phone, profile, online != null);
         y = RenderFileTransferCard(g, t, x, y, w, phone, profile, online);
+        return RenderClipboardCard(g, t, x, y, w, phone, detail);
+    }
 
+    private float RenderClipboardCard(D2dTarget g, UiThemePalette t, float x, float y, float w,
+        PhonePreview phone, AndroidDevice? detail)
+    {
         var clipCard = new UiRect(x, y, w, 60f);
         UiPrimitives.DrawCard(g, t, clipCard, DeviceCardRadius);
         bool clipEnabled = phone.Clipboard.IsEnabled(detail);
@@ -569,7 +586,7 @@ internal sealed partial class PhoneDevicePageView : IViewPage, IViewDockPage
             float fw = fileCard.Width - 2f * DeviceCardPadding;
             float fy = fileCard.Y + DeviceCardPadding;
 
-            bool canUp = _remoteFolder != AndroidFileTransfer.Storage && !_remoteLoading;
+            bool canUp = online != null && _remoteFolder != phone.Operations.FileRoot(online) && !_remoteLoading;
             UiPrimitives.DrawSecondaryButton(g, t, _hit, "phone.folderup", new UiRect(fx, fy, 34f, 28f), "..",
                 enabled: online != null && canUp, fontSize: 12f, tooltip: L10n.T("Phone.AndroidParentFolder"));
             g.DrawText(AndroidFolderLabel(_remoteFolder), new UiRect(fx + 42f, fy, MathF.Max(40f, fw - 82f), 28f),
@@ -667,7 +684,10 @@ internal sealed partial class PhoneDevicePageView : IViewPage, IViewDockPage
         _fileBrowserListRect = default;
         bool hasStatus = transfer != null || queuedCount > 0;
         float cw = w - 2f * DeviceCardPadding;
-        string dropText = L10n.T(online != null ? "Phone.FileDropHint" : "Phone.FileOfflineHint");
+        var fileRoot = online == null ? null : phone.Operations.FileRoot(online);
+        bool dropEnabled = online != null && phone.Operations.CanWriteFiles(online);
+        string dropText = L10n.T(dropEnabled ? "Phone.FileDropHint" : online?.IsApp == true
+            ? (fileRoot == null ? "Phone.SafChoose" : "Phone.SafReadOnly") : "Phone.FileOfflineHint");
         float hintHeight = PhoneTextHeight(dropText, cw - 24f);
         float dropH = MathF.Max(70f, hintHeight + 42f);
         float fileCardH = 124f + dropH + (hasStatus ? 30f : 0f);
@@ -681,11 +701,10 @@ internal sealed partial class PhoneDevicePageView : IViewPage, IViewDockPage
         float browseW = MathF.Min(cw * 0.48f, PhoneTextWidth(browse, 12f) + 42f);
         g.DrawText(L10n.T("Phone.Files"), new UiRect(x0, y0, cw - browseW - 6f, DeviceControlHeight), t.TextPrimary, DeviceHeadingSize, 600);
         UiPrimitives.DrawSecondaryButton(g, t, _hit, "phone.browsefiles", new UiRect(x0 + cw - browseW, y0, browseW, DeviceControlHeight),
-            browse, enabled: online != null, fontSize: 12f, icon: UiIcon.Download);
+            browse, enabled: fileRoot != null, fontSize: 12f, icon: UiIcon.Download);
         y0 += DeviceControlHeight + 7f;
 
         var dropRect = new UiRect(x0, y0, cw, dropH);
-        bool dropEnabled = online != null;
         if (dropEnabled) _hit.Add("phone.sendfile", dropRect, UiCursorKind.Hand, L10n.T("Phone.FileSend"));
         bool dropHot = dropEnabled && _hit.IsHover("phone.sendfile");
         if (dropHot) g.FillRoundedRect(dropRect, 8f, t.NavHover);
@@ -726,7 +745,7 @@ internal sealed partial class PhoneDevicePageView : IViewPage, IViewDockPage
             }
             g.DrawText(change, action, enabled ? t.TextPrimary : t.TextSecondary.WithAlphaFraction(0.55f), 11f, 400, UiTextAlign.Center, UiVertAlign.Center);
         }
-        DrawFolder(L10n.T("Phone.AndroidReceiveFolder"), AndroidFolderLabel(profile.ReceiveFolder), "phone.remotefolder", online != null);
+        DrawFolder(L10n.T("Phone.AndroidReceiveFolder"), AndroidFolderLabel(ReceiveFolder(online ?? profile.LastDevice, profile)), "phone.remotefolder", dropEnabled);
         y0 += 31f;
         DrawFolder(L10n.T("Phone.FileReceiveFolder"), _pcReceiveFolder.GetReceiveDirectory(), "phone.localfolder", true);
         return card.Bottom + DeviceCardGap;
@@ -817,11 +836,12 @@ internal sealed partial class PhoneDevicePageView : IViewPage, IViewDockPage
 
         if (id == "phone.connchoice.android")
         {
-            if (_airPlayConnectionChoice || _appConnectionChoice)
+            if (_airPlayConnectionChoice)
             {
                 _actions.CloseInlineEdit(commit: false);
+                CancelViewOperation();
                 _airPlayConnectionChoice = false;
-                _appConnectionChoice = false;
+                _scroll.Offset = 0f;
                 UpdateQrPairing();
                 _actions.Invalidate();
             }
@@ -832,8 +852,9 @@ internal sealed partial class PhoneDevicePageView : IViewPage, IViewDockPage
             if (!_airPlayConnectionChoice)
             {
                 _actions.CloseInlineEdit(commit: false);
+                CancelViewOperation();
                 _airPlayConnectionChoice = true;
-                _appConnectionChoice = false;
+                _scroll.Offset = 0f;
                 UpdateQrPairing();
                 _actions.Invalidate();
             }
@@ -872,7 +893,7 @@ internal sealed partial class PhoneDevicePageView : IViewPage, IViewDockPage
         }
         if (id == "phone.pairaddr")
         {
-            _actions.StartInlineEdit("phone.pairaddr", hit.Value.Bounds, _pairAddress, t => _pairAddress = t, (t, _) =>
+            _actions.StartInlineEdit("phone.pairaddr", hit.Value.Bounds, _pairAddress, t => { _pairAddress = t; _actions.Invalidate(); }, (t, _) =>
             {
                 _pairAddress = t.Trim();
                 _actions.Invalidate();
@@ -881,7 +902,7 @@ internal sealed partial class PhoneDevicePageView : IViewPage, IViewDockPage
         }
         if (id == "phone.paircode")
         {
-            _actions.StartInlineEdit("phone.paircode", hit.Value.Bounds, _pairCode, t => _pairCode = t, (t, _) =>
+            _actions.StartInlineEdit("phone.paircode", hit.Value.Bounds, _pairCode, t => { _pairCode = t; _actions.Invalidate(); }, (t, _) =>
             {
                 _pairCode = t.Trim();
                 _actions.Invalidate();
@@ -1002,18 +1023,18 @@ internal sealed partial class PhoneDevicePageView : IViewPage, IViewDockPage
             var paths = NativeDialogs.OpenMultiple(_actions.OwnerWindow.Handle, "All Files|*.*", L10n.T("Phone.FileSend"));
             if (paths.Length > 0 && _active && Equals(_activeDevice, online))
             {
-                EnqueueOrStartFiles(online, profile.Id, paths, profile.ReceiveFolder, pullFrom: null);
+                EnqueueOrStartFiles(online, profile.Id, paths, ReceiveFolder(online, profile), pullFrom: null);
             }
             return true;
         }
         if (id == "phone.browsefiles" && online != null)
         {
-            OpenAndroidPicker(online, profile.ReceiveFolder, chooseFolder: false);
+            OpenAndroidPicker(online, ReceiveFolder(online, profile), chooseFolder: false);
             return true;
         }
         if (id == "phone.remotefolder" && online != null)
         {
-            OpenAndroidPicker(online, profile.ReceiveFolder, chooseFolder: true);
+            OpenAndroidPicker(online, ReceiveFolder(online, profile), chooseFolder: true);
             return true;
         }
         if (id == "phone.localfolder")
@@ -1038,7 +1059,7 @@ internal sealed partial class PhoneDevicePageView : IViewPage, IViewDockPage
             CloseAndroidPicker();
             return true;
         }
-        if (id == "phone.folderup" && online != null && _remoteFolder != AndroidFileTransfer.Storage)
+        if (id == "phone.folderup" && online != null && _remoteFolder != phone.Operations.FileRoot(online))
         {
             int slash = _remoteFolder.TrimEnd('/').LastIndexOf('/');
             string parent = slash <= 0 ? AndroidFileTransfer.Storage : _remoteFolder[..slash];
@@ -1089,7 +1110,7 @@ internal sealed partial class PhoneDevicePageView : IViewPage, IViewDockPage
     }
 
     private void OpenConnectAddress(UiRect box) =>
-        _actions.StartInlineEdit("phone.connaddr", box, _connectAddress, value => _connectAddress = value,
+        _actions.StartInlineEdit("phone.connaddr", box, _connectAddress, value => { _connectAddress = value; _actions.Invalidate(); },
             (value, _) => { _connectAddress = value.Trim(); _actions.Invalidate(); });
 
     public bool OnMouseWheel(float x, float y, float delta, bool horizontal)
@@ -1148,7 +1169,7 @@ internal sealed partial class PhoneDevicePageView : IViewPage, IViewDockPage
                 CloseAndroidPicker();
                 return true;
             }
-            if (vk == 0x08 && _activeDevice is { } online && _remoteFolder != AndroidFileTransfer.Storage && !_remoteLoading) // Backspace
+            if (vk == 0x08 && _activeDevice is { } online && _remoteFolder != _actions.Host.Phone.Operations.FileRoot(online) && !_remoteLoading) // Backspace
             {
                 int slash = _remoteFolder.TrimEnd('/').LastIndexOf('/');
                 string parent = slash <= 0 ? AndroidFileTransfer.Storage : _remoteFolder[..slash];
@@ -1220,7 +1241,8 @@ internal sealed partial class PhoneDevicePageView : IViewPage, IViewDockPage
         if (_remoteLoading || _remoteError != null || !_actions.Host.Phone.Connections.IsCurrent(online)) return;
         if (_choosingPhoneFolder)
         {
-            _actions.Host.Phone.Store.SetReceiveFolder(profileId, _remoteFolder);
+            if (online.IsApp) _appReceiveFolder = _remoteFolder;
+            else _actions.Host.Phone.Store.SetReceiveFolder(profileId, _remoteFolder);
             CloseAndroidPicker();
             return;
         }
@@ -1246,8 +1268,20 @@ internal sealed partial class PhoneDevicePageView : IViewPage, IViewDockPage
         return text;
     }
 
+    private string ReceiveFolder(AndroidDevice? device, AndroidPhoneProfile profile)
+    {
+        if (device?.IsApp != true) return profile.ReceiveFolder;
+        string root = _actions.Host.Phone.Operations.FileRoot(device) ?? SrapFilesClient.Prefix;
+        return _appReceiveFolder?.StartsWith(root + "/", StringComparison.Ordinal) == true ? _appReceiveFolder : root;
+    }
+
     private static string AndroidFolderLabel(string path)
     {
+        if (path.StartsWith(SrapFilesClient.Prefix, StringComparison.Ordinal))
+        {
+            int slash = path.IndexOf('/', 1);
+            return L10n.T("Phone.SafFolder") + (slash < 0 ? "" : " / " + AndroidFileTransfer.FormatDisplayName(path[(path.LastIndexOf('/') + 1)..]));
+        }
         string phone = L10n.T("Phone.AndroidStorage");
         if (path == AndroidFileTransfer.Storage) return phone;
         int split = path.LastIndexOf('/');
@@ -1616,8 +1650,7 @@ internal sealed partial class PhoneDevicePageView : IViewPage, IViewDockPage
         var phone = _actions.Host.Phone;
         if (IsConnectionPage)
         {
-            if (_appConnectionChoice) SearchAppCandidates();
-            else RunBusy(ct => phone.RefreshAsync().WaitAsync(ct));
+            RunBusy(ct => phone.RefreshAsync().WaitAsync(ct), pauseWirelessPairing: false);
         }
         else
         {
@@ -1662,7 +1695,6 @@ internal sealed partial class PhoneDevicePageView : IViewPage, IViewDockPage
         {
             case "phone.connect" when profile.LastDevice.IsApp && profile.AppTrustRevoked:
                 ShowConnectionPage();
-                HandleAppDeviceAction("phone.connchoice.app", default);
                 SetStatus(L10n.T("Phone.Srap.not_paired"), false);
                 break;
             case "phone.connect":
@@ -1690,22 +1722,28 @@ internal sealed partial class PhoneDevicePageView : IViewPage, IViewDockPage
         var previous = _operation;
         _operation = null;
         _busy = false;
+        _pauseWirelessPairing = false;
         previous?.Cancel();
         _statusMessage = null;
     }
 
     private void RunBusy(Func<CancellationToken, Task> op, string? successKey = null, bool openDevice = false, Action<Exception>? failed = null,
-        int timeoutSeconds = 25)
+        int timeoutSeconds = 25, bool pauseWirelessPairing = true)
     {
         if (_busy || !_active) return;
         _busy = true;
+        _pauseWirelessPairing = pauseWirelessPairing;
         var cts = CancellationTokenSource.CreateLinkedTokenSource(_actions.Host.Phone.Lifetime);
         cts.CancelAfter(TimeSpan.FromSeconds(timeoutSeconds));
         _operation = cts;
-        CancelCts(ref _searchSaved);
-        _manualSearch = false;
-        _savedSearchStatus = null;
-        var pendingQr = _qrTask;
+        if (pauseWirelessPairing)
+        {
+            CancelCts(ref _searchSaved);
+            CancelAppDiscovery();
+            _manualSearch = false;
+            _savedSearchStatus = null;
+        }
+        var pendingQr = pauseWirelessPairing ? _qrTask : Task.CompletedTask;
         UpdateQrPairing();
         SetStatus(L10n.T("Phone.ProcessingStatus"), false);
         _ = Task.Run(async () =>
@@ -1725,6 +1763,7 @@ internal sealed partial class PhoneDevicePageView : IViewPage, IViewDockPage
                     if (!ReferenceEquals(_operation, cts)) return;
                     _operation = null;
                     _busy = false;
+                    _pauseWirelessPairing = false;
                     if (!_active) return;
                     if (failure != null)
                     {
@@ -1811,7 +1850,14 @@ internal sealed partial class PhoneDevicePageView : IViewPage, IViewDockPage
     {
         if (_active && IsConnectionPage && _airPlayConnectionChoice) _airPlay.Attach();
         else _airPlay.Detach();
-        if (!_active || !IsConnectionPage || _airPlayConnectionChoice) ResetSavedSearch();
+        if (!AndroidConnectionVisible)
+        {
+            CancelAppDiscovery();
+            _appCandidates = [];
+            _selectedAppCandidate = null;
+            _appSearchComplete = false;
+            ResetSavedSearch();
+        }
         else SearchSaved(manual: false);
         if (!CanShowQr)
         {

@@ -40,14 +40,22 @@ internal interface IPhoneOperationPort
     void InvalidateEncoders(AndroidDevice device);
     bool CanWatchMedia(AndroidDevice device);
     IPhoneMediaSession OpenMediaSession(AndroidDevice device);
-    IAndroidClipboardClient OpenClipboard();
+    bool CanSyncClipboard(AndroidDevice device);
+    IAndroidClipboardClient OpenClipboard(AndroidDevice device);
     IPhoneFileOperations OpenFiles(AndroidDevice device);
+    string? FileRoot(AndroidDevice device);
+    bool CanWriteFiles(AndroidDevice device);
     AndroidAudioSession CreateCaptureSession(Func<AndroidDevice, AndroidStreamSettings> settings, Func<string, AndroidDevice?> resolvePhone);
     IVirtualDisplayClient CreateDisplay(Func<AndroidAudioSettingsStore> settings);
     AndroidPhonePcmPlayer CreatePlayback(AndroidDevice device, AndroidPcmSource pcm, string sink, CancellationToken token,
         Action<AndroidDevice, IReadOnlyList<AndroidOutputSink>> outputsObserved, CancellationToken attachment);
     bool CanListApps(AndroidDevice device);
     bool CanListOutputs(AndroidDevice device);
+    bool CanPlayPcm(AndroidDevice device);
+    AppCapturePermission? AppCapture(AndroidDevice device) => null;
+    bool CanViewSharedScreen(AndroidDevice device) => false;
+    bool NeedsScreenConsent(AndroidDevice device) => false;
+    Task ViewSharedScreenAsync(AndroidDevice device, string title, CancellationToken token) => throw new SrapException("unsupported");
     bool CanControlVolume(AndroidDevice device);
     bool CanTestRoute(AndroidDevice device);
     Task<int> VolumeAsync(AndroidDevice device, int? percent, CancellationToken token);
@@ -80,8 +88,11 @@ internal sealed class AdbOperationAdapter(AdbClient adb) : IPhoneOperationPort, 
     public void InvalidateEncoders(AndroidDevice device) => adb.InvalidateEncoders(device);
     public bool CanWatchMedia(AndroidDevice device) => !device.IsApp;
     public IPhoneMediaSession OpenMediaSession(AndroidDevice device) => new AndroidMediaSessionClient(adb);
-    public IAndroidClipboardClient OpenClipboard() => new AndroidClipboardClient(adb);
+    public bool CanSyncClipboard(AndroidDevice device) => !device.IsApp;
+    public IAndroidClipboardClient OpenClipboard(AndroidDevice device) => new AndroidClipboardClient(adb);
     public IPhoneFileOperations OpenFiles(AndroidDevice device) => new AndroidFileTransfer(adb, device.CommandTarget);
+    public string? FileRoot(AndroidDevice device) => device.IsApp ? null : AndroidFileTransfer.Storage;
+    public bool CanWriteFiles(AndroidDevice device) => !device.IsApp;
     public AndroidAudioSession CreateCaptureSession(Func<AndroidDevice, AndroidStreamSettings> settings, Func<string, AndroidDevice?> resolvePhone) =>
         new(adb, settings, resolvePhone);
     public IVirtualDisplayClient CreateDisplay(Func<AndroidAudioSettingsStore> settings) => new InProcessVirtualDisplayClient(adb, _displayRuntime, settings);
@@ -91,6 +102,7 @@ internal sealed class AdbOperationAdapter(AdbClient adb) : IPhoneOperationPort, 
     internal PcToPhoneAudioManager CreatePcPlayback(Func<int, IPcProcessSilenceLease?>? silenceLocalProcess) => new(adb, silenceLocalProcess);
     public bool CanListApps(AndroidDevice device) => !device.IsApp;
     public bool CanListOutputs(AndroidDevice device) => !device.IsApp;
+    public bool CanPlayPcm(AndroidDevice device) => !device.IsApp;
     public bool CanControlVolume(AndroidDevice device) => false;
     public bool CanTestRoute(AndroidDevice device) => false;
     public Task<int> VolumeAsync(AndroidDevice device, int? percent, CancellationToken token) => throw new SrapException("unsupported");

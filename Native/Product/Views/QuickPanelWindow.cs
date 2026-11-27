@@ -133,6 +133,7 @@ internal sealed class QuickPanelWindow : LayeredWindow
     private UiRect _phoneDropBounds;
     private bool _showPhoneDrop;
     private bool _airPlayDrop;
+    private bool _sharedOnlyDrop;
     private AndroidAudioSource? _androidDrag;
     private bool? _sharedDrop;
 #endif
@@ -828,6 +829,10 @@ internal sealed class QuickPanelWindow : LayeredWindow
         var masterSliderRect = new UiRect(masterMuteRect.Right + 10f, y, MathF.Max(40f, pctRect.X - 6f - (masterMuteRect.Right + 10f)), 32f);
         UiPrimitives.DrawVolumeSlider(g, theme, _hit, "qp.masterslider", masterSliderRect,
             _masterVolume / 100f, 0f, _masterMuted, showPeak: false);
+        if (_hit.AccessibilityEnabled)
+            _hit.DescribeVolume("qp.masterslider", masterSliderRect, devName, activeId.Length > 0,
+                activeId.Length > 0 ? _masterVolume : null, activeId,
+                SetAccessibleVolume);
 
         // 4. Divider + App Volumes Header
         y = masterSliderRect.Bottom + 10f;
@@ -904,16 +909,18 @@ internal sealed class QuickPanelWindow : LayeredWindow
     }
 
 #if SONICROUTE_PHONE
-    internal bool? UpdatePhoneDrop(int xPx, int yPx, bool airPlay = false)
+    internal bool? UpdatePhoneDrop(int xPx, int yPx, bool airPlay = false, bool sharedOnly = false)
     {
         if (!IsVisible) return null;
         float x = (xPx - LeftPx) / DpiScale;
         float y = (yPx - TopPx) / DpiScale - _drawnSlideY;
-        bool? shared = _phoneDropBounds.Contains(x, y) ? !airPlay && y >= _phoneDropBounds.CenterY : null;
-        if (!_showPhoneDrop || shared != _sharedDrop || _airPlayDrop != airPlay)
+        sharedOnly |= _androidDrag?.Device.IsApp == true;
+        bool? shared = _phoneDropBounds.Contains(x, y) ? sharedOnly || !airPlay && y >= _phoneDropBounds.CenterY : null;
+        if (!_showPhoneDrop || shared != _sharedDrop || _airPlayDrop != airPlay || _sharedOnlyDrop != sharedOnly)
         {
             _showPhoneDrop = true;
             _airPlayDrop = airPlay;
+            _sharedOnlyDrop = sharedOnly;
             _sharedDrop = shared;
             Invalidate();
         }
@@ -931,11 +938,11 @@ internal sealed class QuickPanelWindow : LayeredWindow
     private void DrawPhoneDropArea(D2dTarget g, UiThemePalette theme, UiRect bounds)
     {
         g.FillRoundedRect(bounds, 8f, theme.SurfaceBg);
-        int count = _airPlayDrop ? 1 : 2;
+        int count = _airPlayDrop || _sharedOnlyDrop ? 1 : 2;
         for (int i = 0; i < count; i++)
         {
-            bool shared = i == 1;
-            var zone = new UiRect(bounds.X + 2f, (shared ? bounds.CenterY : bounds.Y) + 2f,
+            bool shared = _sharedOnlyDrop || i == 1;
+            var zone = new UiRect(bounds.X + 2f, (i == 1 ? bounds.CenterY : bounds.Y) + 2f,
                 bounds.Width - 4f, bounds.Height / count - 4f);
             if (_sharedDrop == shared) g.FillRoundedRect(zone, 6f, theme.Overlay);
             g.PushClip(zone);
@@ -946,7 +953,7 @@ internal sealed class QuickPanelWindow : LayeredWindow
                 UiTextAlign.Center, UiVertAlign.Top, wrap: true);
             g.PopClip();
         }
-        if (!_airPlayDrop) g.DrawLine(bounds.X + 2f, bounds.CenterY, bounds.Right - 2f, bounds.CenterY, theme.Accent, 1f);
+        if (count == 2) g.DrawLine(bounds.X + 2f, bounds.CenterY, bounds.Right - 2f, bounds.CenterY, theme.Accent, 1f);
         g.DrawRoundedRect(bounds, 8f, theme.Accent, 2f);
     }
 #endif
@@ -1086,6 +1093,9 @@ internal sealed class QuickPanelWindow : LayeredWindow
         row.PaintedPeak = row.Peak;
         UiPrimitives.DrawVolumeSlider(g, theme, _hit, id, rect, row.Volume / 100f, row.Peak, row.Muted,
             _config.ShowAppPeakMeter, enabled: row.Available, compact: true, dimUnavailable: row.App.IsExternalOffline);
+        if (_hit.AccessibilityEnabled)
+            _hit.DescribeVolume(id, rect, row.DisplayName, row.Available, row.Available ? row.Volume : null,
+                row.App.Identity, SetAccessibleVolume);
     }
 
     private void RenderAppRow(
@@ -1574,7 +1584,7 @@ internal sealed class QuickPanelWindow : LayeredWindow
             var android = _androidDrag;
             _androidDrag = null;
             string? sourceId = CrossDeviceDragHost.DraggedApp?.ExternalSourceId;
-            bool? shared = android == null ? null : UpdatePhoneDrop(cur.X, cur.Y);
+            bool? shared = android == null ? null : UpdatePhoneDrop(cur.X, cur.Y, sharedOnly: android.Device.IsApp);
             bool outside = !CrossDeviceDragHost.ContainsScreenPoint(this, cur.X, cur.Y) &&
                 !CrossDeviceDragHost.ContainsScreenPoint(_phoneCompanion, cur.X, cur.Y);
             ClearPhoneDrop();
@@ -1693,18 +1703,20 @@ internal sealed class QuickPanelWindow : LayeredWindow
         _ => 0,
     };
 
-    private bool AdjustSlider(string id, int delta)
+    private void SetAccessibleVolume(string id, double value) => AdjustSlider(id, (int)Math.Round(value), absolute: true);
+
+    private bool AdjustSlider(string id, int value, bool absolute = false)
     {
         if (id == "qp.masterslider")
         {
-            _masterVolume = Math.Clamp(_masterVolume + delta, 0, 100);
+            _masterVolume = Math.Clamp(absolute ? value : _masterVolume + value, 0, 100);
             QueueMasterVolume(_masterVolume);
             SyncMasterToOutputPopup(_masterVolume, null);
         }
         else if (id.StartsWith("qp.appslider:", StringComparison.Ordinal) && TryGetAppIndex(id.AsSpan(13), out int index) && _rows[index].Available)
         {
             var row = _rows[index];
-            row.Volume = Math.Clamp(row.Volume + delta, 0, 100);
+            row.Volume = Math.Clamp(absolute ? value : row.Volume + value, 0, 100);
             QueueAppVolume(row, row.Volume);
         }
         else return false;

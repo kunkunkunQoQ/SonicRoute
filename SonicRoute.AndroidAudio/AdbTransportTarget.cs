@@ -18,6 +18,17 @@ internal static class AdbTransportTarget
     }
     internal static string? CreateSocket(string? id, string? daemon) => daemon != null && ulong.TryParse(id, out _)
         ? $"{Prefix}socket:{daemon}/{id}" : null;
+    internal static bool TrySocketOwner(AndroidDevice device, out string daemon)
+    {
+        daemon = "";
+        if (device.ConnectionTarget is not { } target || !TryParse(target, out bool direct, out string qualified) || direct
+            || device.TransportId is not { } id || !ulong.TryParse(id, System.Globalization.NumberStyles.None,
+                System.Globalization.CultureInfo.InvariantCulture, out var number) || number == 0) return false;
+        int slash = qualified.IndexOf('/');
+        if (slash <= 0 || !qualified.AsSpan(slash + 1).SequenceEqual(id)) return false;
+        daemon = qualified[..slash];
+        return true;
+    }
     internal static bool TryParse(string target, out bool direct, out string id)
     {
         direct = false; id = "";

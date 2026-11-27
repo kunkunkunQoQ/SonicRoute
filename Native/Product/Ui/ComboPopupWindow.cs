@@ -134,6 +134,8 @@ internal sealed class ComboPopupWindow : LayeredWindow
     }
 
     protected override UiHitMap InputMap => _hit;
+    protected override string? AccessibleFocusId => _focusedIndex >= 0 && _focusedIndex < _choices.Count
+        ? _choices[_focusedIndex].Key : null;
 
     internal override void ApplyTheme(UiThemePalette theme)
     {
@@ -179,6 +181,7 @@ internal sealed class ComboPopupWindow : LayeredWindow
             }
             // The full label stays available to the tooltip, type-ahead and selection callbacks.
             _hit.Add(choice.Key, UiHitMap.Intersect(view, r), UiCursorKind.Arrow, choice.Label);
+            _hit.Describe(choice.Key, choice.Label, UiAccessibleRole.ListItem, sel);
             g.DrawText(choice.Label, label, ink, LabelFont, 400, UiTextAlign.Leading, UiVertAlign.Center, wrap: false, ellipsis: true);
         }
         g.PopClip();
@@ -348,6 +351,20 @@ internal sealed class ComboPopupWindow : LayeredWindow
         var picked = _choices[idx];
         CloseToOwner();
         _onSelected(picked);
+    }
+
+    protected override void PerformAccessibleItem(string id, bool activate)
+    {
+        for (int i = 0; i < _choices.Count; i++)
+        {
+            if (_choices[i].Key != id) continue;
+            if (activate) { CommitIndex(i); return; }
+            _focusedIndex = _hoverIndex = i;
+            RequestFocus();
+            _scroll.EnsureVisible(i * ItemH, (i + 1) * ItemH, 4f);
+            Invalidate();
+            return;
+        }
     }
 
     private void CloseToOwner()

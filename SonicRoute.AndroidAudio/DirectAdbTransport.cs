@@ -498,7 +498,7 @@ internal sealed class DirectAdbTransport : IAdbTransport, IAsyncDisposable, IAdb
     internal async Task<SrapAdbAttachment> CaptureAliasAttachmentAsync(string target, CancellationToken token)
     {
         if (!AdbTransportTarget.TryParse(target, out bool direct, out _) || !direct) throw new SrapException("unsupported");
-        return new(await ResolveConnectionAsync(target, token).ConfigureAwait(false));
+        return new DirectSrapAdbAttachment(await ResolveConnectionAsync(target, token).ConfigureAwait(false));
     }
 
     private UsbDeviceSlot? FindUsbSlotBySerial(string serial)

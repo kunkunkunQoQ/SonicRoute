@@ -61,16 +61,24 @@ internal sealed partial class PhonePreview
         foreach (string id in ids)
         {
             if (!AndroidOutputIdentity.TryParseDeviceId(id, out string key, out _)
-                || !key.StartsWith("device:", StringComparison.Ordinal)) continue;
+                || !(key.StartsWith("device:", StringComparison.Ordinal) || key.StartsWith("app:", StringComparison.Ordinal))) continue;
             if (!requested.TryGetValue(key, out var sinks)) requested[key] = sinks = new(StringComparer.OrdinalIgnoreCase);
             sinks.Add(id);
         }
-        var saved = Store.Profiles.Where(p => p.LastDevice != null && !p.ManuallyDisconnected
-            && requested.ContainsKey(AndroidDeviceIdentity.Key(p.LastDevice))).ToArray();
+        HashSet<string> Requested(AndroidPhoneProfile p)
+        {
+            var keys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (requested.TryGetValue(AndroidDeviceIdentity.Key(p.LastDevice!), out var primary)) keys.UnionWith(primary);
+            if (!p.AppTrustRevoked && p.AppPublicKeySha256 is { } pin && Store.HasUniqueAppOwner(p.Id, pin)
+                && requested.TryGetValue("app:" + pin, out var appOutputs)) keys.UnionWith(appOutputs);
+            return keys;
+        }
+        var saved = Store.Profiles.Where(p => p.LastDevice != null && !p.ManuallyDisconnected && Requested(p).Count > 0).ToArray();
         if (saved.Length == 0) return;
 
-        var devices = await Discovery.ReadAsync(stop.Token).ConfigureAwait(false);
-        foreach (var profile in saved)
+        var adbProfiles = saved.Where(p => p.LastDevice?.IsApp == false).ToArray();
+        var devices = adbProfiles.Length == 0 ? [] : await Discovery.ReadAsync(stop.Token).ConfigureAwait(false);
+        foreach (var profile in adbProfiles)
         {
             if (await RecoverMissingWirelessAsync(profile.LastDevice, devices, stop.Token).ConfigureAwait(false))
                 devices = Discovery.Devices ?? devices;
@@ -79,9 +87,8 @@ internal sealed partial class PhonePreview
 
         // All requests share the existing track-devices connection. Release it once the saved
         // targets are ready unless the panel, clipboard or another product feature took ownership.
-        var waits = saved.Select(p => WaitForSavedSinksAsync(p.Id,
-            requested[AndroidDeviceIdentity.Key(p.LastDevice!)], stop.Token)).ToArray();
-        if (waits.All(task => task.IsCompleted)) { await Task.WhenAll(waits).ConfigureAwait(false); return; }
+        var waits = saved.Select(p => WaitForSavedSinksAsync(p.Id, Requested(p), stop.Token)).ToArray();
+        if (adbProfiles.Length == 0 || waits.All(task => task.IsCompleted)) { await Task.WhenAll(waits).ConfigureAwait(false); return; }
         lock (operationsGate) { ++temporaryTrackers; EnsureTracking(); }
         try { await Task.WhenAll(waits).ConfigureAwait(false); }
         finally
@@ -107,6 +114,7 @@ internal sealed partial class PhonePreview
         void Wake() => changes.Writer.TryWrite(true);
         Discovery.Changed += Wake;
         Store.Changed += Wake;
+        appTransport.Changed += Wake;
         AndroidDevice? listening = null;
         CancellationTokenSource? listener = null;
         Task watch = Task.CompletedTask;
@@ -141,6 +149,7 @@ internal sealed partial class PhonePreview
         {
             Discovery.Changed -= Wake;
             Store.Changed -= Wake;
+            appTransport.Changed -= Wake;
             listener?.Cancel();
             try { await watch.ConfigureAwait(false); }
             finally { listener?.Dispose(); }

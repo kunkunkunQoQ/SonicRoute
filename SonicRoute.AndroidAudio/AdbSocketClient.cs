@@ -432,6 +432,92 @@ public sealed class AdbSocketClient : IAdbTransport
 
     public Task<Stream> OpenFileSyncAsync(string serial, CancellationToken token) => OpenDeviceStreamAsync(serial, "sync:", token);
 
+    internal async Task<SrapAdbAttachment> CaptureAliasAttachmentAsync(AndroidDevice device, CancellationToken token)
+    {
+        if (!IPAddress.IsLoopback(_endpoint.Address) || !AdbTransportTarget.TrySocketOwner(device, out string daemon))
+            throw new SrapException("unsupported");
+        var selected = await OpenTransportAsync(device.ConnectionTarget!, token).ConfigureAwait(false);
+        var attachment = new SocketAliasAttachment(this, selected, device, daemon);
+        try
+        {
+            await attachment.StartAsync(token).ConfigureAwait(false);
+            return attachment;
+        }
+        catch { await attachment.DisposeAsync().ConfigureAwait(false); throw; }
+    }
+
+    // The selected connection stays open across the phone's consent prompt. A
+    // bounded, event-driven device subscription covers removal through durable commit,
+    // including after the one-use proof socket has reached its expected EOF.
+    private sealed class SocketAliasAttachment(AdbSocketClient owner, TcpClient selected, AndroidDevice device, string daemon) : SrapAdbAttachment
+    {
+        private readonly CancellationTokenSource stop = new();
+        private readonly TaskCompletionSource<bool> ready = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private TcpClient? pending = selected;
+        private Task? watch;
+        private Task? cleanup;
+        private int lost;
+        internal override bool IsConnected => Volatile.Read(ref lost) == 0 && ready.Task.IsCompletedSuccessfully && ready.Task.Result;
+        internal override event Action? Disconnected;
+
+        internal async Task StartAsync(CancellationToken token)
+        {
+            watch = WatchAsync();
+            if (!await ready.Task.WaitAsync(TimeSpan.FromSeconds(5), token).ConfigureAwait(false) || !IsConnected)
+                throw new SrapException("stale_session");
+        }
+
+        private async Task WatchAsync()
+        {
+            try
+            {
+                await owner.TrackDevicesAsync(devices =>
+                {
+                    bool present = devices.Count(d => d.ConnectionTarget == device.ConnectionTarget) == 1
+                        && devices.Any(d => d.ConnectionTarget == device.ConnectionTarget && d.Serial == device.Serial && d.State == "device");
+                    if (!present) Lost();
+                    else ready.TrySetResult(true);
+                }, stop.Token, daemon).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is IOException or SocketException or OperationCanceledException or ObjectDisposedException) { }
+            finally { Lost(); }
+        }
+
+        private void Lost()
+        {
+            if (Interlocked.Exchange(ref lost, 1) != 0) return;
+            ready.TrySetResult(false);
+            Disconnected?.Invoke();
+        }
+
+        protected override async Task<Stream> OpenLoopbackAsync(string service, CancellationToken token)
+        {
+            var client = Interlocked.Exchange(ref pending, null) ?? throw new SrapException("stale_session");
+            try
+            {
+                var stream = client.GetStream();
+                using var abort = RegisterSocketAbort(client, token);
+                await SendRequestAsync(stream, service, token).ConfigureAwait(false);
+                await ReadStatusAsync(stream, token).ConfigureAwait(false);
+                return new OwnedNetworkStream(client, stream);
+            }
+            catch { client.Dispose(); throw; }
+        }
+
+        public override ValueTask DisposeAsync()
+        {
+            lock (this) return new(cleanup ??= CloseAsync());
+        }
+
+        private async Task CloseAsync()
+        {
+            stop.Cancel();
+            Interlocked.Exchange(ref pending, null)?.Dispose();
+            try { if (watch != null) await watch.ConfigureAwait(false); }
+            finally { stop.Dispose(); }
+        }
+    }
+
     private async Task<Stream> OpenDeviceStreamAsync(string serial, string service, CancellationToken token)
     {
         ArgumentException.ThrowIfNullOrEmpty(serial);

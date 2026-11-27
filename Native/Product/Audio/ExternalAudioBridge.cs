@@ -360,7 +360,7 @@ internal sealed class ExternalAudioBridge : IDisposable
         if (phone == null) return [];
         var source = menuTarget?.ExternalSourceId is { } sourceId ? phone.Sources.FindSource(sourceId) : null;
         if (menuTarget is { IsExternal: true } && source == null && _tryGetAirPlay()?.Source?.Id != menuTarget.ExternalSourceId) return [];
-        var devices = phone.Connections.OnlineDevices.Where(d => !d.IsApp).ToArray();
+        var devices = phone.Connections.OnlineDevices.Where(d => phone.Operations.CanPlayPcm(d) && (source == null || !d.IsApp)).ToArray();
         var list = new List<Endpoint>();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var aliases = menuTarget != null || includeCurrent ? ConfigService.Load().DeviceNames : null;
@@ -412,7 +412,7 @@ internal sealed class ExternalAudioBridge : IDisposable
             return (false, -1, L10n.T("Phone.Err.InvalidPhoneOutputDevice"));
         var phone = _getPhone();
         var connected = phone.Connections.ResolveKey(phoneKey);
-        if (connected == null || connected.IsApp)
+        if (connected == null || !phone.Operations.CanPlayPcm(connected))
             return (false, -1, L10n.T("Phone.Err.PhoneOffline"));
         var result = phone.Pc.RouteProcess(pid, targetDeviceId, connected, silenceLocal);
         if (result.Success) _onChanged();

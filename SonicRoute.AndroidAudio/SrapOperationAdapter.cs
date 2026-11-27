@@ -4,12 +4,19 @@ namespace SonicRoute.AndroidAudio;
 
 // The single operation port routes supported calls on the attachment already admitted
 // by AndroidConnectionManager. A selector must never fall back to ADB on a failed App call.
-internal sealed class SrapOperationAdapter(AdbOperationAdapter adb, SrapPhoneTransport app) : IPhoneOperationPort
+internal sealed class SrapOperationAdapter(AdbOperationAdapter adb, SrapPhoneTransport app, Func<AndroidDevice, bool>? isCurrent = null) : IPhoneOperationPort
 {
-    private SrapSession Require(AndroidDevice device) => app.Session(device) ?? throw new SrapException("stale_session");
-    private bool Allows(AndroidDevice device, string id) => app.Session(device)?.Capabilities.Allows(id) == true;
+    private SrapSession? Selected(AndroidDevice device) => isCurrent?.Invoke(device) == false ? null : app.Session(device);
+    private SrapSession Require(AndroidDevice device) => Selected(device) ?? throw new SrapException("stale_session");
+    private bool Allows(AndroidDevice device, string id) => Selected(device)?.Capabilities.Allows(id) == true;
     public bool CanListApps(AndroidDevice device) => device.IsApp ? Allows(device, "catalog.apps") : adb.CanListApps(device);
     public bool CanListOutputs(AndroidDevice device) => device.IsApp ? Allows(device, "audio.devices") : adb.CanListOutputs(device);
+    public bool CanPlayPcm(AndroidDevice device) => device.IsApp ? Selected(device)?.SupportsPcm == true : adb.CanPlayPcm(device);
+    public AppCapturePermission? AppCapture(AndroidDevice device) => device.IsApp ? Selected(device)?.Capabilities.Capture : null;
+    public bool CanViewSharedScreen(AndroidDevice device) => device.IsApp && Selected(device)?.ScreenGrant != null;
+    public bool NeedsScreenConsent(AndroidDevice device) => device.IsApp && Selected(device)?.Capabilities.Entries
+        .GetValueOrDefault("display.mirror") is { Scope: "one_projection", State: "needs_authorization" };
+    public Task ViewSharedScreenAsync(AndroidDevice device, string title, CancellationToken token) => Require(device).ViewScreenAsync(title, token);
     public bool CanControlVolume(AndroidDevice device) => device.IsApp && Allows(device, "volume.device");
     public bool CanTestRoute(AndroidDevice device) => CanListOutputs(device) && device.IsApp
         && Allows(device, "audio.play") && Allows(device, "audio.route.owned");
@@ -17,7 +24,43 @@ internal sealed class SrapOperationAdapter(AdbOperationAdapter adb, SrapPhoneTra
     public async Task<IReadOnlyList<AndroidApp>> AppsAsync(AndroidDevice device, CancellationToken token, IReadOnlyList<string>? packages = null)
     {
         if (!device.IsApp) return await adb.AppsAsync(device, token, packages).ConfigureAwait(false);
-        var result = await Require(device).RequestAsync("catalog.list", "catalog.apps", new(), token).ConfigureAwait(false);
+        var session = Require(device);
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token, session.Token);
+        deadline.CancelAfter(TimeSpan.FromSeconds(10));
+        JsonElement result;
+        try
+        {
+            while (true)
+            {
+                deadline.Token.ThrowIfCancellationRequested();
+                if (!ReferenceEquals(Selected(device), session)) throw new SrapException("stale_session");
+                var snapshot = session.Capabilities;
+                if (snapshot.Entries.GetValueOrDefault("catalog.apps") is not { State: "unavailable", Reason: "catalog_loading" })
+                {
+                    try
+                    {
+                        result = await session.RequestAsync("catalog.list", "catalog.apps", new(), deadline.Token).ConfigureAwait(false);
+                        break;
+                    }
+                    catch (SrapException ex) when (ex is { Code: "busy", WireReason: "catalog_loading" }) { }
+                    catch (SrapException ex) when (ex.Code == "unsupported" && session.Capabilities.Revision != snapshot.Revision) { continue; }
+                }
+                var changed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+                void Wake() => changed.TrySetResult();
+                session.CapabilitiesChanged += Wake;
+                try
+                {
+                    if (session.Capabilities.Revision == snapshot.Revision)
+                        await changed.Task.WaitAsync(deadline.Token).ConfigureAwait(false);
+                }
+                finally { session.CapabilitiesChanged -= Wake; }
+            }
+        }
+        catch (OperationCanceledException) when (!token.IsCancellationRequested)
+        {
+            throw new SrapException(session.Token.IsCancellationRequested ? "stale_session" : "timeout");
+        }
+        if (!ReferenceEquals(Selected(device), session)) throw new SrapException("stale_session");
         var apps = new List<AndroidApp>();
         if (!result.TryGetProperty("apps", out var items) || items.ValueKind != JsonValueKind.Array) throw new SrapException("invalid_argument");
         foreach (var item in items.EnumerateArray().Take(1000))
@@ -73,12 +116,31 @@ internal sealed class SrapOperationAdapter(AdbOperationAdapter adb, SrapPhoneTra
     public bool CanWatchMedia(AndroidDevice device) => device.IsApp ? Allows(device, "media.control") : adb.CanWatchMedia(device);
     public IPhoneMediaSession OpenMediaSession(AndroidDevice device) =>
         device.IsApp ? new SrapMediaClient(app) : adb.OpenMediaSession(device);
-    public IAndroidClipboardClient OpenClipboard() => adb.OpenClipboard();
-    public IPhoneFileOperations OpenFiles(AndroidDevice device) => device.IsApp ? throw new SrapException("unsupported") : adb.OpenFiles(device);
-    public AndroidAudioSession CreateCaptureSession(Func<AndroidDevice, AndroidStreamSettings> settings, Func<string, AndroidDevice?> resolvePhone) =>
-        adb.CreateCaptureSession(settings, key => resolvePhone(key) is { IsApp: false } device ? device : null);
+    public bool CanSyncClipboard(AndroidDevice device) => device.IsApp
+        ? app.Session(device)?.AllowsFocusedClipboard == true : adb.CanSyncClipboard(device);
+    public IAndroidClipboardClient OpenClipboard(AndroidDevice device) =>
+        device.IsApp ? new SrapClipboardClient(app) : adb.OpenClipboard(device);
+    public IPhoneFileOperations OpenFiles(AndroidDevice device) => device.IsApp ? new SrapFilesClient(Require(device)) : adb.OpenFiles(device);
+    public string? FileRoot(AndroidDevice device)
+    {
+        if (!device.IsApp) return adb.FileRoot(device);
+        try { return SrapFilesClient.Root(Require(device)); } catch (SrapException) { return null; }
+    }
+    public bool CanWriteFiles(AndroidDevice device) => !device.IsApp ? adb.CanWriteFiles(device) :
+        Selected(device)?.Capabilities.Entries.TryGetValue("files.transfer", out var cap) == true &&
+            cap.State == "available" && cap.Scope == "saf_tree" && cap.Limits?.GetValueOrDefault("write") == "true";
+    public AndroidAudioSession CreateCaptureSession(Func<AndroidDevice, AndroidStreamSettings> settings, Func<string, AndroidDevice?> resolvePhone)
+    {
+        var capture = adb.CreateCaptureSession(settings, key => resolvePhone(key) is { IsApp: false } device ? device : null);
+        capture.AppSession = Require;
+        return capture;
+    }
     public IVirtualDisplayClient CreateDisplay(Func<AndroidAudioSettingsStore> settings) => adb.CreateDisplay(settings);
     public AndroidPhonePcmPlayer CreatePlayback(AndroidDevice device, AndroidPcmSource pcm, string sink, CancellationToken token,
         Action<AndroidDevice, IReadOnlyList<AndroidOutputSink>> outputsObserved, CancellationToken attachment) => device.IsApp
-        ? throw new SrapException("unsupported") : adb.CreatePlayback(device, pcm, sink, token, outputsObserved, attachment);
+        ? new(pcm, token, attachment, ct => OpenAppPlaybackAsync(device, sink, ct, null))
+        : adb.CreatePlayback(device, pcm, sink, token, outputsObserved, attachment);
+
+    internal Task<IPhonePcmConnection> OpenAppPlaybackAsync(AndroidDevice device, string sink, CancellationToken token,
+        Action<string, int, string>? routed) => SrapPcmOutput.OpenAsync(Require(device), device, sink, token, routed);
 }

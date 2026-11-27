@@ -322,6 +322,9 @@ internal sealed class OutputVolumesPopupWindow : LayeredWindow
             string sliderId = $"ov.vol:{row.Id}";
             UiPrimitives.DrawVolumeSlider(g, _theme, _hit, sliderId, sliderRect,
                 row.Volume / 100f, 0f, row.Muted, showPeak: false, enabled: row.Available, compact: true);
+            if (_hit.AccessibilityEnabled)
+                _hit.DescribeVolume(sliderId, sliderRect, row.Name, row.Available, row.Available ? row.Volume : null,
+                    row.Id, SetAccessibleVolume);
         }
         _hit.PopClip();
         g.PopClip();
@@ -497,12 +500,14 @@ internal sealed class OutputVolumesPopupWindow : LayeredWindow
         Invalidate();
     }
 
-    private bool AdjustSlider(string id, int delta)
+    private void SetAccessibleVolume(string id, double value) => AdjustSlider(id, (int)Math.Round(value), absolute: true);
+
+    private bool AdjustSlider(string id, int value, bool absolute = false)
     {
         if (!id.StartsWith("ov.vol:", StringComparison.Ordinal) || !TryGetDeviceIndex(id.AsSpan(7), out int index)) return false;
         var row = _rows[index];
         if (!row.Available) return false;
-        row.Volume = Math.Clamp(row.Volume + delta, 0, 100);
+        row.Volume = Math.Clamp(absolute ? value : row.Volume + value, 0, 100);
         QueueDeviceVolume(row.Id, row.Volume);
         _onEndpointStateChanged?.Invoke(row.Id, row.Volume, null);
         Invalidate();

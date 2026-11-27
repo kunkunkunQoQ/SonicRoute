@@ -14,6 +14,7 @@ namespace SonicRoute.AndroidAudio;
 internal sealed record SrapCapabilitySnapshot(long Revision, IReadOnlyDictionary<string, SrapCapability> Entries)
 {
     internal bool Allows(string id) => Entries.TryGetValue(id, out var value) && value.State == "available";
+    internal AppCapturePermission? Capture { get; } = AppCapturePermission.Read(Entries);
 }
 
 internal sealed partial class SrapSession : IDisposable
@@ -33,6 +34,8 @@ internal sealed partial class SrapSession : IDisposable
     internal Task<string?> Completion { get; }
     internal event Action? CapabilitiesChanged;
     internal event Action? MediaChanged;
+    internal event Action<JsonElement>? StreamEvent;
+    internal event Action<string, long?>? RequestSent;
     internal CancellationToken Token => token;
     internal string PeerFingerprint { get; }
     internal SslProtocols Protocol { get; }
@@ -51,11 +54,43 @@ internal sealed partial class SrapSession : IDisposable
         Completion = ReadLoopAsync();
     }
 
-    internal async Task<JsonElement> RequestAsync(string op, string? capability, JsonObject parameters, CancellationToken cancel,
-        string? routeTarget = null)
+    internal Task<JsonElement> RequestAsync(string op, string? capability, JsonObject parameters, CancellationToken cancel,
+        string? routeTarget = null, Action? beforeWrite = null)
+        => routeTarget == null && beforeWrite == null &&
+            (op is "audio.devices.list" or "catalog.list" or "volume.get" or "display.next" ||
+             op == "media.get" && !parameters.ContainsKey("watchId"))
+            ? ReadWithFreshCapabilitiesAsync(op, capability, parameters, cancel)
+            : RequestOnceAsync(op, capability, parameters, cancel, routeTarget, beforeWrite);
+
+    private async Task<JsonElement> ReadWithFreshCapabilitiesAsync(string op, string? capability, JsonObject parameters, CancellationToken cancel)
+    {
+        long before = Capabilities.Revision;
+        try { return await RequestOnceAsync(op, capability, parameters, cancel, null, null).ConfigureAwait(false); }
+        catch (SrapException ex) when (ex is { Code: "stale_session", WireReason: "capability_revision_mismatch" })
+        {
+            var changed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            void OnChange() => changed.TrySetResult();
+            CapabilitiesChanged += OnChange;
+            try
+            {
+                if (Capabilities.Revision <= before)
+                {
+                    using var stop = CancellationTokenSource.CreateLinkedTokenSource(token, cancel);
+                    try { await changed.Task.WaitAsync(TimeSpan.FromSeconds(2), stop.Token).ConfigureAwait(false); }
+                    catch (TimeoutException) { throw new SrapException("stale_session", "capability_revision_mismatch"); }
+                }
+            }
+            finally { CapabilitiesChanged -= OnChange; }
+            return await RequestOnceAsync(op, capability, (JsonObject)parameters.DeepClone(), cancel, null, null).ConfigureAwait(false);
+        }
+    }
+
+    private async Task<JsonElement> RequestOnceAsync(string op, string? capability, JsonObject parameters, CancellationToken cancel,
+        string? routeTarget, Action? beforeWrite)
     {
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancel, token);
-        deadline.CancelAfter(TimeSpan.FromSeconds(6));
+        if (op != "display.next")
+            deadline.CancelAfter(TimeSpan.FromSeconds(op == "file.offer" ? 65 : op == "file.finish" ? 605 : 6));
         if (!await requestSlots.WaitAsync(0, deadline.Token).ConfigureAwait(false)) throw new SrapException("busy");
         string id = RequestId();
         var channel = Channel.CreateBounded<JsonElement>(new BoundedChannelOptions(2) { SingleReader = true, SingleWriter = true });
@@ -68,7 +103,7 @@ internal sealed partial class SrapSession : IDisposable
             await WriteAsync("request", new()
             {
                 ["op"] = op, ["capabilityRevision"] = current.Revision, ["params"] = parameters
-            }, id, deadline.Token).ConfigureAwait(false);
+            }, id, deadline.Token, beforeWrite).ConfigureAwait(false);
             sent = true;
             var body = await channel.Reader.ReadAsync(deadline.Token).ConfigureAwait(false);
             string? status = Text(body, "status");
@@ -107,13 +142,20 @@ internal sealed partial class SrapSession : IDisposable
         RequestAsync("volume.get", "volume.device", new() { ["scope"] = "system_media" }, token);
     internal Task<JsonElement> SetVolumeAsync(int percent, CancellationToken token) =>
         RequestAsync("volume.set", "volume.device", new() { ["scope"] = "system_media", ["percent"] = Math.Clamp(percent, 0, 100) }, token);
+    internal bool CanSetVolumeIndex => Capabilities.Entries.TryGetValue("volume.device", out var cap)
+        && cap.State == "available" && cap.Limits?.GetValueOrDefault("indexWrite") == "1";
+    internal Task<JsonElement> SetVolumeIndexAsync(int index, CancellationToken token)
+    {
+        if (!CanSetVolumeIndex) throw new SrapException("unsupported");
+        if (index < 0) throw new ArgumentOutOfRangeException(nameof(index));
+        return RequestAsync("volume.set", "volume.device", new() { ["scope"] = "system_media", ["streamIndex"] = index }, token);
+    }
     internal Task<JsonElement> SetTrackVolumeAsync(uint id, int percent, bool mute, CancellationToken token) =>
         RequestAsync("volume.set", "audio.play", new() { ["scope"] = "owned_track", ["streamId"] = id, ["trackGainPercent"] = percent, ["trackMuted"] = mute }, token);
 
     internal async Task<uint> StartTrackAsync(string target, CancellationToken token)
     {
-        long id = Interlocked.Add(ref nextStream, 2);
-        if (id > uint.MaxValue) throw new SrapException("busy");
+        uint id = AllocateStreamId();
         try
         {
             var result = await RequestAsync("audio.play.start", "audio.play", new() { ["streamId"] = id, ["targetKey"] = target }, token).ConfigureAwait(false);
@@ -142,10 +184,16 @@ internal sealed partial class SrapSession : IDisposable
         await WriteAsync("cancel", new() { ["streamId"] = id }, null, token).ConfigureAwait(false);
     }
 
-    private async Task WriteAsync(string type, JsonObject body, string? id, CancellationToken cancel)
+    private async Task WriteAsync(string type, JsonObject body, string? id, CancellationToken cancel, Action? beforeWrite = null)
     {
         await writeGate.WaitAsync(cancel).ConfigureAwait(false);
-        try { await SrapClient.WriteAsync(stream, type, body, cancel, id, sessionId).ConfigureAwait(false); }
+        try
+        {
+            beforeWrite?.Invoke();
+            if (type == "request" && RequestSent is { } trace && body["op"] is JsonValue op)
+                trace(op.GetValue<string>(), body["capabilityRevision"]?.GetValue<long>());
+            await SrapClient.WriteAsync(stream, type, body, cancel, id, sessionId).ConfigureAwait(false);
+        }
         catch { Dispose(); throw; } // A partially written TLS message cannot be safely resumed.
         finally { writeGate.Release(); }
     }
@@ -157,7 +205,14 @@ internal sealed partial class SrapSession : IDisposable
         {
             while (true)
             {
-                var message = await ReadAsync(stream, token, sessionError: false).ConfigureAwait(false);
+                var frame = await SrapProtocol.ReadAsync(stream, token).ConfigureAwait(false) ?? throw new EndOfStreamException();
+                if (frame.Type == SrapFrameType.Data)
+                {
+                    DeliverData(frame);
+                    continue;
+                }
+                using var document = SrapProtocol.ParseControl(frame);
+                var message = document.RootElement.Clone();
                 if (Text(message, "session") != sessionId) throw new SrapException("stale_session");
                 var body = Body(message);
                 switch (Text(message, "type"))
@@ -182,6 +237,7 @@ internal sealed partial class SrapSession : IDisposable
                         seq = next;
                         string? name = Text(body, "name");
                         if (name == "session.error") throw Error(body);
+                        StreamEvent?.Invoke(body);
                         if (name == "audio.routed") Publish(Text(body, "requestId"), body);
                         if (name == "media.changed") MediaChanged?.Invoke();
                         if (name == "alias.bind.proof") Volatile.Read(ref aliasExchange)?.Proof(body);

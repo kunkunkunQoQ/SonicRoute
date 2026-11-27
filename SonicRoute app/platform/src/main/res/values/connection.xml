@@ -1,0 +1,13 @@
+<resources>
+    <string name="connection_channel">SonicRoute PC connection</string>
+    <string name="connection_channel_summary">Connection status while PC access is enabled.</string>
+    <string name="connection_title">SonicRoute PC connection active</string>
+    <string name="connection_connected">Connected to %1$s</string>
+    <string name="connection_waiting">Waiting for Wi-Fi or LAN · %1$d trusted PCs</string>
+    <string name="connection_pairing">Pairing open on %1$s</string>
+    <string name="connection_listening">Listening on %1$s · Trusted PCs can reconnect</string>
+    <string name="connection_stopped">Stopped</string>
+    <string name="connection_stop">Stop connection</string>
+    <string name="local_audio_speaker">Phone speaker</string>
+    <string name="local_audio_follow">Follow system output</string>
+</resources>

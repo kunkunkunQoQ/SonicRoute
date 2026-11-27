@@ -1,0 +1,23 @@
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" style="@style/SonicRoute.Column">
+    <LinearLayout android:id="@+id/file_offer_box" style="@style/SonicRoute.Notice">
+    <TextView android:id="@+id/file_offer_text" style="@style/SonicRoute.Body" android:accessibilityLiveRegion="polite" />
+    <org.sonicroute.app.ActionStrip android:layout_width="match_parent" android:layout_height="wrap_content">
+    <Button android:id="@+id/file_offer_accept" style="@style/SonicRoute.Primary" android:text="@string/file_accept"  />
+    <Button android:id="@+id/file_offer_reject" style="@style/SonicRoute.ActionButton" android:text="@string/action_pair_reject"  />
+    </org.sonicroute.app.ActionStrip>
+    </LinearLayout>
+    <LinearLayout android:id="@+id/lan_pending_box" style="@style/SonicRoute.Notice">
+    <TextView android:id="@+id/lan_pending_text" style="@style/SonicRoute.Body" android:accessibilityLiveRegion="polite" />
+    <org.sonicroute.app.ActionStrip android:layout_width="match_parent" android:layout_height="wrap_content">
+    <Button android:id="@+id/btn_pair_confirm" style="@style/SonicRoute.Primary" android:text="@string/action_pair_confirm"  />
+    <Button android:id="@+id/btn_pair_reject" style="@style/SonicRoute.ActionButton" android:text="@string/action_pair_reject"  />
+    </org.sonicroute.app.ActionStrip>
+    </LinearLayout>
+    <LinearLayout android:id="@+id/alias_box" style="@style/SonicRoute.Notice">
+    <TextView android:id="@+id/alias_prompt" style="@style/SonicRoute.Body" android:accessibilityLiveRegion="polite" />
+    <org.sonicroute.app.ActionStrip android:layout_width="match_parent" android:layout_height="wrap_content">
+    <Button android:id="@+id/alias_allow" style="@style/SonicRoute.Primary" android:text="@string/alias_allow"  />
+    <Button android:id="@+id/alias_reject" style="@style/SonicRoute.ActionButton" android:text="@string/action_pair_reject"  />
+    </org.sonicroute.app.ActionStrip>
+    </LinearLayout>
+</LinearLayout>

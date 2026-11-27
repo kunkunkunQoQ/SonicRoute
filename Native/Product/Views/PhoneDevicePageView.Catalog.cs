@@ -19,13 +19,15 @@ internal sealed partial class PhoneDevicePageView
     private void DrawAppPin(D2dTarget g, UiThemePalette theme, UiRect bounds, AndroidApp app, bool retained, bool compact = false)
     {
         string id = "phone.pin:" + app.Package;
-        _hit.Add(id, bounds, UiCursorKind.Hand, L10n.T(retained ? "Phone.RemoveFromQuickPanel" : "Phone.AddToQuickPanel"));
+        string action = L10n.T(retained ? "Phone.RemoveFromQuickPanel" : "Phone.AddToQuickPanel");
+        _hit.Add(id, bounds, UiCursorKind.Hand, action);
+        _hit.Describe(id, app.Name + " · " + action, UiAccessibleRole.CheckBox, retained);
         if (_hit.IsHover(id)) g.FillRoundedRect(bounds, 8f, theme.NavHover);
         if (_hit.ShowFocus && _hit.FocusId == id) g.DrawRoundedRect(bounds, 8f, theme.Accent, 1f);
         float radius = compact ? 7f : 9f;
-        var ink = compact ? theme.TextSecondary : theme.Accent;
+        var ink = !compact && retained ? theme.Accent : theme.TextSecondary;
         g.DrawIcon(UiIcon.Pin, new UiRect(bounds.CenterX - radius, bounds.CenterY - radius, radius * 2f, radius * 2f),
-            ink.WithAlphaFraction(retained ? 1f : 0.55f), rotationDeg: retained ? 45f : 0f, filled: true);
+            ink, rotationDeg: retained ? 45f : 0f, filled: retained);
     }
 
     private void CloseCatalog()
@@ -101,6 +103,7 @@ internal sealed partial class PhoneDevicePageView
             var row = new UiRect(view.X, top + i * rowH - _scroll.Offset, view.Width - (_scroll.MaxOffset > 0.5f ? UiMetrics.ScrollBarWidth + 4f : 0f), rowH);
             string id = CatalogRow + app.Package;
             _hit.Add(id, row, UiCursorKind.Hand);
+            _hit.Describe(id, app.Name + " · " + app.Package, UiAccessibleRole.ListItem, _selectedCatalog.Contains(app.Package));
             if (_selectedCatalog.Contains(app.Package)) g.FillRoundedRect(row, 6f, theme.NavSelected);
             else if (_hit.IsHover(id)) g.FillRoundedRect(row, 6f, theme.NavHover);
             var icon = new UiRect(row.X + 6f, row.CenterY - 14f, 28f, 28f);

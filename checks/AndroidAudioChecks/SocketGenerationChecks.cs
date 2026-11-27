@@ -38,6 +38,8 @@ internal static partial class Program
                 }
                 Check(await Rejected(() => socket.RunShellAsync(previous.CommandTarget, "old-session", token)),
                     "a stale shell is rejected before rediscovery on the replacement daemon");
+                Check(await Rejected(() => adb!.CaptureAliasAttachmentAsync(previous, token)),
+                    "an alias proof cannot select a recycled transport id from a replacement daemon");
                 Check(await Rejected(() => socket.RemoveForwardAsync(previous.CommandTarget, "tcp:34001", token)),
                     "old forward cleanup is rejected before rediscovery on the replacement daemon");
                 var current = (await adb!.DevicesAsync(token)).Single();

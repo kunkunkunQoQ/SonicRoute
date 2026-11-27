@@ -1,0 +1,20 @@
+<resources>
+    <style name="Theme.SonicRoute" parent="android:style/Theme.Material.NoActionBar">
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+        <item name="android:statusBarColor">@color/sonic_background</item>
+        <item name="android:navigationBarColor">@color/sonic_surface</item>
+        <item name="android:colorAccent">@color/sonic_accent</item>
+        <item name="android:colorBackground">@color/sonic_background</item>
+        <item name="android:windowBackground">@color/sonic_background</item>
+        <item name="android:textColorPrimary">@color/sonic_ink</item>
+        <item name="android:textColorSecondary">@color/sonic_secondary</item>
+        <item name="android:alertDialogTheme">@style/Theme.SonicRoute.Dialog</item>
+    </style>
+    <style name="Theme.SonicRoute.Dialog" parent="android:style/Theme.Material.Dialog.Alert">
+        <item name="android:colorAccent">@color/sonic_accent</item>
+        <item name="android:colorBackgroundFloating">@color/sonic_surface</item>
+        <item name="android:textColorPrimary">@color/sonic_ink</item>
+        <item name="android:textColorSecondary">@color/sonic_secondary</item>
+    </style>
+</resources>

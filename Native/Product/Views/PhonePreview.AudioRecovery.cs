@@ -8,7 +8,7 @@ namespace SonicRoute.Native.Product;
 internal sealed partial class PhonePreview
 {
     private readonly object sourceRecoveryGate = new();
-    private readonly Dictionary<string, AndroidDevice> captureAttempts = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, (AndroidDevice Device, string? Grant)> captureAttempts = new(StringComparer.Ordinal);
     private Task sourceRecovery = Task.CompletedTask;
     private bool sourceRecoveryRunning, sourceRecoveryPending, sourceRoutesChanged;
     private readonly object wirelessWatchGate = new();
@@ -64,8 +64,8 @@ internal sealed partial class PhonePreview
     {
         if (Discovery.CurrentDevices == null) return;
         await Sources.SuspendUnavailableAsync(Connections.IsCurrent).ConfigureAwait(false);
-        foreach (var (key, device) in captureAttempts.ToArray())
-            if (!Connections.IsCurrent(device)) captureAttempts.Remove(key);
+        foreach (var (key, attempt) in captureAttempts.ToArray())
+            if (!Connections.IsCurrent(attempt.Device)) captureAttempts.Remove(key);
 
         var saved = Settings.ExternalAudio;
         var legacy = Settings.GetSavedSources();
@@ -114,10 +114,14 @@ internal sealed partial class PhonePreview
     private async Task ResumeCaptureAsync(string key, AndroidDevice online, AndroidApp app, string?[] outputs)
     {
         token.ThrowIfCancellationRequested();
+        var grant = online.IsApp ? Operations.AppCapture(online) : null;
+        if (online.IsApp && (grant?.Package != app.Package
+            || !outputs.Contains(AndroidAudioSession.SourcePhoneOutputId))) return;
         if (Sources.Sources.Any(s => AndroidDeviceIdentity.Matches(s.Device, online)
             && (s.App.Package == app.Package || s.App.IsDeviceAudio || app.IsDeviceAudio))) return;
-        if (captureAttempts.TryGetValue(key, out var attempted) && AndroidDeviceIdentity.SameTransport(attempted, online)) return;
-        captureAttempts[key] = online;
+        if (captureAttempts.TryGetValue(key, out var attempted) && AndroidDeviceIdentity.SameTransport(attempted.Device, online)
+            && attempted.Grant == grant?.Grant) return;
+        captureAttempts[key] = (online, grant?.Grant);
         try { await Sources.ResumeAsync(online, app, ExternalAudioBridge.ResolveAvailableOutputs(outputs)).ConfigureAwait(false); }
         catch (OperationCanceledException) { }
         catch (Exception error) { ExceptionDiagnostics.Record("NativePhone.Resume", error); }

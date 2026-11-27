@@ -1,0 +1,124 @@
+using System.Net;
+using System.Net.Sockets;
+using System.Security.Cryptography;
+using System.Text.Json;
+using System.Text.Json.Nodes;
+using SonicRoute.AndroidAudio;
+
+internal static partial class Program
+{
+    private sealed record BusinessVector(string Expected, JsonElement Meta, SrapFrame Frame, byte[] Wire);
+
+    private static async Task SrapBusinessVectorsAsync(string directory, string fixtures)
+    {
+        var vectors = new Dictionary<string, BusinessVector>(StringComparer.Ordinal);
+        foreach (string row in File.ReadLines(fixtures).Where(line => line.Length != 0 && !line.StartsWith('#')))
+        {
+            var fields = row.Split('|');
+            if (fields.Length != 5) throw new InvalidDataException("Invalid business fixture row.");
+            using var metadata = JsonDocument.Parse(fields[2]);
+            var meta = metadata.RootElement.Clone();
+            var bytes = Convert.FromHexString(fields[3]);
+            var wire = Convert.FromHexString(fields[4]);
+            using var input = new MemoryStream(wire);
+            var frame = await SrapProtocol.ReadAsync(input, CancellationToken.None) ?? throw new EndOfStreamException();
+            bool data = fields[1] == "data";
+            Check(frame.Type == (data ? SrapFrameType.Data : SrapFrameType.Control)
+                && frame.StreamId == (data ? meta.GetProperty("streamId").GetUInt32() : 0)
+                && input.Position == input.Length && frame.Payload.SequenceEqual(bytes) && SrapProtocol.Encode(frame).SequenceEqual(wire),
+                fields[0] + " decodes and re-encodes the exact shared wire bytes");
+            if (!data)
+            {
+                using var doc = SrapProtocol.ParseControl(frame);
+                var body = SrapClient.Body(doc.RootElement);
+                Check(SrapClient.Text(doc.RootElement, "type") == "request" && body.GetProperty("capabilityRevision").GetInt32() == 7
+                    && SrapClient.Text(body, "op") == SrapClient.Text(meta, "op")
+                    && JsonElement.DeepEquals(body.GetProperty("params"), meta.GetProperty("params")), fields[0] + " control parameters match the fixture");
+            }
+            vectors.Add(fields[0], new(fields[1], meta, frame, wire));
+        }
+        var screen = vectors["display.annexb"];
+        var assembler = new ScreenFrameAssembler();
+        assembler.Begin();
+        assembler.Append(screen.Frame.Payload.AsMemory(0, 3));
+        assembler.Append(screen.Frame.Payload.AsMemory(3));
+        var config = assembler.Complete(screen.Meta.GetProperty("size").GetInt32());
+        Check(screen.Expected == "data" && screen.Frame.StreamId % 2 == 0 && screen.Meta.GetProperty("seq").GetInt32() == 0
+            && screen.Meta.GetProperty("ptsUs").GetInt64() == 0 && screen.Meta.GetProperty("config").GetBoolean()
+            && !screen.Meta.GetProperty("key").GetBoolean() && config.Span.SequenceEqual(BuildTestBaselineH264_64x64().ConfigNal),
+            "the shared screen chunks reconstruct the existing decoder fixture's Annex B SPS and PPS");
+
+        Directory.CreateDirectory(directory);
+        using var identity = new SrapIdentity(directory);
+        using var signer = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        using var cert = SrapFixtureCertificate(signer);
+        using var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+        var ct = deadline.Token;
+        string parent = Guid.NewGuid().ToString("N"), pin = Convert.ToHexString(SHA256.HashData(signer.ExportSubjectPublicKeyInfo()));
+        var accepting = AcceptSrapFixtureAsync(listener, cert, identity.Fingerprint, parent, [
+            new JsonObject { ["id"] = "files.transfer", ["state"] = "available", ["scope"] = "saf_tree",
+                ["limits"] = new JsonObject { ["grant"] = "1", ["write"] = "false" } },
+            new JsonObject { ["id"] = "volume.device", ["state"] = "available", ["scope"] = "system_media",
+                ["limits"] = new JsonObject { ["indexWrite"] = "1" } }], ct);
+        using var session = await new SrapClient(identity).ConnectAsync((IPEndPoint)listener.LocalEndpoint, pin, ct);
+        using var peer = await accepting;
+        async Task<JsonElement> Read(string op)
+        {
+            var message = await SrapClient.ReadAsync(peer, ct);
+            if (SrapClient.Text(SrapClient.Body(message), "op") != op) throw new InvalidDataException("Expected " + op);
+            return message;
+        }
+        Task Reply(JsonElement message, JsonObject result) => SrapClient.WriteAsync(peer, "response",
+            new() { ["status"] = "done", ["result"] = result }, ct, SrapClient.Text(message, "id"), parent);
+
+        var file = vectors["file.binary"];
+        var files = new SrapFilesClient(session);
+        string folder = SrapFilesClient.Root(session) + "/" + string.Join('/', file.Meta.GetProperty("parent").EnumerateArray().Select(p => p.GetString()));
+        string name = file.Meta.GetProperty("name").GetString()!, destination = Path.Combine(directory, "download");
+        string digest = file.Meta.GetProperty("sha256").GetString()!;
+        long size = file.Meta.GetProperty("size").GetInt64();
+        var invalid = vectors["file.unsafe_name"];
+        bool denied = false;
+        try { await files.ReceiveAsync(folder, invalid.Meta.GetProperty("params").GetProperty("name").GetString()!, destination, ct); }
+        catch (SrapException error) when (error.Code == "invalid_argument") { denied = true; }
+        Check(invalid.Expected == "reject" && denied, "the receiving file adapter rejects the shared reserved name before requesting a file");
+        var receive = files.ReceiveAsync(folder, name, destination, ct);
+        var open = await Read("file.open");
+        var param = SrapClient.Body(open).GetProperty("params");
+        Check(file.Expected == "data" && file.Frame.StreamId % 2 == 1 && param.GetProperty("streamId").GetUInt32() == file.Frame.StreamId
+            && SrapClient.Text(param, "name") == name && JsonElement.DeepEquals(param.GetProperty("parent"), file.Meta.GetProperty("parent")),
+            "the SAF adapter requests the shared logical location and its own odd stream");
+        await Reply(open, new() { ["streamId"] = file.Frame.StreamId, ["size"] = size });
+        var chunk = await Read("file.chunk");
+        param = SrapClient.Body(chunk).GetProperty("params");
+        int count = file.Meta.GetProperty("count").GetInt32();
+        long offset = file.Meta.GetProperty("offset").GetInt64();
+        Check(param.GetProperty("streamId").GetUInt32() == file.Frame.StreamId && param.GetProperty("count").GetInt32() == count
+            && param.GetProperty("offset").GetInt64() == offset, "file DATA is requested at the golden offset and byte count");
+        await peer.WriteAsync(file.Wire, ct);
+        await Reply(chunk, new() { ["offset"] = offset, ["count"] = count });
+        await Reply(await Read("file.finish"), new() { ["name"] = name, ["size"] = size, ["sha256"] = digest });
+        var saved = await File.ReadAllBytesAsync(await receive, ct);
+        Check(saved.SequenceEqual(file.Frame.Payload) && Convert.ToHexString(SHA256.HashData(saved)) == digest,
+            "an independently reopened Windows file matches the shared binary and SHA-256");
+
+        var typed = vectors["volume.index"];
+        var expectedParams = typed.Meta.GetProperty("params");
+        int index = expectedParams.GetProperty("streamIndex").GetInt32();
+        var setting = session.SetVolumeIndexAsync(index, ct);
+        var request = await Read("volume.set");
+        var actualParams = SrapClient.Body(request).GetProperty("params");
+        Check(typed.Expected == "accept" && JsonElement.DeepEquals(actualParams, expectedParams), "the negotiated Windows volume setter emits the shared exact-index parameters");
+        foreach (var key in new[] { "volume.mixed", "volume.scope" })
+        {
+            var invalidVolume = vectors[key];
+            Check(invalidVolume.Expected == "reject" && !JsonElement.DeepEquals(actualParams, invalidVolume.Meta.GetProperty("params")),
+                key + " cannot be produced by the typed system volume setter");
+        }
+        await Reply(request, new() { ["scope"] = "system_media", ["streamIndex"] = index, ["minIndex"] = 0, ["maxIndex"] = 150 });
+        Check((await setting).GetProperty("streamIndex").GetInt32() == index && vectors.Count == 6, "all six shared file, screen and volume vectors were consumed");
+        Console.WriteLine($"PASS {_checks} SRAP business vector checks");
+    }
+}

@@ -47,6 +47,7 @@ public sealed class AndroidVirtualDisplayManager : IAsyncDisposable
 
     public Task<IVirtualDisplayClient> OpenAsync(AndroidDevice device, AndroidApp app, int x, int y)
     {
+        if (device.IsApp) throw new SrapException("unsupported");
         Entry entry;
         string id = AndroidDeviceIdentity.Key(device) + ":" + app.Package;
         lock (_gate)

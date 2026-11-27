@@ -47,14 +47,20 @@ internal static class SrapProtocol
 
     internal static byte[] Encode(SrapFrame frame)
     {
-        ValidateFrame(frame.Type, frame.StreamId, (uint)frame.Payload.Length);
         var buffer = new byte[HeaderSize + frame.Payload.Length];
-        "SRAP"u8.CopyTo(buffer);
-        buffer[4] = (byte)frame.Type;
-        BinaryPrimitives.WriteUInt32BigEndian(buffer.AsSpan(8), frame.StreamId);
-        BinaryPrimitives.WriteUInt32BigEndian(buffer.AsSpan(12), (uint)frame.Payload.Length);
+        WriteHeader(buffer, frame.Type, frame.StreamId, frame.Payload.Length);
         frame.Payload.CopyTo(buffer, HeaderSize);
         return buffer;
+    }
+
+    internal static void WriteHeader(Span<byte> buffer, SrapFrameType type, uint streamId, int length)
+    {
+        ValidateFrame(type, streamId, (uint)length);
+        "SRAP"u8.CopyTo(buffer);
+        buffer[4] = (byte)type;
+        buffer.Slice(5, 3).Clear();
+        BinaryPrimitives.WriteUInt32BigEndian(buffer[8..], streamId);
+        BinaryPrimitives.WriteUInt32BigEndian(buffer[12..], (uint)length);
     }
 
     private static void ValidateFrame(SrapFrameType type, uint streamId, uint length)
@@ -150,7 +156,8 @@ internal static class SrapProtocol
     private static string RequiredText(JsonElement element, string name)
     {
         string value = Required(element, name, JsonValueKind.String).GetString()!;
-        if (value.Length is 0 or > 128) throw new InvalidDataException($"Invalid SRAP field {name}.");
+        int limit = name == "scope" ? 265 : 128;
+        if (value.Length == 0 || value.Length > limit) throw new InvalidDataException($"Invalid SRAP field {name}.");
         return value;
     }
 

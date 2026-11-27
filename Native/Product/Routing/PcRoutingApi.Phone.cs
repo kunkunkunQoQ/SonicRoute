@@ -32,6 +32,7 @@ internal static partial class PcRoutingApi
         if (!IsPhoneOutputDevice(id)) return id;
         if (!AndroidOutputIdentity.TryParseDeviceId(id, out string key, out string sink)) return null;
         if (key.StartsWith("device:", StringComparison.Ordinal) && key.Length > 7) return id;
+        if (key.StartsWith("app:", StringComparison.Ordinal) && SrapInvite.IsFingerprint(key[4..])) return id;
         if (!key.StartsWith("endpoint:", StringComparison.Ordinal)) return null;
         var device = Phones?.ExistingPhone?.Connections.ResolveKey(key);
         return AndroidDeviceIdentity.StableKey(device) is { } stable ? AndroidOutputIdentity.FormatDeviceId(stable, sink) : null;
@@ -43,7 +44,7 @@ internal static partial class PcRoutingApi
         if (!AndroidOutputIdentity.TryParseDeviceId(id, out var key, out var sink) || Phones?.ExistingPhone is not { } phone)
             return null;
         var online = phone.Connections.ResolveKey(key);
-        if (online == null || online.IsApp || phone.Store.FindProfile(online) is not { } profile) return null;
+        if (online == null || !phone.Operations.CanPlayPcm(online) || phone.Store.FindProfile(online) is not { } profile) return null;
         if (AndroidOutputIdentity.IsPhoneCurrentOutput(id))
             return AndroidOutputIdentity.FormatDeviceId(AndroidDeviceIdentity.Key(online), AndroidOutputSink.Current.Key);
         var available = profile.OutputSinks.FirstOrDefault(s => string.Equals(s.Key, sink, StringComparison.OrdinalIgnoreCase));

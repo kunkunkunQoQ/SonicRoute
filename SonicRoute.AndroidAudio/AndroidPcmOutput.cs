@@ -7,8 +7,21 @@ using System.Text.Json;
 
 namespace SonicRoute.AndroidAudio;
 
+internal interface IPhonePcmConnection : IAsyncDisposable
+{
+    AndroidDevice Device { get; }
+    Stream Stream { get; }
+    Task<Exception> Completion { get; }
+    int RoutedType { get; }
+    event Action<Exception>? Failed;
+    Task WaitForRoutingAsync(CancellationToken token);
+    Task SwitchTargetAsync(string target, CancellationToken token);
+    void SetPaused(bool paused);
+    void Abort(Exception error);
+}
+
 /// <summary>One owned phone playback connection, shared by Windows loopback and incoming-phone renderers.</summary>
-internal sealed class AndroidAudioOutputConnection : IAsyncDisposable
+internal sealed class AndroidAudioOutputConnection : IPhonePcmConnection
 {
     private static readonly Encoding Utf8NoBom = new UTF8Encoding(false);
     private readonly AdbClient _adb;
@@ -239,7 +252,7 @@ internal sealed class AndroidAudioOutputConnection : IAsyncDisposable
         try { _pcmStream?.Dispose(); } catch { }
         try { Failed?.Invoke(error); } catch { }
     }
-    internal void Abort(Exception error) => Fail(error);
+    public void Abort(Exception error) => Fail(error);
 
     public async ValueTask DisposeAsync()
     {
@@ -282,7 +295,7 @@ internal sealed class AndroidPhonePcmPlayer : IPcmPlayer
 {
     private static readonly byte[] RouteSilence = new byte[960 * AndroidPcmSource.Channels * sizeof(short)];
     private readonly AndroidPcmSource _source;
-    private readonly AndroidAudioOutputConnection _output;
+    private readonly IPhonePcmConnection _output;
     private readonly CancellationTokenSource _lifetime = new();
     private readonly CancellationTokenSource _connectionLifetime;
     private readonly SemaphoreSlim _available = new(0, 1);
@@ -301,13 +314,17 @@ internal sealed class AndroidPhonePcmPlayer : IPcmPlayer
     public AndroidPhonePcmPlayer(AdbClient adb, AndroidDevice device, AndroidPcmSource source, string sinkKey, CancellationToken token,
         Action<AndroidDevice, IReadOnlyList<AndroidOutputSink>>? onOutputs = null, CancellationToken managementToken = default,
         AndroidOutputSwitchTiming? timing = null)
+        : this(source, token, managementToken, async ct => await AndroidAudioOutputConnection.OpenTimedAsync(
+            adb, device, sinkKey, ct, onOutputs, null, timing).ConfigureAwait(false)) { }
+
+    internal AndroidPhonePcmPlayer(AndroidPcmSource source, CancellationToken token, CancellationToken managementToken,
+        Func<CancellationToken, Task<IPhonePcmConnection>> open)
     {
         _source = source;
         _connectionLifetime = CancellationTokenSource.CreateLinkedTokenSource(token, managementToken);
         try
         {
-            _output = AndroidAudioOutputConnection.OpenTimedAsync(adb, device, sinkKey, _connectionLifetime.Token, onOutputs, null, timing)
-                .GetAwaiter().GetResult();
+            _output = open(_connectionLifetime.Token).GetAwaiter().GetResult();
             _output.Failed += OnFailure;
             _source.DataAvailable += Wake;
             _pump = Task.Run(PumpAsync);
@@ -333,7 +350,7 @@ internal sealed class AndroidPhonePcmPlayer : IPcmPlayer
         // Prime it with 20 ms of silence while the previous renderer still owns the PCM queue.
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token);
         deadline.CancelAfter(TimeSpan.FromSeconds(5));
-        await _output.Stream.WriteAsync(RouteSilence, deadline.Token).ConfigureAwait(false);
+        if (!Device.IsApp) await _output.Stream.WriteAsync(RouteSilence, deadline.Token).ConfigureAwait(false);
         await WaitForRoutingAsync(deadline.Token).ConfigureAwait(false);
     }
 

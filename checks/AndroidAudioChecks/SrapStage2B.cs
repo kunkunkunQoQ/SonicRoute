@@ -23,19 +23,20 @@ internal static partial class Program
 
         using var identity = new SrapIdentity(directory);
         using var signer = ECDsa.Create(ECCurve.NamedCurves.nistP256);
-        var request = new CertificateRequest("CN=SonicRoute Alias Fixture", signer, HashAlgorithmName.SHA256);
-        request.CertificateExtensions.Add(new X509EnhancedKeyUsageExtension(new OidCollection { new("1.3.6.1.5.5.7.3.1") }, false));
-        using var generated = request.CreateSelfSigned(DateTimeOffset.UtcNow.AddHours(-1), DateTimeOffset.UtcNow.AddDays(1));
-        byte[] pfx = generated.Export(X509ContentType.Pfx);
-        using var cert = X509CertificateLoader.LoadPkcs12(pfx, null, X509KeyStorageFlags.UserKeySet);
-        CryptographicOperations.ZeroMemory(pfx);
+        using var cert = SrapFixtureCertificate(signer);
         byte[] phonePin = SHA256.HashData(signer.ExportSubjectPublicKeyInfo());
         string pin = Convert.ToHexString(phonePin);
-        var adb = new AndroidDevice("fixture", "Same model", "device", false, "fixture", "usb-123")
+        var direct = new AndroidDevice("fixture", "Same model", "device", false, "fixture", "usb-123")
             { ConnectionTarget = AdbTransportTarget.CreateDirect("usb-123"), IdentityFingerprint = "fixture-proof" };
-        Check(AdbClient.SupportsAliasForward(adb) && !AdbClient.SupportsAliasForward(adb with { ConnectionTarget = null })
-            && !AdbClient.SupportsAliasForward(adb with { ConnectionTarget = AdbTransportTarget.CreateSocket("1", "test") }),
-            "only an owned ADB attachment enables the private forward");
+        Check(AdbClient.SupportsAliasForward(direct) && !AdbClient.SupportsAliasForward(direct with { ConnectionTarget = null })
+            && !AdbClient.SupportsAliasForward(direct with { ConnectionTarget = AdbTransportTarget.CreateSocket("1", "test") }),
+            "an unqualified ADB serial or mismatched transport id cannot open a proof socket");
+        await using var shared = new FakeAdbServer();
+        var socket = new AdbSocketClient(shared.EndPoint);
+        await using var client = new AdbClient(directory, socket);
+        var adb = (await client.DevicesAsync(default)).Single();
+        Check(AdbClient.SupportsAliasForward(adb) && AdbTransportTarget.TrySocketOwner(adb, out _),
+            "a verified daemon generation and exact external ADB transport id can open a proof socket");
         var statePath = Path.Combine(directory, "alias-" + Guid.NewGuid().ToString("N") + ".json");
         var store = new AndroidPhoneStore(statePath);
         store.RememberDevice(adb);
@@ -45,7 +46,7 @@ internal static partial class Program
         var discovery = new AndroidDeviceDiscovery(_ => Task.FromResult<IReadOnlyList<AndroidDevice>>([adb]));
         discovery.Publish([adb]);
         await using var transport = new SrapPhoneTransport(store, directory);
-        var manager = new AndroidConnectionManager(store, () => discovery, app: transport);
+        var manager = new AndroidConnectionManager(store, () => discovery, app: transport, adb: client);
         string appId = store.RegisterApp(pin, IPEndPoint.Parse("127.0.0.1:12345"), store.ManagementRevision).Id;
         store.Retain(new("example.app", "App", 0, ""));
         using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(35));
@@ -54,33 +55,8 @@ internal static partial class Program
         mainListener.Start();
         var endpoint = (IPEndPoint)mainListener.LocalEndpoint;
         string parent = Guid.NewGuid().ToString("N");
-        async Task<SslStream> AcceptHello(TcpListener listener, bool primary)
-        {
-            var socket = await listener.AcceptSocketAsync(ct);
-            var tls = new SslStream(new NetworkStream(socket, ownsSocket: true));
-            try
-            {
-                await tls.AuthenticateAsServerAsync(new SslServerAuthenticationOptions
-                {
-                    ServerCertificate = cert, ClientCertificateRequired = true, EnabledSslProtocols = SslProtocols.Tls12 | SslProtocols.Tls13,
-                    CertificateRevocationCheckMode = X509RevocationMode.NoCheck, AllowTlsResume = false,
-                    RemoteCertificateValidationCallback = (_, leaf, _, _) =>
-                    {
-                        using var key = (leaf as X509Certificate2)?.GetECDsaPublicKey();
-                        return key != null && SHA256.HashData(key.ExportSubjectPublicKeyInfo()).SequenceEqual(identity.Fingerprint);
-                    }
-                }, ct);
-                var hello = await SrapClient.ReadAsync(tls, ct);
-                await SrapClient.WriteAsync(tls, "hello", new() { ["protocol"] = SrapProtocol.Name, ["major"] = 1,
-                    ["minorMin"] = 0, ["minorMax"] = 0 }, ct, SrapClient.Text(hello, "id"));
-                if (primary)
-                    await SrapClient.WriteAsync(tls, "capabilities", new() { ["capabilityRevision"] = 1,
-                        ["entries"] = new JsonArray(new JsonObject { ["id"] = SrapSession.AliasCapability, ["state"] = "available" }) },
-                        ct, session: parent);
-                return tls;
-            }
-            catch { tls.Dispose(); throw; }
-        }
+        Task<SslStream> AcceptHello(TcpListener listener, bool primary) => AcceptSrapFixtureAsync(listener, cert, identity.Fingerprint,
+            primary ? parent : null, new JsonArray(new JsonObject { ["id"] = SrapSession.AliasCapability, ["state"] = "available" }), ct);
         var accept = AcceptHello(mainListener, true);
         using var session = await new SrapClient(identity).ConnectAsync(endpoint, pin, ct);
         using var main = await accept;
@@ -95,7 +71,13 @@ internal static partial class Program
             var ready = AcceptHello(aliasListener, false);
             long rev = store.LibraryRevision;
             int localPort = 0;
-            var binding = session.BindAdbAliasAsync(identity, pin, id, async (number, token) =>
+            Task binding;
+            if (scenario == "accepted")
+            {
+                shared.AliasListener = (IPEndPoint)aliasListener.LocalEndpoint;
+                binding = manager.BindAppAsync(id, adb, appId, app, true, ct);
+            }
+            else binding = session.BindAdbAliasAsync(identity, pin, id, async (number, token) =>
             {
                 Check(number == port, "challenge binds the selected remote port");
                 var remote = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
@@ -144,10 +126,18 @@ internal static partial class Program
             }
             else Check(error == null && store.Profiles.Count == 1 && store.Profile.Id == id && store.Profile.Name == "Preserved ADB"
                 && store.Profile.RetainedApps.Count == 2 && store.FindProfile(app)?.Id == id, "verified transaction merges pins while preserving ADB ID and name");
-            using var probe = new TcpClient();
-            bool released = false;
-            try { await probe.ConnectAsync(IPAddress.Loopback, localPort, ct); } catch (SocketException) { released = true; }
-            Check(released, "private IPv4 forward was removed after " + scenario);
+            if (scenario == "accepted")
+                Check(shared.Commands.Count(c => c == "tcp:" + port) == 1
+                    && shared.Requests.Contains("host:transport-id:" + adb.TransportId) && shared.Requests.Contains("host:track-devices-l")
+                    && !shared.Requests.Any(c => c.Contains("forward") || c.Contains("kill")),
+                    "normal binding uses one approved loopback service on the chosen shared transport and leaves the daemon's forwards alone");
+            else
+            {
+                using var probe = new TcpClient();
+                bool released = false;
+                try { await probe.ConnectAsync(IPAddress.Loopback, localPort, ct); } catch (SocketException) { released = true; }
+                Check(released, "private IPv4 forward was removed after " + scenario);
+            }
         }
         Check(!manager.IsCurrent(app), "old App-only attachment cannot run work after migration");
         transport.Close(appId);
@@ -156,19 +146,107 @@ internal static partial class Program
         using var server = await reconnect;
         var linked = transport.Admit(store.Profile, fresh);
         Check(manager.Resolve(adb) == adb, "both channels available uses ADB by default");
+        var unknownUid = store.Profile.RetainedApps.Single(a => a.Package == "example.app");
+        var verifiedApp = await manager.ResolveRetainedDisplayAppAsync(adb, unknownUid, (selected, package, _) =>
+            Task.FromResult<IReadOnlyList<AndroidApp>>(selected == adb && package == unknownUid.Package ? [unknownUid with { Uid = 10200 }] : []), ct);
+        Check(verifiedApp.Package == unknownUid.Package && verifiedApp.Uid == 10200,
+            "an App-only retained package obtains its actual UID from the exact bound ADB attachment before interactive launch");
+        bool staleCatalog = false;
+        try
+        {
+            await manager.ResolveRetainedDisplayAppAsync(adb, unknownUid, (_, _, _) =>
+            {
+                discovery.Publish([]);
+                return Task.FromResult<IReadOnlyList<AndroidApp>>([unknownUid with { Uid = 10200 }]);
+            }, ct);
+        }
+        catch (SrapException ex) when (ex.Code == "stale_session") { staleCatalog = true; }
+        discovery.Publish([adb]);
+        Check(staleCatalog, "a UID read completing after ADB loss cannot open the package");
         manager.SelectAppTransport(id, pin, true);
+        Check(manager.VerifiedAdbForDisplay(linked) == adb && manager.VerifiedAdbForDisplay(app) == null,
+            "the interactive-window switch resolves only the live, cryptographically linked ADB profile");
         Check(manager.Resolve(adb) == linked && manager.OnlineDevices.Count == 1 && AndroidDeviceIdentity.Key(linked) == AndroidDeviceIdentity.Key(adb)
             && new AndroidPhoneStore(statePath).Profile.PreferAppTransport, "App preference persists and both channels share the original output key");
         discovery.Publish([]);
+        Check(manager.VerifiedAdbForDisplay(linked) == null, "an offline ADB profile offers no interactive-window switch");
         Check(manager.Resolve(adb) == linked, "ADB loss keeps the linked App online");
         discovery.Publish([adb, adb with { ConnectionTarget = AdbTransportTarget.CreateDirect("usb-234"), TransportId = "usb-234" }]);
         Check(manager.Get(adb).State == AndroidManagedConnectionState.IdentityConflict, "ambiguous two-device evidence prohibits even preferred App fallback");
+        Check(manager.VerifiedAdbForDisplay(linked) == null, "ambiguous ADB devices offer no interactive-window switch");
         discovery.Publish([adb]);
         transport.RevokeTrust(id, pin);
         Check(manager.Resolve(adb) == adb && !manager.IsCurrent(linked) && !store.Profile.ManuallyDisconnected, "revoking App trust preserves independent ADB connectivity");
         manager.SelectAppTransport(id, pin, null);
         Check(new AndroidPhoneStore(statePath).Profile is { AppPublicKeySha256: null, PreferAppTransport: false }
             && store.Profile.Id == id, "explicit unlink forgets the local binding and keeps the ADB profile");
+        await using var lostServer = new FakeAdbServer();
+        var lostSocket = new AdbSocketClient(lostServer.EndPoint);
+        await using var lostClient = new AdbClient(directory, lostSocket);
+        var selected = (await lostClient.DevicesAsync(ct)).Single();
+        await using var lease = await lostClient.CaptureAliasAttachmentAsync(selected, ct);
+        var gone = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        lease.Disconnected += () => gone.TrySetResult();
+        lostServer.EnqueueTrackUpdate("fake-usb-1\tdevice model:Fake_Phone transport_id:8\n");
+        await gone.Task.WaitAsync(ct);
+        bool rejected = false;
+        try { await using var _ = await lease.OpenForwardAsync(1, ct); }
+        catch (SrapException e) when (e.Code == "stale_session") { rejected = true; }
+        Check(rejected && !lease.IsConnected && !lostServer.Commands.Any(cmd => cmd.StartsWith("tcp:")),
+            "a replacement transport id on the same serial retires the binding without opening another device");
         Console.WriteLine($"PASS {_checks} SRAP alias checks");
+    }
+
+    private static async Task SrapLiveAliasAsync(string directory, string transportId, string preference)
+    {
+        if (!ulong.TryParse(transportId, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture,
+            out ulong number) || number == 0) throw new ArgumentException("A numeric, current ADB transport ID is required.");
+        bool keepAdb = preference switch { "keep-adb" => true, "keep-app" => false, _ => throw new ArgumentException("Choose keep-adb or keep-app for setting conflicts.") };
+        string path = Path.Combine(directory, "android-phone.json");
+        if (!File.Exists(path)) throw new FileNotFoundException("The existing paired Native Full profile is required.", path);
+        var store = new AndroidPhoneStore(path);
+        var settings = new AndroidAudioSettingsStore(Path.Combine(directory, "android-audio.json"));
+        await using var adb = new AdbClient(directory, new AdbSocketClient());
+        await using var lan = new SrapPhoneTransport(store, directory);
+        using var overall = new CancellationTokenSource(TimeSpan.FromMinutes(2));
+        var ct = overall.Token;
+        Console.WriteLine("STAGE verify_adb_transport " + transportId);
+        var raw = await adb.DevicesAsync(ct, deduplicate: false);
+        var device = raw.Single(d => d.TransportId == transportId && d.State == "device");
+        if (!AdbClient.SupportsAliasForward(device) || !AdbTransportTarget.TrySocketOwner(device, out _)
+            || AndroidConnectionManager.IsAmbiguous(device, raw) || store.IsRemoved(device) || store.HasConflictingIdentity(device))
+            throw new SrapException("identity_conflict");
+        if (store.FindProfile(device)?.AppPublicKeySha256 != null)
+        { Console.WriteLine("SKIP already linked; a new proof was not requested."); return; }
+        var paired = store.Profiles.Single(p => p.LastDevice?.IsApp == true && p.LastAppAddress != null && !p.AppTrustRevoked && !p.ManuallyDisconnected);
+        store.ObserveDevices([device]);
+        await store.FlushAsync();
+        var saved = store.FindProfile(device) ?? throw new SrapException("stale_session");
+        var discovery = new AndroidDeviceDiscovery(_ => Task.FromResult(raw));
+        discovery.Publish(raw);
+        var manager = new AndroidConnectionManager(store, () => discovery, settings.MigrateConnectionPreferences, lan, adb, settings.MigrateConnectionPreferences);
+        Console.WriteLine("STAGE trusted_reconnect");
+        var phone = await lan.ReconnectAsync(paired, ct);
+        var session = lan.Session(phone) ?? throw new SrapException("stale_session");
+        session.RequestSent += LogSrapRequest;
+        Console.WriteLine("STAGE request_phone_link_confirmation");
+        await manager.BindAppAsync(saved.Id, device, paired.Id, phone, keepAdb, ct);
+        var linked = new AndroidPhoneStore(path).Profiles.Single(p => p.Id == saved.Id);
+        Check(linked.AppPublicKeySha256 == session.PeerFingerprint && linked.LastDevice?.IsApp == false
+            && !store.Profiles.Any(p => p.Id == paired.Id), "real shared ADB and phone app proofs committed to the selected ADB profile");
+        Console.WriteLine("STAGE verify_linked_app_operations");
+        var connected = await lan.ReconnectAsync(linked, ct);
+        var fresh = lan.Session(connected) ?? throw new SrapException("stale_session");
+        fresh.RequestSent += LogSrapRequest;
+        manager.SelectAppTransport(linked.Id, phone.Serial, true);
+        try
+        {
+            Check(manager.Resolve(device) == connected && new AndroidPhoneStore(path).Profiles.Single(p => p.Id == linked.Id).PreferAppTransport,
+                "the linked app is selected with a saved preference");
+            var outputs = await fresh.RequestAsync("audio.devices.list", "audio.devices", new(), ct);
+            Check(outputs.GetProperty("outputs").GetArrayLength() > 0, "the selected linked app returned its negotiated audio devices");
+        }
+        finally { manager.SelectAppTransport(linked.Id, phone.Serial, linked.PreferAppTransport); }
+        Check(manager.Resolve(device) == device, "the original ADB transport is restored");
     }
 }

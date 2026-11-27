@@ -58,6 +58,8 @@ public static class AndroidMdnsDiscovery
     internal static IAsyncEnumerable<bool> WatchAppsAsync(CancellationToken token) =>
         WindowsServiceBrowse.WatchAsync(AppType + ".local", token);
 
+    internal static bool HasDiscoveryInterface() => SelectCandidateAddresses(null).Length != 0;
+
     // Keep the long-lived browse in the Windows DNS client. The app only sends
     // short-lived queries for endpoints after a browse notification.
     internal static async Task WatchConnectionsAsync(Func<AndroidMdnsService, Task> onService, CancellationToken token)

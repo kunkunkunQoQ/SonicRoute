@@ -1,0 +1,30 @@
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:id="@+id/panel_settings" style="@style/SonicRoute.Column" android:visibility="gone">
+    <TextView style="@style/SonicRoute.Title" android:text="@string/nav_settings" />
+    <TextView style="@style/SonicRoute.Heading" android:layout_marginTop="4dp" android:text="@string/appearance_title" />
+    <Button android:id="@+id/appearance_theme" style="@style/SonicRoute.BackendButton" android:drawableEnd="@drawable/ic_next" android:saveEnabled="false" />
+    <Button android:id="@+id/appearance_language" style="@style/SonicRoute.BackendButton" android:drawableEnd="@drawable/ic_next" android:saveEnabled="false" />
+    <View android:layout_width="match_parent" android:layout_height="1dp" android:layout_marginTop="8dp" android:background="@color/sonic_line" android:importantForAccessibility="no" />
+    <TextView style="@style/SonicRoute.Heading" android:text="@string/settings_playback" />
+    <Switch android:id="@+id/owned_audio_focus" style="@style/SonicRoute.Switch" android:saveEnabled="false" android:text="@string/owned_audio_focus" />
+    <TextView android:id="@+id/owned_focus_status" style="@style/SonicRoute.Body"  />
+    <View android:layout_width="match_parent" android:layout_height="1dp" android:layout_marginTop="8dp" android:background="@color/sonic_line" android:importantForAccessibility="no" />
+    <TextView style="@style/SonicRoute.Heading" android:text="@string/settings_sharing" />
+    <Switch android:id="@+id/media_share" style="@style/SonicRoute.Switch" android:saveEnabled="false" android:text="@string/media_share" />
+    <Button android:id="@+id/settings_media_access" style="@style/SonicRoute.ActionButton" android:text="@string/media_grant"  />
+    <Switch android:id="@+id/clipboard_share" style="@style/SonicRoute.Switch" android:saveEnabled="false" android:text="@string/clipboard_share" />
+    <TextView style="@style/SonicRoute.Body" android:text="@string/clipboard_scope" />
+    <Button android:id="@+id/select_shared_folder" style="@style/SonicRoute.BackendButton" android:text="@string/select_shared_folder" android:drawableStart="@drawable/ic_folder" android:drawableEnd="@drawable/ic_next" />
+    <TextView android:id="@+id/shared_folder_status" style="@style/SonicRoute.Body"  />
+    <Button android:id="@+id/revoke_shared_folder" style="@style/SonicRoute.ActionButton" android:text="@string/revoke_shared_folder"  />
+    <View android:layout_width="match_parent" android:layout_height="1dp" android:layout_marginTop="8dp" android:background="@color/sonic_line" android:importantForAccessibility="no" />
+    <TextView style="@style/SonicRoute.Heading" android:text="@string/settings_access" />
+    <Button android:id="@+id/backend_options" style="@style/SonicRoute.BackendButton" android:text="@string/access_method" android:drawableEnd="@drawable/ic_next" />
+    <TextView android:id="@+id/active_backend" style="@style/SonicRoute.Body" android:accessibilityLiveRegion="polite" />
+    <LinearLayout android:id="@+id/backend_list" style="@style/SonicRoute.Column" android:visibility="gone">
+    <Button android:id="@+id/backend_standard" style="@style/SonicRoute.BackendButton"  />
+    <Button android:id="@+id/backend_shizuku_shell" style="@style/SonicRoute.BackendButton"  />
+    <Button android:id="@+id/backend_shizuku_root" style="@style/SonicRoute.BackendButton"  />
+    <Button android:id="@+id/backend_direct_root" style="@style/SonicRoute.BackendButton"  />
+    <TextView android:id="@+id/backend_help" style="@style/SonicRoute.Body" android:text="@string/permission_hint"  />
+    </LinearLayout>
+</LinearLayout>

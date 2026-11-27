@@ -90,6 +90,7 @@ public sealed class D3D11VideoSurfaceRenderer : IDisposable
     private VideoColorMatrix _colorMatrix = VideoColorMatrix.Bt601Limited;
     private bool _hasHwFrame;
     private bool _hasSwFrame;
+    private int _videoPresentResult = int.MinValue;
     private bool _counted;
     private bool _disposed;
     private ShaderConstants _lastConstants;
@@ -124,6 +125,7 @@ public sealed class D3D11VideoSurfaceRenderer : IDisposable
     public int SwapHeight => _swapHeight;
     public bool IsMirrorMode => _isMirrorMode;
     public bool HasPresentedFrame => _hasHwFrame || _hasSwFrame;
+    internal bool VideoPresentSucceeded => Volatile.Read(ref _videoPresentResult) == 0;
 
     internal VideoRect ComputeRenderRect()
         => _isMirrorMode
@@ -355,9 +357,9 @@ public sealed class D3D11VideoSurfaceRenderer : IDisposable
             {
                 fixed (byte* basePtr = nv12Contiguous)
                 {
-                    UploadPlane(_swYTex.Handle, (nint)basePtr, stride, copyW, codedHeight);
+                    if (!UploadPlane(_swYTex.Handle, (nint)basePtr, stride, copyW, codedHeight)) return;
                     nint uvPtr = (nint)(basePtr + (nint)stride * codedHeight);
-                    UploadPlane(_swUvTex.Handle, uvPtr, stride, ((copyW + 1) / 2) * 2, uvHeight);
+                    if (!UploadPlane(_swUvTex.Handle, uvPtr, stride, ((copyW + 1) / 2) * 2, uvHeight)) return;
                 }
             }
 
@@ -373,14 +375,14 @@ public sealed class D3D11VideoSurfaceRenderer : IDisposable
         }
     }
 
-    private void UploadPlane(nint texture, nint srcPtr, int srcStride, int rowBytes, int rows)
+    private bool UploadPlane(nint texture, nint srcPtr, int srcStride, int rowBytes, int rows)
     {
         int hr = ComVtbl.Get<MapFn>(_context.Handle, 14)(_context.Handle, texture, 0, D3D11MapWriteDiscard, 0, out var mapped);
-        if (hr < 0) return;
+        if (hr < 0) return false;
         try
         {
             int copyBytes = Math.Min(rowBytes, (int)mapped.RowPitch);
-            if (copyBytes <= 0) return;
+            if (copyBytes <= 0) return false;
             unsafe
             {
                 byte* dstBase = (byte*)mapped.pData;
@@ -397,6 +399,7 @@ public sealed class D3D11VideoSurfaceRenderer : IDisposable
         {
             ComVtbl.Get<UnmapFn>(_context.Handle, 15)(_context.Handle, texture, 0);
         }
+        return true;
     }
 
     private void EnsureHardwareStagingTexture(int width, int height)
@@ -566,7 +569,8 @@ public sealed class D3D11VideoSurfaceRenderer : IDisposable
             }
         }
 
-        ComVtbl.Get<PresentFn>(_swapChain.Handle, 8)(_swapChain.Handle, 0, 0);
+        int hr = ComVtbl.Get<PresentFn>(_swapChain.Handle, 8)(_swapChain.Handle, 0, 0);
+        if (_hasHwFrame || _hasSwFrame) Volatile.Write(ref _videoPresentResult, hr);
     }
 
     private void UpdateConstants(float u0, float v0, float uScale, float vScale, int matrixMode)

@@ -326,7 +326,7 @@ public sealed class AndroidPhoneStore
             return state with { Profiles = Array.AsReadOnly(state.Profiles.Where(p => p.Id != appId)
                     .Select(p => p.Id == adbId ? merged : p).ToArray()),
                 SelectedId = state.SelectedId == appId ? adbId : state.SelectedId };
-        }, durable: true, management: true); }
+        }, durable: true, management: true, beforeCommit: validate); }
         catch { rollback?.Invoke(); throw; }
     }
 
@@ -681,7 +681,7 @@ public sealed class AndroidPhoneStore
         var profiles = state.Profiles.ToArray(); profiles[index] = next;
         return state with { Profiles = Array.AsReadOnly(profiles) };
     });
-    private void Change(Func<State, State> change, bool durable = false, bool management = false)
+    private void Change(Func<State, State> change, bool durable = false, bool management = false, Action? beforeCommit = null)
     {
         bool namesChanged;
         bool outputsChanged;
@@ -692,7 +692,7 @@ public sealed class AndroidPhoneStore
             if (durable)
             {
                 BackupBeforeMigration();
-                WriteState(next);
+                WriteState(next, beforeCommit);
             }
             namesChanged = !ReferenceEquals(next.Profiles, _state.Profiles)
                 && (next.Profiles.Count != _state.Profiles.Count
@@ -738,14 +738,14 @@ public sealed class AndroidPhoneStore
         if (File.Exists(FilePath) && !File.Exists(backup))
             AtomicFile.Write(backup, stream => { using var original = File.OpenRead(FilePath); original.CopyTo(stream); });
     }
-    private void WriteState(State state)
+    private void WriteState(State state, Action? beforeCommit = null)
     {
         if (_legacyFormat) BackupBeforeMigration();
         var saved = new PhoneFile(3, state.SelectedId, state.Profiles.Select(SaveProfile).ToArray(), state.RemovedDevices?.ToArray(),
             state.RemovedProfiles?.Select(SaveProfile).ToArray()) { AdditionalFields = state.AdditionalFields };
         Directory.CreateDirectory(Path.GetDirectoryName(FilePath)!);
         AtomicFile.BackupBeforeWrite(FilePath);
-        AtomicFile.Write(FilePath, stream => JsonSerializer.Serialize(stream, saved, AndroidSettingsJsonContext.Default.PhoneFile));
+        AtomicFile.Write(FilePath, stream => JsonSerializer.Serialize(stream, saved, AndroidSettingsJsonContext.Default.PhoneFile), beforeCommit);
         _legacyFormat = false;
     }
     private static SavedPhone SaveProfile(AndroidPhoneProfile profile) => new(profile.Id, profile.Name, profile.LastDevice,
