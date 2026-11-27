@@ -25,6 +25,7 @@ internal static partial class Program
         try
         {
             if (args is ["--srap-stage2a", var fixtureDirectory]) { await SrapStage2ACheckAsync(fixtureDirectory); return 0; }
+            if (args is ["--srap-stage2b", var aliasDirectory, var aliasVectors]) { await SrapAliasChecksAsync(aliasDirectory, aliasVectors); return 0; }
             if (args is ["--srap-live", var liveDirectory]) { await SrapLiveAsync(liveDirectory); return 0; }
             if (args is ["--srap-live-revoke", var revokeDirectory]) { await SrapLiveRevokeAsync(revokeDirectory); return 0; }
             if (args is ["--gemini-android-contract", var output, var vectors])
