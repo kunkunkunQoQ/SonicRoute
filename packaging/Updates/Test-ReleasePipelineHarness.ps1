@@ -4,8 +4,11 @@
 param([string]$AssetsDirectory,[string]$ReportPath)
 $ErrorActionPreference='Stop'
 . "$PSScriptRoot/Invoke-ReleasePipeline.ps1"
-$harnessRoot=Join-Path $root ('build-artifacts/release-harness-'+[guid]::NewGuid().ToString('N'))
+$harnessDirectory='build-artifacts/release-harness-'+[guid]::NewGuid().ToString('N')
+$harnessRoot=Join-Path $root $harnessDirectory
 New-Item -ItemType Directory -Path $harnessRoot -Force|Out-Null
+$untrackedSource="$harnessDirectory/untracked.cs"
+[IO.File]::WriteAllText((Join-Path $root $untrackedSource),'// Untracked source fixture.')
 if(!$AssetsDirectory){& "$PSScriptRoot/Build-PortableRelease.ps1" -OutputDirectory "$harnessRoot/candidate";$AssetsDirectory="$harnessRoot/candidate/assets"}
 $AssetsDirectory=[IO.Path]::GetFullPath($AssetsDirectory)
 $version=(Get-SonicRouteVersion).Version
@@ -31,7 +34,10 @@ function git {
     if($line -match 'rev-parse --abbrev-ref HEAD$'){return $mock.Branch}
     if($line -match 'rev-parse HEAD\^\{tree\}$'){return $mock.Tree}
     if($line -match 'rev-parse HEAD$'){return $mock.Head}
-    if($line -match 'status --porcelain --untracked-files=all$'){if($mock.Dirty){return '?? untracked.cs'};return}
+    if($line -match 'status --porcelain --untracked-files=all$'){if($mock.Dirty){return "?? $untrackedSource"};return}
+    if($line -match ' ls-files --others --exclude-standard$'){if($mock.Dirty){return $untrackedSource};return}
+    if($line -match ' diff --name-only --no-renames HEAD(?: --)?$'){return}
+    if($line -match ' diff --cached --raw --no-abbrev --no-renames HEAD(?: --)?$'){return}
     if($line -match 'ls-remote --tags '){if($mock.RemoteTag){return "$($mock.RemoteTag)`trefs/tags/v$version"};return}
     if($line -match 'tag -l '){return 'v1.24'}
     if($line -match ' log '){if($mock.LogFailure){$global:LASTEXITCODE=128;return};return $mock.Commits}
