@@ -1,6 +1,6 @@
 # 🎧 SonicRoute v2.00
 
-> **主题** 全新开始 · [📥 发布页](https://github.com/kunkunkunQoQ/SonicRoute/releases) · [📖 使用指南](https://github.com/kunkunkunQoQ/SonicRoute/wiki/01-%E4%BD%BF%E7%94%A8%E6%8C%87%E5%8D%97)
+> **发布日期** 2026-11-28 · **主题** 全新开始 · [📥 发布页](https://github.com/kunkunkunQoQ/SonicRoute/releases/tag/v2.00) · [📖 使用指南](https://github.com/kunkunkunQoQ/SonicRoute/wiki/01-%E4%BD%BF%E7%94%A8%E6%8C%87%E5%8D%97)
 
 ---
 
@@ -73,15 +73,15 @@
 
 ## 📦 资产下载与校验
 
-在 Windows 发行页选择对应版本，按下表文件名从 **Assets（附件）** 下载。手机端使用单独的 Android App 下载页。[Windows 发行页](https://github.com/kunkunkunQoQ/SonicRoute/releases)
+按下表选择 Windows 版型和处理器架构即可下载，也可在本页的 **Assets（附件）** 中找到相同文件。手机端使用单独的 Android App 下载页。
 
 | 版本 | 下载 | 说明 |
 | --- | --- | --- |
-| ⭐ **Full**（全功能版） | x64 `SonicRoute-v2.00-x64.exe` / ARM64（实验）`SonicRoute-v2.00-arm64.exe` | Windows 本机音频、Android 互联与 AirPlay。单文件 EXE，自带 .NET 10 Native AOT 运行时 |
-| 🪶 **Lite**（纯 PC 轻量版） | x64 `SonicRoute-v2.00-Lite-x64.exe` / ARM64（实验）`SonicRoute-v2.00-Lite-arm64.exe` | Windows 本机音频。单文件 EXE，自带 .NET 10 Native AOT 运行时 |
+| ⭐ **Full**（全功能版） | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v2.00/SonicRoute-v2.00-x64.exe) / [ARM64（实验）](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v2.00/SonicRoute-v2.00-arm64.exe) | Windows 本机音频、Android 互联与 AirPlay。单文件 EXE，自带 .NET 10 Native AOT 运行时 |
+| 🪶 **Lite**（纯 PC 轻量版） | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v2.00/SonicRoute-v2.00-Lite-x64.exe) / [ARM64（实验）](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v2.00/SonicRoute-v2.00-Lite-arm64.exe) | Windows 本机音频。单文件 EXE，自带 .NET 10 Native AOT 运行时 |
 | 🔄 **Microsoft Store** | [Full](https://apps.microsoft.com/detail/9NQZGRTPM1NT) / [Lite](https://apps.microsoft.com/detail/9N37LQ8SMLF6) | 两个版型分别通过 Microsoft Store 安装和更新。在架版本见各自的商店页面 |
-| 📋 **更新清单** | `SonicRoute-update.json` | Protocol 2 便携更新按版型、运行时和架构选包 |
-| 🔒 **校验散列** | `SHA256SUMS.txt` | 便携包与更新清单的 SHA-256 校验值 |
+| 📋 **更新清单** | [`SonicRoute-update.json`](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v2.00/SonicRoute-update.json) | Protocol 2 便携更新按版型、运行时和架构选包 |
+| 🔒 **校验散列** | [`SHA256SUMS.txt`](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v2.00/SHA256SUMS.txt) | 便携包与更新清单的 SHA-256 校验值 |
 | 📱 **SonicRoute Android App** | [Android App 下载页](https://github.com/kunkunkunQoQ/SonicRoute-App/releases) / [安装说明](https://github.com/kunkunkunQoQ/SonicRoute-App/blob/main/README.md#install) | Android 10 及以上。APK 将列在安卓发行页，当前可按安装说明从源码构建 |
 
 桌面版需要 Windows 10 2004（内部版本 19041）或更高版本，含 Windows 11。将选中应用的音频捕获并转发到其他本机输出需要 Windows 内部版本 20348 或更高。
@@ -94,4 +94,4 @@ To upgrade the same portable edition, exit it from the system tray and replace i
 
 ## 📜 许可证说明（GPL-3.0-only）
 
-本版采用 GPL-3.0-only。第三方组件沿用各自的许可证。[许可证全文](https://github.com/kunkunkunQoQ/SonicRoute/blob/master/LICENSE) · [第三方声明](https://github.com/kunkunkunQoQ/SonicRoute/blob/master/packaging/AndroidLab/THIRD-PARTY-NOTICES.md) · [与 v1.36 比较](https://github.com/kunkunkunQoQ/SonicRoute/compare/v1.36...master)
+本版采用 GPL-3.0-only。第三方组件沿用各自的许可证。[许可证全文](https://github.com/kunkunkunQoQ/SonicRoute/blob/v2.00/LICENSE) · [第三方声明](https://github.com/kunkunkunQoQ/SonicRoute/blob/v2.00/packaging/AndroidLab/THIRD-PARTY-NOTICES.md) · [与 v1.36 比较](https://github.com/kunkunkunQoQ/SonicRoute/compare/v1.36...v2.00)
