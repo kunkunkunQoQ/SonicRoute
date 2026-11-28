@@ -60,6 +60,9 @@ internal static partial class Program
         using var main = await accept;
         var app = transport.Admit(store.Profile, session);
         Check(manager.IsCurrent(app) && manager.IsCurrent(adb) && store.Profiles.Count == 2, "pair leaves two independent admitted profiles");
+        Check(!store.AppSmartVolumeEnabled && !store.IsSmartVolumeEnabled(app, AndroidApp.DeviceAudioPackage),
+            "a phone library without a shared App Smart Volume setting defaults to off");
+        store.SetAppSmartVolume(true);
         long seq = 0;
         foreach (var scenario in new[] { "wrong signature", "stale profile", "accepted" })
         {
@@ -144,6 +147,8 @@ internal static partial class Program
         using var server = await reconnect;
         var linked = transport.Admit(store.Profile, fresh);
         Check(manager.Resolve(adb) == adb, "both channels available uses ADB by default");
+        Check(store.IsSmartVolumeEnabled(linked, AndroidApp.DeviceAudioPackage),
+            "the App identity reconnects with the shared Smart Volume setting enabled after binding");
         var operations = new SrapOperationAdapter(new AdbOperationAdapter(client), transport, manager.IsCurrent);
         var pinned = new AndroidApp("example.saved", "Saved ADB app", 10080, "media");
         const string folder = "/sdcard/Download/ADB";
@@ -193,11 +198,18 @@ internal static partial class Program
         store.Retain(pinned with { Package = "example.app.only" });
         store.SetSmartVolume(pinned.Package, true);
         store.SetReceiveFolder(id, "/sdcard/Download/Other");
+        store.SetAppSmartVolume(false);
+        Check(!store.IsSmartVolumeEnabled(linked, pinned.Package)
+            && store.Profile.DisabledSmartVolumeApps.SequenceEqual([pinned.Package]),
+            "disabling App Smart Volume leaves the ADB per-package preference intact");
+        store.SetAppSmartVolume(true);
         await store.FlushAsync();
-        var preserved = new AndroidPhoneStore(statePath).Profile;
+        var reloaded = new AndroidPhoneStore(statePath);
+        var preserved = reloaded.Profile;
         Check(preserved.RetainedApps.Single() == pinned && preserved.DisabledSmartVolumeApps.Contains(pinned.Package)
-            && preserved.ReceiveFolder == folder && !store.IsSmartVolumeEnabled(linked, pinned.Package),
-            "App preference changes cannot overwrite the bound phone's ADB pins, gain or receive folder");
+            && preserved.ReceiveFolder == folder && reloaded.AppSmartVolumeEnabled
+            && reloaded.IsSmartVolumeEnabled(linked, pinned.Package) && reloaded.IsSmartVolumeEnabled(linked, AndroidApp.DeviceAudioPackage),
+            "reopening the library restores shared App Smart Volume and independent ADB pins, gain and receive folder");
         Check(manager.VerifiedAdbForDisplay(linked) == adb && manager.VerifiedAdbForDisplay(app) == null,
             "the interactive-window switch resolves only the live, cryptographically linked ADB profile");
         Check(manager.Resolve(adb) == linked && manager.OnlineDevices.Count == 1 && AndroidDeviceIdentity.Key(linked) == AndroidDeviceIdentity.Key(adb)
@@ -211,13 +223,16 @@ internal static partial class Program
         discovery.Publish([adb]);
         transport.RevokeTrust(id, pin);
         Check(manager.Resolve(adb) == adb && !manager.IsCurrent(linked) && !store.Profile.ManuallyDisconnected, "revoking App trust preserves independent ADB connectivity");
+        Check(!store.IsSmartVolumeEnabled(adb, pinned.Package) && store.IsSmartVolumeEnabled(adb, AndroidApp.DeviceAudioPackage),
+            "switching back to ADB reads the original package setting and the usual default for other ADB sources");
         store.SetSmartVolume(pinned.Package, true);
         Check(operations.CanWriteFiles(adb) && operations.CanSyncClipboard(adb) && store.IsSmartVolumeEnabled(adb, pinned.Package)
             && store.Profile.QuickPanelApps.Single() == pinned && store.Profile.ReceiveFolder == folder,
             "returning to ADB restores the saved ADB pane and editable smart volume");
         manager.SelectAppTransport(id, pin, null);
-        Check(new AndroidPhoneStore(statePath).Profile is { AppPublicKeySha256: null, PreferAppTransport: false }
-            && store.Profile.Id == id, "explicit unlink forgets the local binding and keeps the ADB profile");
+        var unlinked = new AndroidPhoneStore(statePath);
+        Check(unlinked.Profile is { AppPublicKeySha256: null, PreferAppTransport: false } && unlinked.Profile.Id == id
+            && unlinked.AppSmartVolumeEnabled, "explicit unlink keeps the ADB profile and the setting shared by App connections");
         await using var lostServer = new FakeAdbServer();
         var lostSocket = new AdbSocketClient(lostServer.EndPoint);
         await using var lostClient = new AdbClient(directory, lostSocket);

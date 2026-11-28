@@ -13,11 +13,12 @@ internal sealed class PcmOutputMirrors(Func<Predicate<IPcmPlayer>, Task> removeF
     private bool _smart;
     private AudioLatencyMode _latencyMode = AudioLatencyMode.Balanced;
     private string? _primaryDevice;
+    internal Func<string, (int VolumePercent, bool Muted)?>? InitialGain { private get; set; }
     internal string[] IdsSnapshot() => Volatile.Read(ref _outputs).Select(output => output.Id).ToArray();
-    private float EffectiveVolumeLocked(string id)
+    private float MirrorGainLocked(string id)
     {
-        if (!_gains.TryGetValue(id, out var gain)) return _volume;
-        return gain.Muted ? 0f : _volume * (gain.VolumePercent / 100f);
+        if (!_gains.TryGetValue(id, out var gain)) return 1f;
+        return gain.Muted ? 0f : gain.VolumePercent / 100f;
     }
     internal (int VolumePercent, bool Muted) GetGain(string id)
     {
@@ -28,11 +29,11 @@ internal sealed class PcmOutputMirrors(Func<Predicate<IPcmPlayer>, Task> removeF
         lock (_gate)
         {
             var prev = _gains.TryGetValue(id, out var existing) ? existing : (VolumePercent: 100, Muted: false);
-            var next = (VolumePercent: Math.Clamp(volumePercent ?? prev.VolumePercent, 0, 100), Muted: toggleMute ? !prev.Muted : (muted ?? prev.Muted));
+            var next = (VolumePercent: Math.Clamp(volumePercent ?? prev.VolumePercent, 0, AndroidPcmSource.MaximumMirrorVolumePercent),
+                Muted: toggleMute ? !prev.Muted : (muted ?? prev.Muted));
             _gains[id] = next;
-            float effective = next.Muted ? 0f : _volume * (next.VolumePercent / 100f);
             foreach (var output in _outputs)
-                if (Ids.Equals(output.Id, id)) output.Pcm.Volume = effective;
+                if (Ids.Equals(output.Id, id)) output.Pcm.MirrorGain = next.Muted ? 0f : next.VolumePercent / 100f;
             return next;
         }
     }
@@ -47,7 +48,7 @@ internal sealed class PcmOutputMirrors(Func<Predicate<IPcmPlayer>, Task> removeF
         lock (_gate)
         {
             _volume = volume; _smart = smart;
-            foreach (var output in _outputs) { output.Pcm.Volume = EffectiveVolumeLocked(output.Id); output.Pcm.SmartVolume = smart; }
+            foreach (var output in _outputs) { output.Pcm.Volume = volume; output.Pcm.SmartVolume = smart; }
         }
     }
     internal void SetHeaderGain(float gain)
@@ -105,19 +106,24 @@ internal sealed class PcmOutputMirrors(Func<Predicate<IPcmPlayer>, Task> removeF
                 var output = Array.Find(previous, o => Ids.Equals(o.Id, id));
                 if (output == null)
                 {
+                    var initial = InitialGain?.Invoke(id);
                     AudioLatencyMode latencyMode;
-                    float volume, headerGain;
+                    float volume, mirrorGain, headerGain;
                     bool smart;
                     lock (_gate)
                     {
+                        // A live gain edit can arrive while a new renderer is being prepared.
+                        if (initial is { } saved) _gains.TryAdd(id, saved);
                         latencyMode = _latencyMode;
-                        volume = EffectiveVolumeLocked(id);
+                        volume = _volume;
+                        mirrorGain = MirrorGainLocked(id);
                         smart = _smart;
                         headerGain = _headerGain;
                     }
                     var pcm = new AndroidPcmSource(latencyMode)
                     {
                         Volume = volume,
+                        MirrorGain = mirrorGain,
                         SmartVolume = smart,
                         HeaderGain = headerGain
                     };
@@ -167,7 +173,8 @@ internal sealed class PcmOutputMirrors(Func<Predicate<IPcmPlayer>, Task> removeF
             if (clearGains) _gains.Clear();
             foreach (var output in next)
             {
-                output.Pcm.Volume = EffectiveVolumeLocked(output.Id);
+                output.Pcm.Volume = _volume;
+                output.Pcm.MirrorGain = MirrorGainLocked(output.Id);
                 output.Pcm.SmartVolume = _smart;
                 output.Pcm.LatencyMode = _latencyMode;
                 output.Pcm.HeaderGain = _headerGain;

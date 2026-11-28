@@ -322,58 +322,76 @@ public static class AndroidMdnsDiscovery
         var requestedInstances = new HashSet<ServiceInstance>();
         var appRecords = new Dictionary<ServiceInstance, (ServiceRecord Record, IPAddress Address)>();
         var appText = new Dictionary<ServiceInstance, SrapAdvertisement>();
+        using var queryLifetime = CancellationTokenSource.CreateLinkedTokenSource(token);
         Task<SocketReceiveFromResult>? receive = null;
         int probeDelayMs = 1000;
-        while (true)
+        try
         {
-            foreach (byte[] query in queries)
-                await socket.SendToAsync(query, SocketFlags.None, endpoint, token).ConfigureAwait(false);
-            var nextProbe = Task.Delay(TimeSpan.FromMilliseconds(probeDelayMs), token);
-            probeDelayMs = Math.Min(probeDelayMs * 2, 2500);
-            while (!nextProbe.IsCompleted)
+            while (true)
             {
-                receive ??= socket.ReceiveFromAsync(buffer, SocketFlags.None, remoteTemplate, token).AsTask();
-                if (await Task.WhenAny(receive, nextProbe).ConfigureAwait(false) != receive) break;
-                var packet = await receive.ConfigureAwait(false); receive = null;
-                var source = (IPEndPoint)packet.RemoteEndPoint;
-                // Local mDNS relays can return the one-shot reply from a different UDP port.
-                var response = ReadResponse(buffer.AsSpan(0, packet.ReceivedBytes));
-                if (response == null) continue;
-                foreach (var (instance, info) in response.AppText)
+                foreach (byte[] query in queries)
+                    await socket.SendToAsync(query, SocketFlags.None, endpoint, token).ConfigureAwait(false);
+                var nextProbe = Task.Delay(TimeSpan.FromMilliseconds(probeDelayMs), queryLifetime.Token);
+                probeDelayMs = Math.Min(probeDelayMs * 2, 2500);
+                while (!nextProbe.IsCompleted)
                 {
-                    if (appText.Count < 32 || appText.ContainsKey(instance)) appText[instance] = info;
-                    if (appRecords.TryGetValue(instance, out var cached)
-                        && onService(cached.Record.ToService(cached.Address) with { App = info }, cached.Address)) return;
-                }
-                foreach (var record in response.Services)
-                {
-                    if (!types.Contains(record.Instance.Type, StringComparer.OrdinalIgnoreCase)) continue;
-                    var address = response.GetAddress(record.Target, source.Address, scope);
-                    if (record.Instance.Type == AppType)
+                    receive ??= socket.ReceiveFromAsync(buffer, SocketFlags.None, remoteTemplate, queryLifetime.Token).AsTask();
+                    if (await Task.WhenAny(receive, nextProbe).ConfigureAwait(false) != receive) break;
+                    var completed = receive;
+                    receive = null;
+                    var packet = await completed.ConfigureAwait(false);
+                    var source = (IPEndPoint)packet.RemoteEndPoint;
+                    // Local mDNS relays can return the one-shot reply from a different UDP port.
+                    var response = ReadResponse(buffer.AsSpan(0, packet.ReceivedBytes));
+                    if (response == null) continue;
+                    foreach (var (instance, info) in response.AppText)
                     {
-                        if (appRecords.Count < 32 || appRecords.ContainsKey(record.Instance)) appRecords[record.Instance] = (record, address);
-                        if (appText.TryGetValue(record.Instance, out var info))
-                        {
-                            if (onService(record.ToService(address) with { App = info }, address)) return;
-                        }
-                        else if (requestedInstances.Count < 32 && requestedInstances.Add(record.Instance))
-                            await socket.SendToAsync(BuildQuery(AppType, record.Instance.Name, txt: true), SocketFlags.None, endpoint, token).ConfigureAwait(false);
-                        continue;
+                        if (appText.Count < 32 || appText.ContainsKey(instance)) appText[instance] = info;
+                        if (appRecords.TryGetValue(instance, out var cached)
+                            && onService(cached.Record.ToService(cached.Address) with { App = info }, cached.Address)) return;
                     }
-                    if (onService(record.ToService(address), address)) return;
+                    foreach (var record in response.Services)
+                    {
+                        if (!types.Contains(record.Instance.Type, StringComparer.OrdinalIgnoreCase)) continue;
+                        var address = response.GetAddress(record.Target, source.Address, scope);
+                        if (record.Instance.Type == AppType)
+                        {
+                            if (appRecords.Count < 32 || appRecords.ContainsKey(record.Instance)) appRecords[record.Instance] = (record, address);
+                            if (appText.TryGetValue(record.Instance, out var info))
+                            {
+                                if (onService(record.ToService(address) with { App = info }, address)) return;
+                            }
+                            else if (requestedInstances.Count < 32 && requestedInstances.Add(record.Instance))
+                                await socket.SendToAsync(BuildQuery(AppType, record.Instance.Name, txt: true), SocketFlags.None, endpoint, token).ConfigureAwait(false);
+                            continue;
+                        }
+                        if (onService(record.ToService(address), address)) return;
+                    }
+                    foreach (var instance in response.Instances)
+                    {
+                        if (requestedInstances.Count >= 32 || !types.Contains(instance.Type, StringComparer.OrdinalIgnoreCase)
+                            || response.Services.Any(s => s.Instance == instance) || !requestedInstances.Add(instance)) continue;
+                        await socket.SendToAsync(BuildQuery(instance.Type, instance.Name), SocketFlags.None, endpoint, token).ConfigureAwait(false);
+                        if (instance.Type == AppType)
+                            await socket.SendToAsync(BuildQuery(instance.Type, instance.Name, txt: true), SocketFlags.None, endpoint, token).ConfigureAwait(false);
+                    }
                 }
-                foreach (var instance in response.Instances)
-                {
-                    if (requestedInstances.Count >= 32 || !types.Contains(instance.Type, StringComparer.OrdinalIgnoreCase)
-                        || response.Services.Any(s => s.Instance == instance) || !requestedInstances.Add(instance)) continue;
-                    await socket.SendToAsync(BuildQuery(instance.Type, instance.Name), SocketFlags.None, endpoint, token).ConfigureAwait(false);
-                    if (instance.Type == AppType)
-                        await socket.SendToAsync(BuildQuery(instance.Type, instance.Name, txt: true), SocketFlags.None, endpoint, token).ConfigureAwait(false);
-                }
+                token.ThrowIfCancellationRequested();
             }
-            token.ThrowIfCancellationRequested();
+        }
+        finally
+        {
+            // A probe timer can finish ahead of a receive during cancellation.
+            // Finish the outstanding operation before its socket is disposed.
+            queryLifetime.Cancel();
+            if (receive != null)
+            {
+                try { await receive.ConfigureAwait(false); }
+                catch (OperationCanceledException) when (queryLifetime.IsCancellationRequested) { }
+            }
         }
     }
+
     public static byte[] BuildQuery(string type, string? name) => BuildQuery(type, name, txt: false);
 
     private static byte[] BuildQuery(string type, string? name, bool txt)

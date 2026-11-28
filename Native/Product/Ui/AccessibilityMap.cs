@@ -36,8 +36,8 @@ internal sealed partial class UiHitMap
     }
 
     internal void DescribeVolume(string id, UiRect bounds, string targetName, bool enabled, int? percent,
-        string? subject, Action<string, double> setValue) =>
-        DescribeRange(id, bounds, L10n.T("Apps.Volume") + " · " + targetName, enabled, percent, 100, 1, 10, subject, setValue);
+        string? subject, Action<string, double> setValue, int maximum = 100) =>
+        DescribeRange(id, bounds, L10n.T("Apps.Volume") + " · " + targetName, enabled, percent, maximum, 1, 10, subject, setValue);
 
     internal void SetAccessibleRange(string id, double value)
     {

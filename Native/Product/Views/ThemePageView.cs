@@ -60,8 +60,13 @@ internal sealed class ThemePageView : IViewPage
 
         float card1H = 198f;
         float card2H = 148f;
-        float card3H = 266f + (_osdMoreExpanded ? 164f : 0f);
-        float card4H = 308f;
+        float headerWidth = contentRect.Width - UiMetrics.ScrollBarWidth - 44f;
+        var osdHeader = MeasureActionHeader(headerWidth, "Theme.OsdAppearanceSettings", "Th.OsdHint",
+            _actions.Host.IsOsdAdjusting ? "Exp.OsdAdjustCancel" : "Exp.OsdAdjust", "Exp.OsdReset");
+        var panelHeader = MeasureActionHeader(headerWidth, "Exp.PanelPosSection", "Th.PanelHint",
+            _actions.Host.IsPanelAdjusting ? "Exp.PanelPosAdjustCancel" : "Exp.PanelPosAdjust", "Exp.PanelPosReset");
+        float card3H = 266f + osdHeader.ExtraHeight + (_osdMoreExpanded ? 164f : 0f);
+        float card4H = 308f + panelHeader.ExtraHeight;
         float totalH = 33f + hintH + 20f + card1H + 14f + card2H + 14f + card3H + 14f + card4H + 16f;
 
         _scroll.ViewportHeight = contentRect.Height;
@@ -91,12 +96,12 @@ internal sealed class ThemePageView : IViewPage
 
         var card3 = new UiRect(contentRect.X, y, w, card3H);
         UiPrimitives.DrawCard(g, t, card3, 16f);
-        RenderOsdCard(g, t, hit, card3.Deflate(20f), cfg);
+        RenderOsdCard(g, t, hit, card3.Deflate(20f), cfg, osdHeader);
         y += card3H + 14f;
 
         var card4 = new UiRect(contentRect.X, y, w, card4H);
         UiPrimitives.DrawCard(g, t, card4, 16f);
-        RenderPanelCard(g, t, hit, card4.Deflate(20f), cfg);
+        RenderPanelCard(g, t, hit, card4.Deflate(20f), cfg, panelHeader);
 
         hit.PopClip();
         g.PopClip();
@@ -107,7 +112,10 @@ internal sealed class ThemePageView : IViewPage
     {
         var boxIn = box.Deflate(14f, 12f);
 
-        float previewW = MathF.Max(130f, (boxIn.Width - 14f) / 2.4f);
+        string pickLabel = L10n.T("Th.ChooseColor");
+        float pickW = MeasureActionButton(pickLabel, boxIn.Width);
+        float previewW = Math.Clamp((boxIn.Width - 14f) / 2.4f, 130f,
+            MathF.Max(130f, boxIn.Width - 14f - 162f - pickW));
         float leftW = boxIn.Width - previewW - 14f;
 
         g.DrawText(L10n.T("Th.CustomTitle"), new UiRect(boxIn.X, boxIn.Y, leftW, 20f), t.TextPrimary, 13.5f, 600);
@@ -125,9 +133,14 @@ internal sealed class ThemePageView : IViewPage
             _actions.StartInlineEdit("th.hex", _hexBoxRect, t.Accent.ToHexRgb(), null, (val, _) => CommitHex(val), mono: true);
         };
 
-        string pickLabel = L10n.T("Th.ChooseColor");
-        float pickW = MathF.Max(104f, D2dSharedContext.Instance.MeasureText(pickLabel, UiMetrics.FontFamily, 12f, 400, 160f, 34f, false).Width + 38f);
-        var pickBtn = new UiRect(_hexBoxRect.Right + 8f, rowY + 10f, MathF.Min(pickW, MathF.Max(80f, leftW - (_hexBoxRect.Right - boxIn.X) - 8f)), 34f);
+        float pickX = _hexBoxRect.Right + 8f;
+        float pickY = rowY + 10f;
+        if (pickX + pickW > boxIn.X + leftW)
+        {
+            pickX = boxIn.X;
+            pickY = swatch.Bottom + 4f;
+        }
+        var pickBtn = new UiRect(pickX, pickY, MathF.Min(pickW, boxIn.X + leftW - pickX), 34f);
         UiPrimitives.DrawSecondaryButton(g, t, hit, "th.chooseColor", pickBtn, pickLabel, fontSize: 12f, icon: UiIcon.Theme);
         _clicks["th.chooseColor"] = OpenColorPicker;
 
@@ -183,20 +196,48 @@ internal sealed class ThemePageView : IViewPage
         g.DrawText(L10n.T("St.OpacityHint"), new UiRect(inner.X + 36f, rowY + 40f, inner.Width - 36f, 20f), t.TextSecondary, 11.5f, 400);
     }
 
-    private void RenderOsdCard(D2dTarget g, UiThemePalette t, UiHitMap hit, UiRect inner, AppConfig cfg)
+    private readonly record struct ActionHeader(string Title, string Hint, string Adjust, string Reset,
+        float AdjustWidth, float ResetWidth, float ExtraHeight);
+
+    private static float MeasureActionButton(string label, float width) =>
+        MathF.Max(92f, MathF.Ceiling(D2dSharedContext.Instance.MeasureText(label, UiMetrics.FontFamily,
+            12f, 400, width, 36f, false).Width) + 42f);
+
+    private static ActionHeader MeasureActionHeader(float width, string titleKey, string hintKey, string adjustKey, string resetKey)
+    {
+        string title = L10n.T(titleKey), hint = L10n.T(hintKey);
+        string adjust = L10n.T(adjustKey), reset = L10n.T(resetKey);
+        float adjustWidth = MeasureActionButton(adjust, width), resetWidth = MeasureActionButton(reset, width);
+        var ctx = D2dSharedContext.Instance;
+        float titleWidth = ctx.MeasureText(title, UiMetrics.FontFamily, 16f, 600, width, 22f, false).Width;
+        float hintWidth = ctx.MeasureText(hint, UiMetrics.FontFamily, 11.5f, 400, width, 18f, false).Width;
+        float textWidth = 52f + MathF.Max(titleWidth, hintWidth);
+        float buttons = adjustWidth + resetWidth + 8f;
+        float extra = buttons > width ? 84f : textWidth + buttons + 10f > width ? 44f : 0f;
+        return new(title, hint, adjust, reset, MathF.Min(width, adjustWidth), MathF.Min(width, resetWidth), extra);
+    }
+
+    private static (UiRect Adjust, UiRect Reset) DrawActionHeader(D2dTarget g, UiThemePalette t, UiRect inner,
+        UiIcon icon, ActionHeader header)
+    {
+        float top = inner.Y + (header.ExtraHeight > 0f ? 46f : 2f);
+        bool separateRows = header.ExtraHeight > 44f;
+        float resetX = inner.Right - header.ResetWidth;
+        float adjustX = separateRows ? inner.Right - header.AdjustWidth : resetX - 8f - header.AdjustWidth;
+        var adjust = new UiRect(adjustX, top, header.AdjustWidth, 36f);
+        var reset = new UiRect(resetX, separateRows ? top + 40f : top, header.ResetWidth, 36f);
+        float textWidth = header.ExtraHeight > 0f ? inner.Width : adjust.X - inner.X - 10f;
+        DrawThemeCardHeader(g, t, new UiRect(inner.X, inner.Y, textWidth, 42f), icon, header.Title, header.Hint);
+        return (adjust, reset);
+    }
+
+    private void RenderOsdCard(D2dTarget g, UiThemePalette t, UiHitMap hit, UiRect inner, AppConfig cfg, ActionHeader header)
     {
         float y = inner.Y;
 
-        string adjLabel = L10n.T(_actions.Host.IsOsdAdjusting ? "Exp.OsdAdjustCancel" : "Exp.OsdAdjust");
-        string rstLabel = L10n.T("Exp.OsdReset");
-        float adjW = MathF.Max(92f, D2dSharedContext.Instance.MeasureText(adjLabel, UiMetrics.FontFamily, 12f, 400, 160f, 36f, false).Width + 32f);
-        float rstW = MathF.Max(108f, D2dSharedContext.Instance.MeasureText(rstLabel, UiMetrics.FontFamily, 12f, 400, 180f, 36f, false).Width + 32f);
-
-        var rstBtn = new UiRect(inner.Right - rstW, y + 2f, rstW, 36f);
-        var adjBtn = new UiRect(rstBtn.X - 8f - adjW, y + 2f, adjW, 36f);
-
-        UiPrimitives.DrawSecondaryButton(g, t, hit, "th.osd.adjust", adjBtn, adjLabel, fontSize: 12f, icon: UiIcon.Position, tooltip: L10n.T("Exp.OsdAdjustHint"));
-        UiPrimitives.DrawSecondaryButton(g, t, hit, "th.osd.reset", rstBtn, rstLabel, fontSize: 12f, icon: UiIcon.Reset, tooltip: L10n.T("Exp.OsdResetHint"));
+        var (adjBtn, rstBtn) = DrawActionHeader(g, t, inner, UiIcon.Monitor, header);
+        UiPrimitives.DrawSecondaryButton(g, t, hit, "th.osd.adjust", adjBtn, header.Adjust, fontSize: 12f, icon: UiIcon.Position, tooltip: L10n.T("Exp.OsdAdjustHint"));
+        UiPrimitives.DrawSecondaryButton(g, t, hit, "th.osd.reset", rstBtn, header.Reset, fontSize: 12f, icon: UiIcon.Reset, tooltip: L10n.T("Exp.OsdResetHint"));
         _clicks["th.osd.adjust"] = () =>
         {
             if (_actions.Host.IsOsdAdjusting) _actions.Host.CancelOsdAdjust();
@@ -204,9 +245,7 @@ internal sealed class ThemePageView : IViewPage
         };
         _clicks["th.osd.reset"] = ResetOsdSettings;
 
-        DrawThemeCardHeader(g, t, new UiRect(inner.X, y, MathF.Max(100f, adjBtn.X - inner.X - 10f), 42f),
-            UiIcon.Monitor, L10n.T("Theme.OsdAppearanceSettings"), L10n.T("Th.OsdHint"));
-        y += 56f;
+        y += 56f + header.ExtraHeight;
 
         g.DrawLine(inner.X, y, inner.Right, y, t.Border, 1f, roundCaps: false);
         y += 12f;
@@ -255,19 +294,13 @@ internal sealed class ThemePageView : IViewPage
         }
     }
 
-    private void RenderPanelCard(D2dTarget g, UiThemePalette t, UiHitMap hit, UiRect inner, AppConfig cfg)
+    private void RenderPanelCard(D2dTarget g, UiThemePalette t, UiHitMap hit, UiRect inner, AppConfig cfg, ActionHeader header)
     {
         float y = inner.Y;
 
-        string adjLabel = L10n.T(_actions.Host.IsPanelAdjusting ? "Exp.PanelPosAdjustCancel" : "Exp.PanelPosAdjust");
-        string rstLabel = L10n.T("Exp.PanelPosReset");
-        float adjW = MathF.Max(88f, D2dSharedContext.Instance.MeasureText(adjLabel, UiMetrics.FontFamily, 12f, 400, 150f, 36f, false).Width + 32f);
-        float rstW = MathF.Max(92f, D2dSharedContext.Instance.MeasureText(rstLabel, UiMetrics.FontFamily, 12f, 400, 150f, 36f, false).Width + 32f);
-        var rstBtn = new UiRect(inner.Right - rstW, y + 2f, rstW, 36f);
-        var adjBtn = new UiRect(rstBtn.X - 8f - adjW, y + 2f, adjW, 36f);
-
-        UiPrimitives.DrawSecondaryButton(g, t, hit, "th.panel.adjust", adjBtn, adjLabel, fontSize: 12f, icon: UiIcon.Position);
-        UiPrimitives.DrawSecondaryButton(g, t, hit, "th.panel.reset", rstBtn, rstLabel, fontSize: 12f, icon: UiIcon.Reset);
+        var (adjBtn, rstBtn) = DrawActionHeader(g, t, inner, UiIcon.Application, header);
+        UiPrimitives.DrawSecondaryButton(g, t, hit, "th.panel.adjust", adjBtn, header.Adjust, fontSize: 12f, icon: UiIcon.Position);
+        UiPrimitives.DrawSecondaryButton(g, t, hit, "th.panel.reset", rstBtn, header.Reset, fontSize: 12f, icon: UiIcon.Reset);
         _clicks["th.panel.adjust"] = () =>
         {
             if (_actions.Host.IsPanelAdjusting) _actions.Host.CancelPanelAdjust();
@@ -283,9 +316,7 @@ internal sealed class ThemePageView : IViewPage
             _actions.ShowNotice(L10n.T("Exp.PanelPosResetDone"));
         };
 
-        DrawThemeCardHeader(g, t, new UiRect(inner.X, y, MathF.Max(100f, adjBtn.X - inner.X - 10f), 42f),
-            UiIcon.Application, L10n.T("Exp.PanelPosSection"), L10n.T("Th.PanelHint"));
-        y += 56f;
+        y += 56f + header.ExtraHeight;
 
         g.DrawLine(inner.X, y, inner.Right, y, t.Border, 1f, roundCaps: false);
         y += 12f;

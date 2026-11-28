@@ -251,6 +251,12 @@ internal sealed partial class PhoneDevicePageView
                 return true;
             }
         }
+        if (id == "phone.app.smartvolume")
+        {
+            if (SelectedDeviceForTools is { IsApp: true })
+                host.Phone.Store.SetAppSmartVolume(!host.Phone.Store.AppSmartVolumeEnabled);
+            return true;
+        }
         if (_activeDevice is not { IsApp: true } device) return false;
         if (id == "phone.app.sound")
         {

@@ -2,5 +2,6 @@
   <PropertyGroup><DefineConstants>$(DefineConstants);SONICROUTE_NATIVE</DefineConstants></PropertyGroup>
   <ItemGroup>
     <Compile Include="../../SonicRoute/AutoRuleTemplates.cs;../../SonicRoute/AutoRuleService.cs;../../SonicRoute/AutoRuleScheduler.cs;../../SonicRoute/ExecutionHistoryRun.cs;../../SonicRoute/HotkeyActions.cs;../../SonicRoute/HotkeyService.cs;../Monitoring/ProcessTraceSubscription.cs" />
+    <Compile Include="../../SonicRoute/AutoRuleService.ExternalAudio.cs" Condition="'$(SonicRouteEdition)'=='Full'" />
   </ItemGroup>
 </Project>

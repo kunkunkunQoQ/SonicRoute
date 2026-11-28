@@ -83,6 +83,11 @@ internal sealed partial class SrapClient(SrapIdentity identity, SslProtocols ver
                 throw new SrapException("invalid_argument");
             return new(tls, session, SrapProtocol.ReadCapabilities(Body(initial)), minor);
         }
+        catch (InvalidDataException)
+        {
+            tls.Dispose();
+            throw new SrapException("invalid_argument");
+        }
         catch { tls.Dispose(); throw; }
     }
 

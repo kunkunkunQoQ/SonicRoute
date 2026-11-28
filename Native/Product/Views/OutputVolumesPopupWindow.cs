@@ -278,6 +278,9 @@ internal sealed class OutputVolumesPopupWindow : LayeredWindow
         }
 
         float rowW = _scroll.MaxOffset > 0.5f ? listRect.Width - UiMetrics.ScrollBarWidth - 4f : listRect.Width;
+        string defaultBadge = L10n.T("Qp.DefaultOutputBadge");
+        float badgeWidth = Math.Clamp(MathF.Ceiling(D2dSharedContext.Instance.MeasureText(defaultBadge, UiMetrics.FontFamily,
+            10f, 600, rowW, 17f, false).Width) + 12f, 42f, MathF.Max(42f, rowW * .45f));
         g.PushClip(listRect);
         _hit.PushClip(listRect);
         for (int i = 0; i < _rows.Count; i++)
@@ -291,14 +294,13 @@ internal sealed class OutputVolumesPopupWindow : LayeredWindow
             _hit.Add(setDefId, nameRect, UiCursorKind.Hand, row.Name);
 
             bool nameHot = _hit.IsHover(setDefId);
-            float textMaxW = rowW - (row.IsDefault ? 48f : 0f);
             if (row.IsDefault)
             {
                 g.FillEllipse(nameRect.X + 4f, nameRect.CenterY, 3.5f, 3.5f, _theme.Accent);
-                g.DrawText(row.Name, new UiRect(nameRect.X + 12f, nameRect.Y, MathF.Max(10f, textMaxW - 12f), nameRect.Height),
+                g.DrawText(row.Name, new UiRect(nameRect.X + 12f, nameRect.Y, MathF.Max(10f, rowW - badgeWidth - 18f), nameRect.Height),
                     nameHot ? _theme.Accent : _theme.TextPrimary, 12f, 600, UiTextAlign.Leading, UiVertAlign.Center);
-                var badgeRect = new UiRect(nameRect.Right - 42f, nameRect.CenterY - 8.5f, 42f, 17f);
-                UiPrimitives.DrawBadge(g, _theme, badgeRect, L10n.T("Qp.DefaultOutputBadge"), _theme.NavSelected, _theme.Accent, fontSize: 10f);
+                var badgeRect = new UiRect(nameRect.Right - badgeWidth, nameRect.CenterY - 8.5f, badgeWidth, 17f);
+                UiPrimitives.DrawBadge(g, _theme, badgeRect, defaultBadge, _theme.NavSelected, _theme.Accent, fontSize: 10f);
             }
             else
             {

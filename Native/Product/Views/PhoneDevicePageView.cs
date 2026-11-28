@@ -82,7 +82,7 @@ internal sealed partial class PhoneDevicePageView : IViewPage, IViewDockPage
     private string? _streamDeviceKey;
     private AndroidEncoderCatalog? _streamEncoders;
     private CancellationTokenSource? _encoderCts;
-    private bool _encoderFailed;
+    private string? _encoderError;
     private bool? _windowsHevcAvailable;
     private bool _hevcLoadStarted;
 
@@ -118,8 +118,10 @@ internal sealed partial class PhoneDevicePageView : IViewPage, IViewDockPage
 
     internal void ShowConfigurationPage(string? profileId = null) => SwitchSection(connection: false, profileId: profileId);
 
-    private bool AdbToolsSelected => !IsConnectionPage && _actions.Host.Phone.Store.Profile.LastDevice is { } last &&
-        (_actions.Host.Phone.Connections.Get(last).Device ?? last) is { IsApp: false };
+    private AndroidDevice? SelectedDeviceForTools => !IsConnectionPage && _actions.Host.Phone.Store.Profile.LastDevice is { } last
+        ? _actions.Host.Phone.Connections.Get(last).Device ?? last : null;
+
+    private bool AdbToolsSelected => SelectedDeviceForTools is { IsApp: false };
 
     private bool CurrentAdb(AndroidDevice device) => AdbToolsSelected && !device.IsApp &&
         AndroidDeviceIdentity.SameTransport(_activeDevice, device) && _actions.Host.Phone.IsSelectedAdbAttachment(device);
@@ -216,6 +218,8 @@ internal sealed partial class PhoneDevicePageView : IViewPage, IViewDockPage
         RefreshSharingStatus(online);
         if (!Equals(online, _activeDevice))
         {
+            if (_active && !IsConnectionPage && _activeDevice?.IsApp != online?.IsApp)
+                _actions.ClosePopups();
             FinishPinnedOrder(commit: false);
             CancelEncoderRead();
             _streamDeviceKey = null;
@@ -231,8 +235,9 @@ internal sealed partial class PhoneDevicePageView : IViewPage, IViewDockPage
         var cached = phone.Discovery.CurrentDevices ?? [];
         _restorableUsb = IsConnectionPage ? cached.Where(device => !device.IsWifi && device.State == "device" &&
             phone.Connections.Resolve(device) == null && !AndroidConnectionManager.IsAmbiguous(device, cached)).ToArray() : [];
-        RefreshStreamingSettings(IsConnectionPage || (online ?? profile.LastDevice)?.IsApp == true ? null : online ?? profile.LastDevice);
-        if (!_hevcLoadStarted && _active && !IsConnectionPage && profile.LastDevice != null)
+        var streamingDevice = !IsConnectionPage && (online ?? profile.LastDevice) is { IsApp: false } adb ? adb : null;
+        RefreshStreamingSettings(streamingDevice);
+        if (!_hevcLoadStarted && _active && streamingDevice != null)
         {
             _hevcLoadStarted = true;
             _ = LoadWindowsHevcAsync();
@@ -361,27 +366,31 @@ internal sealed partial class PhoneDevicePageView : IViewPage, IViewDockPage
         var online = _activeDevice;
         var detail = profile.LastDevice;
         y = RenderDeviceHeader(g, t, x, y, w, phone.Store.GetProfileDisplayName(profile), online);
-        if ((online ?? detail)?.IsApp == true) return y;
+        var device = online ?? detail;
+        if (device?.IsApp == true)
+            return RenderDeviceSwitchCard(g, t, x, y, w, "phone.app.smartvolume", L10n.T("Phone.SmartVolumeTitle"),
+                L10n.T("Phone.AppSmartVolumeHint"), phone.Store.AppSmartVolumeEnabled, enabled: true);
         y = RenderStreamingCard(g, t, x, y, w, detail != null);
         y = RenderQuickPanelApps(g, t, x, y, w, phone, profile, online != null);
         y = RenderFileTransferCard(g, t, x, y, w, phone, profile, online);
-        return RenderClipboardCard(g, t, x, y, w, phone, online ?? detail);
+        return RenderDeviceSwitchCard(g, t, x, y, w, "phone.clipboard", L10n.T("Phone.ClipboardSyncTitle"),
+            phone.Clipboard.StatusFor(device), phone.Clipboard.IsEnabled(device), device != null);
     }
 
-    private float RenderClipboardCard(D2dTarget g, UiThemePalette t, float x, float y, float w,
-        PhonePreview phone, AndroidDevice? detail)
+    private float RenderDeviceSwitchCard(D2dTarget g, UiThemePalette t, float x, float y, float w,
+        string id, string title, string description, bool isOn, bool enabled)
     {
-        var clipCard = new UiRect(x, y, w, 60f);
-        UiPrimitives.DrawCard(g, t, clipCard, DeviceCardRadius);
-        bool clipEnabled = phone.Clipboard.IsEnabled(detail);
-        string clipDesc = phone.Clipboard.StatusFor(detail);
-        g.DrawText(L10n.T("Phone.ClipboardSyncTitle"), new UiRect(x + DeviceCardPadding, y + 9f, w - 72f, 20f),
+        float textWidth = MathF.Max(1f, w - 72f);
+        float hintHeight = PhoneTextHeight(description, textWidth, 11.5f);
+        var card = new UiRect(x, y, w, MathF.Max(60f, 30f + hintHeight + DeviceCardPadding));
+        UiPrimitives.DrawCard(g, t, card, DeviceCardRadius);
+        g.DrawText(title, new UiRect(x + DeviceCardPadding, y + 9f, textWidth, 20f),
             t.TextPrimary, DeviceHeadingSize, 600);
-        g.DrawText(clipDesc, new UiRect(x + DeviceCardPadding, y + 30f, w - 72f, 20f), t.TextSecondary, 11.5f);
-        UiPrimitives.DrawSwitch(g, t, _hit, "phone.clipboard",
-            new UiRect(clipCard.Right - DeviceCardPadding - 36f, clipCard.CenterY - 12f, 36f, 24f), clipEnabled, enabled: detail != null);
-
-        return clipCard.Bottom + DeviceCardGap;
+        g.DrawText(description, new UiRect(x + DeviceCardPadding, y + 30f, textWidth, hintHeight), t.TextSecondary, 11.5f, wrap: true);
+        var toggle = new UiRect(card.Right - DeviceCardPadding - 36f, card.CenterY - 12f, 36f, 24f);
+        UiPrimitives.DrawSwitch(g, t, _hit, id, toggle, isOn, enabled);
+        _hit.DescribeControl(id, toggle, title, UiAccessibleRole.CheckBox, isOn, enabled);
+        return card.Bottom + DeviceCardGap;
     }
 
     private float RenderQuickPanelApps(D2dTarget g, UiThemePalette t, float x, float y, float w,
@@ -482,8 +491,10 @@ internal sealed partial class PhoneDevicePageView : IViewPage, IViewDockPage
             g.DrawText(PhoneAppPresentation.Description(app), new UiRect(textX, row.Y + 19f, textW, 14f), t.TextSecondary, 10.5f);
             DrawAppPin(g, t, new UiRect(pinCenter - 14f, row.CenterY - 14f, 28f, 28f), app, retained: true, compact: true);
             bool smart = phone.Store.IsSmartVolumeEnabled(profile.LastDevice, app.Package);
-            UiPrimitives.DrawSwitch(g, t, _hit, $"phone.smart:{app.Package}",
-                new UiRect(smartCenter - 20f, row.CenterY - 12f, 40f, 24f), smart);
+            string smartId = $"phone.smart:{app.Package}";
+            UiPrimitives.DrawSwitch(g, t, _hit, smartId, new UiRect(smartCenter - 20f, row.CenterY - 12f, 40f, 24f), smart);
+            if (_hit.AccessibilityEnabled)
+                _hit.Describe(smartId, app.Name + " · " + smartLabel, UiAccessibleRole.CheckBox, smart);
         }
 
         return libCard.Bottom + DeviceCardGap;
@@ -747,6 +758,8 @@ internal sealed partial class PhoneDevicePageView : IViewPage, IViewDockPage
                 _hit.Add(id, action, UiCursorKind.Hand);
                 if (_hit.IsHover(id)) g.FillRoundedRect(action, 7f, t.NavHover);
             }
+            if (_hit.AccessibilityEnabled)
+                _hit.DescribeControl(id, action, label + " · " + change, UiAccessibleRole.Button, null, enabled);
             g.DrawText(change, action, enabled ? t.TextPrimary : t.TextSecondary.WithAlphaFraction(0.55f), 11f, 400, UiTextAlign.Center, UiVertAlign.Center);
         }
         DrawFolder(L10n.T("Phone.AndroidReceiveFolder"), AndroidFolderLabel(profile.ReceiveFolder), "phone.remotefolder", dropEnabled);
@@ -1020,7 +1033,6 @@ internal sealed partial class PhoneDevicePageView : IViewPage, IViewDockPage
             string pkg = id[12..];
             bool smart = phone.Store.IsSmartVolumeEnabled(profile.LastDevice, pkg);
             phone.Store.SetSmartVolume(pkg, !smart);
-            phone.Sources.SyncSmartVolume((d, p) => !d.IsApp && phone.Store.IsSmartVolumeEnabled(d, p));
             _actions.Invalidate();
             return true;
         }
@@ -1294,7 +1306,7 @@ internal sealed partial class PhoneDevicePageView : IViewPage, IViewDockPage
     private void RefreshStreamingSettings(AndroidDevice? device)
     {
         string? key = device == null ? null : AndroidDeviceIdentity.Key(device);
-        if (key == _streamDeviceKey && (device == null || _activeDevice == null || _encoderCts != null || _streamEncoders != null || _encoderFailed))
+        if (key == _streamDeviceKey && (device == null || _activeDevice == null || _encoderCts != null || _streamEncoders != null || _encoderError != null))
         {
             return;
         }
@@ -1302,7 +1314,6 @@ internal sealed partial class PhoneDevicePageView : IViewPage, IViewDockPage
         CancelEncoderRead();
         _streamDeviceKey = key;
         _streamEncoders = null;
-        _encoderFailed = false;
         var phone = _actions.Host.Phone;
         _streamSettings = device == null ? new() : phone.Settings.GetStreaming(device);
 
@@ -1335,7 +1346,6 @@ internal sealed partial class PhoneDevicePageView : IViewPage, IViewDockPage
                 if (!_active || token.IsCancellationRequested || !ReferenceEquals(_encoderCts, cts) || _streamDeviceKey != key)
                     return;
                 _streamEncoders = encoders;
-                _encoderFailed = false;
                 _actions.Invalidate();
             });
         }
@@ -1346,8 +1356,8 @@ internal sealed partial class PhoneDevicePageView : IViewPage, IViewDockPage
             {
                 if (_active && !token.IsCancellationRequested && ReferenceEquals(_encoderCts, cts))
                 {
-                    _encoderFailed = true;
-                    SetStatus(PhonePreview.TranslateError(ex), true);
+                    _encoderError = PhonePreview.TranslateError(ex);
+                    SetStatus(_encoderError, true);
                 }
             });
         }
@@ -1490,7 +1500,7 @@ internal sealed partial class PhoneDevicePageView : IViewPage, IViewDockPage
 
     private void SaveStreaming(AndroidDevice online, AndroidStreamSettings next)
     {
-        if (!_active || IsConnectionPage || _actions.Host.Phone.Store.Profile.LastDevice is not { } current ||
+        if (!_active || !AdbToolsSelected || _actions.Host.Phone.Store.Profile.LastDevice is not { } current ||
             !AndroidDeviceIdentity.MatchesSavedDevice(current, online)) return;
         try
         {
@@ -1504,8 +1514,8 @@ internal sealed partial class PhoneDevicePageView : IViewPage, IViewDockPage
     private void RetryEncodersIfNeeded(AndroidDevice online, bool forceRetry = false)
     {
         if (_activeDevice == null || !_actions.Host.Phone.Connections.IsCurrent(online)) return;
-        if (forceRetry) _encoderFailed = false;
-        if (_streamEncoders == null && _encoderCts == null && !_encoderFailed && _streamDeviceKey is { } key)
+        if (forceRetry) ClearEncoderError();
+        if (_streamEncoders == null && _encoderCts == null && _encoderError == null && _streamDeviceKey is { } key)
         {
             var phone = _actions.Host.Phone;
             var cts = CancellationTokenSource.CreateLinkedTokenSource(phone.Lifetime, phone.Connections.OperationToken(online));
@@ -1531,8 +1541,8 @@ internal sealed partial class PhoneDevicePageView : IViewPage, IViewDockPage
             .OrderBy(item => item.Rank)
             .ThenBy(item => item.Name, StringComparer.Ordinal);
         foreach (var item in entries) choices.Add(new(item.Name, item.Label));
-        if (_streamEncoders == null && (_encoderCts != null || _encoderFailed))
-            choices.Add(new("#status", L10n.T(_encoderFailed ? "Phone.StreamEncoderRetry" : "Phone.StreamEncoderLoading")));
+        if (_streamEncoders == null && (_encoderCts != null || _encoderError != null))
+            choices.Add(new("#status", L10n.T(_encoderError != null ? "Phone.StreamEncoderRetry" : "Phone.StreamEncoderLoading")));
         return choices;
     }
 
@@ -1625,12 +1635,19 @@ internal sealed partial class PhoneDevicePageView : IViewPage, IViewDockPage
 
     private void CancelEncoderRead()
     {
+        ClearEncoderError();
         var old = _encoderCts;
         _encoderCts = null;
         if (old != null)
         {
             try { old.Cancel(); } catch { }
         }
+    }
+
+    private void ClearEncoderError()
+    {
+        if (_encoderError != null && _statusError && _statusMessage == _encoderError) _statusMessage = null;
+        _encoderError = null;
     }
 
     // --- Busy & QR Pairing ---

@@ -182,7 +182,7 @@ public sealed class AndroidAudioManager : IAsyncDisposable
         var retained = _settings?.FindExternalAudio(key);
         source.Session.SetVolume(previous?.Volume ?? retained?.Volume ?? saved.Volume);
         source.Session.SetMute(previous?.Muted ?? retained?.Muted ?? false);
-        source.Session.SetSmartVolume(!device.IsApp && (_smartVolume?.Invoke(device, app.Package) ?? previous?.SmartVolume ?? true));
+        source.Session.SetSmartVolume(_smartVolume?.Invoke(device, app.Package) ?? previous?.SmartVolume ?? !device.IsApp);
         var previousStage = source.Session.State.State;
         source.Handler = changedState =>
         {
@@ -247,7 +247,7 @@ public sealed class AndroidAudioManager : IAsyncDisposable
         AndroidAudioSource[] snapshot;
         lock (_gate) snapshot = _sources.ToArray();
         foreach (var source in snapshot)
-            source.Session.SetSmartVolume(!source.Device.IsApp && resolve(source.Device, source.App.Package));
+            source.Session.SetSmartVolume(resolve(source.Device, source.App.Package));
     }
 
     private async Task StartAsync(AndroidAudioSource source, AndroidAudioSource[] releaseBeforeStart, bool keepPhoneAudio, string? outputId)

@@ -71,6 +71,17 @@ internal static partial class Program
             ["result"] = new JsonObject { ["scope"] = "system_media", ["percent"] = 20 } }, ct, SrapClient.Text(request, "id"), parent);
         Check(starts == 2 && ReferenceEquals(transport.Session(device), session) && (await reading).GetProperty("percent").GetInt32() == 20,
             "further network events preserve one browser and the original responsive mutual TLS session");
+        var downgraded = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        session.CapabilitiesChanged += () => downgraded.TrySetResult();
+        await SrapClient.WriteAsync(peer, "capabilities", new() { ["capabilityRevision"] = 2,
+            ["entries"] = new JsonArray(new JsonObject { ["id"] = "volume.device", ["state"] = "needs_authorization" }) },
+            ct, session: parent);
+        await downgraded.Task.WaitAsync(ct);
+        bool declinedLocally = false;
+        try { await session.ReadVolumeAsync(ct); }
+        catch (SrapException error) when (error.Code == "unsupported") { declinedLocally = true; }
+        Check(declinedLocally && !session.Token.IsCancellationRequested && ReferenceEquals(transport.Session(device), session),
+            "a newer capability revision disables volume operations while preserving the paired session");
         transport.RevokeTrust(profile.Id, pin);
         await stopped.Task.WaitAsync(ct);
         transport.OnNetworkAddressChanged();

@@ -499,7 +499,8 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
             var pickRect = new UiRect(inputX, y, inputW, 34f);
             DrawAppPicker(g, t, hit, "edit.trigapp.pick", pickRect, _editingRule.TriggerApp);
             RegisterBtn("edit.trigapp.pick", pickRect, _editorViewport, hit, () =>
-                OpenAppPickerCombo(pickRect, _editingRule.TriggerApp, proc => { _editingRule.TriggerApp = proc; actions.Invalidate(); }));
+                OpenAppPickerCombo(pickRect, _editingRule.TriggerApp, proc => { _editingRule.TriggerApp = proc; actions.Invalidate(); },
+                    includeWindowApps: _editingRule.Trigger == AutoRuleTrigger.AppSwitch));
             y += 42f;
         }
         else if (_editingRule.Trigger == AutoRuleTrigger.Schedule)
@@ -1173,6 +1174,7 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
         CancelHotkeyCapture();
         _selectedRuleId = rule.Id;
         _editingRule = rule.Clone();
+        _editingRule.TriggerApp ??= string.Empty;
         _editingSteps = _editingRule.CloneSteps();
         if (_editingSteps.Count == 0) _editingSteps.Add(new AutoRuleStep());
         _isNewDraft = isNewDraft;
@@ -1348,7 +1350,7 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
         if (_editingRule.Trigger == AutoRuleTrigger.Hotkey && string.IsNullOrWhiteSpace(_editingRule.Hotkey))
         { message = L10n.T("Auto.HotkeyRequired"); return false; }
         if (_editingRule.Trigger is AutoRuleTrigger.AppStart or AutoRuleTrigger.AppSwitch or AutoRuleTrigger.AppExit
-            && !_apps.Any(app => string.Equals(app.ProcessName, _editingRule.TriggerApp, StringComparison.OrdinalIgnoreCase)))
+            && !HasTriggerApp(_editingRule))
         { message = L10n.T("Auto.TriggerAppRequired"); return false; }
         if (_editingRule.Trigger == AutoRuleTrigger.Schedule && _editingRule.ScheduleMode == 2 && _editingRule.ScheduleWeekdays.Count == 0)
         { message = L10n.T("Auto.ScheduleWeekdayRequired"); return false; }
@@ -1476,11 +1478,31 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
 
     private void OnAppPickerIconLoaded() => actions.Host.TryPost(actions.Invalidate);
 
-    private void OpenAppPickerCombo(UiRect anchor, string current, Action<string> onPick)
+    private IEnumerable<AudioAppInfo> AppPickerSources(bool includeWindowApps)
+    {
+#if SONICROUTE_PHONE
+        if (includeWindowApps && actions.Host.Audio.ExternalAudio is { } bridge)
+            return _apps.Concat(bridge.GetWindowTriggerApps());
+#endif
+        return _apps;
+    }
+
+    private bool HasTriggerApp(AutoRule rule)
+    {
+        string? app = rule.TriggerApp?.Trim();
+        if (string.IsNullOrEmpty(app)) return false;
+        bool switchesApp = rule.Trigger == AutoRuleTrigger.AppSwitch;
+        if (AppPickerSources(switchesApp).Any(entry => string.Equals(entry.ProcessName, app, StringComparison.OrdinalIgnoreCase)))
+            return true;
+        return switchesApp && !_isNewDraft && AutoRuleStore.Find(rule.Id) is { Trigger: AutoRuleTrigger.AppSwitch } saved
+            && string.Equals(saved.TriggerApp?.Trim(), app, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private void OpenAppPickerCombo(UiRect anchor, string current, Action<string> onPick, bool includeWindowApps = false)
     {
         var choices = new List<ComboChoice>();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var app in _apps)
+        foreach (var app in AppPickerSources(includeWindowApps))
         {
             string proc = app.ProcessName ?? "";
             if (string.IsNullOrWhiteSpace(proc) || !seen.Add(proc)) continue;

@@ -34,11 +34,31 @@ internal static partial class Program
             ConfigService.FlushPendingSaves();
             Check(Disk().FixedAppName == "new synchronous", "older pending save cannot overwrite a critical save");
             string source = Path.Combine(isolated!, "incoming.json");
-            File.WriteAllText(source, "{\"FixedAppName\":\"imported\",\"FutureOption\":17}");
+            File.WriteAllText(source, "{\"FixedAppName\":\"imported\",\"FutureOption\":17,\"AutoRules\":[{\"Id\":\"archive\",\"Name\":\"Archived\",\"Enabled\":false}]}");
             byte[] before = File.ReadAllBytes(ConfigService.ConfigPath);
             var prepared = ConfigService.PrepareImport(source) ?? throw new InvalidOperationException("Import fixture rejected");
+            using (var settings = JsonDocument.Parse(prepared))
+                Check(!settings.RootElement.TryGetProperty("AutoRules", out _)
+                    && settings.RootElement.GetProperty("FutureOption").GetInt32() == 17
+                    && File.ReadAllText(source).Contains("Archived"),
+                    "explicit settings import preserves the source archive and other fields without installing rules");
             Check(ConfigService.ReadPreparedConfig(prepared)?.FixedAppName == "imported"
                 && File.ReadAllBytes(ConfigService.ConfigPath).SequenceEqual(before), "preparing and canceling an import leaves persisted configuration unchanged");
+            foreach (bool reset in new[] { false, true })
+            {
+                string operation = reset ? "reset" : "import";
+                string lastEdit = "edit before failed " + operation;
+                lock (gate)
+                {
+                    ConfigService.QueueSave(new AppConfig { FixedAppName = lastEdit });
+                    using var busy = File.Open(ConfigService.BackupPath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+                    bool replaced = reset ? ConfigService.TryResetToDefault(out _) : ConfigService.ApplyImport(prepared);
+                    Check(!replaced, "locked backup rejects " + operation);
+                }
+                ConfigService.FlushPendingSaves();
+                Check(Disk().FixedAppName == lastEdit && ConfigService.Load().FixedAppName == lastEdit,
+                    "failed " + operation + " preserves the edit already queued for writing");
+            }
             lock (gate)
             {
                 ConfigService.QueueSave(new AppConfig { FixedAppName = "obsolete before import" });

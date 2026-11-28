@@ -248,6 +248,7 @@ internal sealed partial class SrapSession : IDisposable
             }
         }
         catch (SrapException ex) { fault = ex.Code == "permission_lost" && !ex.PeerRevoked ? "stale_session" : ex.Code; }
+        catch (InvalidDataException) { fault = "invalid_argument"; }
         catch (Exception ex) when (ex is IOException or OperationCanceledException or ObjectDisposedException or InvalidOperationException) { }
         finally
         {

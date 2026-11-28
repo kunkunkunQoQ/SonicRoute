@@ -18,6 +18,9 @@ internal sealed partial class ApplicationHost
     private ProductAutomation _automation = null!;
     private CoalescedVolumeWriter _volumeWriter = null!;
     private CoalescedVolumeWriter<EndpointVolumeKey> _endpointVolumeWriter = null!;
+    private readonly object _deviceRefreshGate = new();
+    private Task _deviceRefresh = Task.CompletedTask;
+    private bool _deviceRefreshRunning, _deviceRefreshPending;
 #if SONICROUTE_PHONE
     private CoalescedVolumeWriter<string> _externalVolumeWriter = null!;
 #endif
@@ -60,12 +63,41 @@ internal sealed partial class ApplicationHost
 
     internal void HandleDeviceSignal()
     {
-        _audio.InvalidateAppsCache();
-        _audio.InvalidateVolumeCache();
-        NotifyAudioVisualChanged();
+        lock (_deviceRefreshGate)
+        {
+            _deviceRefreshPending = true;
+            if (!_deviceRefreshRunning)
+            {
+                _deviceRefreshRunning = true;
+                _deviceRefresh = Task.Run(RefreshAudioDevices);
+            }
+        }
 #if SONICROUTE_PHONE
         phone?.OnDeviceBroadcast();
 #endif
+    }
+
+    private void RefreshAudioDevices()
+    {
+        while (true)
+        {
+            lock (_deviceRefreshGate)
+            {
+                if (!_deviceRefreshPending)
+                {
+                    _deviceRefreshRunning = false;
+                    return;
+                }
+                _deviceRefreshPending = false;
+            }
+            try
+            {
+                _audio.InvalidateAppsCache();
+                _audio.InvalidateVolumeCache();
+                NotifyAudioVisualChanged();
+            }
+            catch (Exception error) { ExceptionDiagnostics.Record("Audio.RefreshDevices", error); }
+        }
     }
 
     internal void RefreshForegroundInterest()
@@ -85,6 +117,7 @@ internal sealed partial class ApplicationHost
         PcRoutingApi.OutputsChanged -= NotifyAudioVisualChanged;
         _automation?.Dispose();
         CurrentApp?.Dispose();
+        _deviceRefresh.GetAwaiter().GetResult();
         _panelAudioClicks.GetAwaiter().GetResult();
         _endpointVolumeWriter?.Dispose();
         _endpointVolumeWriter?.Completion.GetAwaiter().GetResult();

@@ -182,32 +182,42 @@ internal sealed partial class ProductAudio : IDisposable
         return [Core.AudioService.SystemDefaultDeviceId];
     }
 
-    internal MirrorGainState GetMirrorGain(AudioAppInfo app, string sinkId)
+    internal static bool SupportsMirrorVolumeLimit(AudioAppInfo app, string sinkId)
     {
-        if (string.IsNullOrWhiteSpace(sinkId)) return new(100, false);
-        if (!app.IsExternal) return LocalAppOutputMirrors.GetSinkGain(checked((int)app.ProcessId), sinkId);
+        if (app.IsExternalOffline || string.IsNullOrWhiteSpace(sinkId)) return false;
+        if (!app.IsExternal)
+            return app.ProcessId is > 0 and <= int.MaxValue && LocalAppOutputMirrors.HasSink((int)app.ProcessId, sinkId);
 #if SONICROUTE_PHONE
-        if (ExternalAudio?.FindSession(app.ExternalSourceId) is SonicRoute.AndroidAudio.IMultiOutputAudioSession multi)
-        {
-            var g = multi.GetMirrorGain(sinkId);
-            return new(g.VolumePercent, g.Muted);
-        }
+        return !Same(sinkId, SonicRoute.AndroidAudio.AndroidAudioSession.SourcePhoneOutputId)
+            && PcRoutingApi.Phones?.FindSession(app.ExternalSourceId) is SonicRoute.AndroidAudio.IMultiOutputAudioSession;
+#else
+        return false;
 #endif
-        return new(100, false);
     }
 
-    internal MirrorGainState SetMirrorGain(AudioAppInfo app, string sinkId, int? volumePercent = null, bool? muted = null, bool toggleMute = false)
+    internal MirrorGainState GetMirrorGain(AudioAppInfo app, string sinkId)
     {
-        if (string.IsNullOrWhiteSpace(sinkId)) return new(100, false);
-        if (!app.IsExternal) return LocalAppOutputMirrors.SetSinkGain(checked((int)app.ProcessId), sinkId, volumePercent, muted, toggleMute);
+        if (string.IsNullOrWhiteSpace(sinkId)) return MirrorGainState.Default;
+        if (!app.IsExternal && app.ProcessId is > 0 and <= int.MaxValue)
+            return LocalAppOutputMirrors.GetSinkGain((int)app.ProcessId, sinkId);
 #if SONICROUTE_PHONE
-        if (ExternalAudio?.FindSession(app.ExternalSourceId) is SonicRoute.AndroidAudio.IMultiOutputAudioSession multi)
-        {
-            var g = multi.SetMirrorGain(sinkId, volumePercent, muted, toggleMute);
-            return new(g.VolumePercent, g.Muted);
-        }
+        if (app.IsExternal && ExternalAudio is { } bridge) return bridge.GetMirrorGain(app, sinkId);
 #endif
-        return new(100, false);
+        return MirrorGainState.Default;
+    }
+
+    internal MirrorGainState SetMirrorGain(AudioAppInfo app, string sinkId, int? volumePercent = null, bool? muted = null,
+        bool toggleMute = false, int? maximumVolumePercent = null, bool persist = true)
+    {
+        if (string.IsNullOrWhiteSpace(sinkId)) return MirrorGainState.Default;
+        if (!app.IsExternal && app.ProcessId is > 0 and <= int.MaxValue)
+            return LocalAppOutputMirrors.SetSinkGain((int)app.ProcessId, sinkId, volumePercent, muted, toggleMute,
+                maximumVolumePercent, persist);
+#if SONICROUTE_PHONE
+        if (app is { IsExternal: true, IsExternalOffline: false } && ExternalAudio is { } bridge)
+            return bridge.SetMirrorGain(app, sinkId, volumePercent, muted, toggleMute, maximumVolumePercent, persist);
+#endif
+        return MirrorGainState.Default;
     }
 
     internal bool SetRoute(int pid, Flow flow, string? endpoint)

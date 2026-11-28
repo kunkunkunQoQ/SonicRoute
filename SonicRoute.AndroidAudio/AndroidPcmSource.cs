@@ -34,7 +34,8 @@ public sealed class AndroidPcmSource : IWasapiPlaybackSource
     private bool _primingEnabled;
     private bool _primed;
     private int _start, _count;
-    private float _volume = 1, _gain = 1;
+    internal const int MaximumMirrorVolumePercent = 300;
+    private float _volume = 1, _gain = 1, _mirrorGain = 1;
     private bool _smartVolume;
     private float _smartEnvelope;
     private long _dropped, _underflow;
@@ -96,6 +97,11 @@ public sealed class AndroidPcmSource : IWasapiPlaybackSource
     public long SamplesConsumed => Interlocked.Read(ref _read);
     public float LastPeak => Volatile.Read(ref _lastPeak);
     public float Volume { get => Volatile.Read(ref _volume); set => Volatile.Write(ref _volume, Math.Clamp(value, 0, 1)); }
+    internal float MirrorGain
+    {
+        get => Volatile.Read(ref _mirrorGain);
+        set => Volatile.Write(ref _mirrorGain, Math.Clamp(value, 0f, MaximumMirrorVolumePercent / 100f));
+    }
     public float HeaderGain { get => Volatile.Read(ref _gain); set => Volatile.Write(ref _gain, value); }
     public bool SmartVolume { get => Volatile.Read(ref _smartVolume); set => Volatile.Write(ref _smartVolume, value); }
     public float EffectiveGain => ComputeEffectiveGain();
@@ -467,9 +473,13 @@ public sealed class AndroidPcmSource : IWasapiPlaybackSource
 
     private float ComputeEffectiveGain()
     {
+        float mirror = MirrorGain;
         float volume = Volume;
         float headerGain = HeaderGain;
-        if (!SmartVolume) return volume * headerGain;
+        if (!SmartVolume) return volume * mirror * headerGain;
+        // Preserve the smart curve for attenuation. Boost above unity scales its output linearly.
+        volume *= Math.Min(1f, mirror);
+        headerGain *= Math.Max(1f, mirror);
         if (volume <= 0f || headerGain <= 0f || float.IsNaN(headerGain)) return 0f;
         float curved = volume * (0.12f + 0.88f * volume);
         float env = Math.Max(Volatile.Read(ref _smartEnvelope), Volatile.Read(ref _lastPeak));

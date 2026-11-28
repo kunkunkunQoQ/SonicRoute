@@ -64,6 +64,12 @@ public sealed class AndroidVirtualDisplayManager : IAsyncDisposable
     public (AndroidDevice Device, AndroidApp App)? FindApplication(int processId)
         => FindApplication(0, processId);
 
+    internal AndroidApp[] GetOpenApplications()
+    {
+        lock (_gate)
+            return _entries.Values.Where(entry => entry.Client.WindowHandle != 0).Select(entry => entry.App).ToArray();
+    }
+
     public (AndroidDevice Device, AndroidApp App)? FindApplication(nint windowHandle, int processId)
     {
         lock (_gate)

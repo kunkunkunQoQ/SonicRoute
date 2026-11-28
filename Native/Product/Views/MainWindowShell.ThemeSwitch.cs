@@ -52,7 +52,26 @@ internal sealed partial class MainWindowShell
         float height = rail ? 82f : 32f;
         var track = new UiRect(nav.CenterX - width / 2f, nav.Bottom - 12f - height, width, height);
         int selected = SelectedMode;
-        UiSegmentedSwitch.Draw(g, _theme, _hit, track, ThemeSegments, [.42f, .29f, .29f],
-            selected, _modeAnimating ? _modePosition : selected, vertical: rail, showLabels: nav.Width >= 154f, tooltips: true);
+        bool showLabels = nav.Width >= 154f;
+        Span<float> fractions = stackalloc float[] { .42f, .29f, .29f };
+        if (showLabels)
+        {
+            float available = width - 2f * UiSegmentedSwitch.Padding;
+            float total = 0f;
+            for (int i = 0; i < ThemeSegments.Length; ++i)
+            {
+                var segment = ThemeSegments[i];
+                string label = L10n.T(segment.ShortLabelKey ?? segment.LabelKey);
+                float textWidth = D2dSharedContext.Instance.MeasureText(label, UiMetrics.FontFamily,
+                    11f, 600, available, height, false).Width;
+                fractions[i] = MathF.Ceiling(textWidth) + 24f;
+                total += fractions[i];
+            }
+            float spare = MathF.Max(0f, available - total) / ThemeSegments.Length;
+            for (int i = 0; i < fractions.Length; ++i)
+                fractions[i] = (fractions[i] + spare) / MathF.Max(available, total);
+        }
+        UiSegmentedSwitch.Draw(g, _theme, _hit, track, ThemeSegments, fractions,
+            selected, _modeAnimating ? _modePosition : selected, vertical: rail, showLabels: showLabels, tooltips: true);
     }
 }

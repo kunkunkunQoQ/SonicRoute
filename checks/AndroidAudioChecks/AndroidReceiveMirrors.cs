@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using System.Runtime.InteropServices;
 using System.Threading.Channels;
 using SonicRoute.AndroidAudio;
 
@@ -31,6 +32,9 @@ internal static partial class Program
             if (id == phoneId) return new AndroidPhonePcmPlayer(adb, device, pcm, "speaker", token);
             return new StartupPlayer(() => { }, () => disposed.Add(id ?? "default"));
         });
+        session.SetSmartVolume(false);
+        session.SetMirrorGainResolver((source, application, output) =>
+            source == device && application == app && output == "speaker-a" ? (75, false) : null);
         var multi = (IMultiOutputAudioSession)session;
         await multi.SetOutputsAsync([null, "speaker-a", "speaker-b", "speaker-b"]);
         Check(outputs.Count == 0 && modes.Count == 0, "choosing outputs for an idle Android source opens no capture, phone helper or playback device");
@@ -42,7 +46,33 @@ internal static partial class Program
             "one Android capture and one Opus decode feed all three queues, preserving gain and timestamp resets");
         int bytes = queues[0].BufferedSamples * sizeof(float);
         var readings = queues.Select(q => { var buffer = new byte[bytes]; q.Read(buffer, 0, bytes); return buffer; }).ToArray();
-        Check(readings.Skip(1).All(b => b.SequenceEqual(readings[0])), "each independently read output produces identical non-silent PCM");
+        var primarySamples = MemoryMarshal.Cast<byte, float>(readings[0]).ToArray();
+        var limitedSamples = MemoryMarshal.Cast<byte, float>(readings[1]).ToArray();
+        Check(readings[2].SequenceEqual(readings[0]) && primarySamples.Any(s => s != 0f)
+            && limitedSamples.Zip(primarySamples, (mirror, primary) => Math.Abs(mirror - primary * 0.75f) < 0.00001f).All(s => s),
+            "the first decoded samples already use the saved 75% mirror gain while the other mirror matches the primary");
+        session.SetVolume(100);
+        float[][] ReadOutputFrame()
+        {
+            queues[0].Write([0.25f, -0.25f, 0.875f, -0.875f]);
+            return queues.Select(q =>
+            {
+                var buffer = new byte[4 * sizeof(float)];
+                q.Read(buffer, 0, buffer.Length);
+                return MemoryMarshal.Cast<byte, float>(buffer).ToArray();
+            }).ToArray();
+        }
+        multi.SetMirrorGain("speaker-a", 300);
+        var boosted = ReadOutputFrame();
+        Check(boosted[0][0] > 0 && boosted[0].SequenceEqual(boosted[2])
+            && boosted[1][0] == 3 * boosted[0][0] && boosted[1][1] == 3 * boosted[0][1]
+            && boosted[1][2] == 1f && boosted[1][3] == -1f,
+            "300% boosts only the selected receiver mirror and saturates loud samples at both PCM limits");
+        multi.SetMirrorGain("speaker-a", 75);
+        var lowered = ReadOutputFrame();
+        Check(lowered[0].SequenceEqual(boosted[0]) && lowered[2].SequenceEqual(boosted[2])
+            && Math.Abs(lowered[1][0] - lowered[0][0] * 0.75f) < 0.00001f,
+            "lowering a playing mirror takes effect on the next frame and leaves the other outputs unchanged");
         session.SetMute(true); session.SetSmartVolume(true);
         Check(queues.All(q => q.Volume == 0 && q.SmartVolume), "mute and automatic volume update all Android receiver outputs");
         session.SetMute(false); session.SetVolume(31);

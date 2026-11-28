@@ -37,6 +37,7 @@ internal interface IViewHostActions
     void ShowProjectLicense(string text);
     void ShowMenu(UiRect anchorDip, List<UiMenuItem> items);
     void ShowMenuAtCursor(List<UiMenuItem> items, bool alignBottomUp = false);
+    void ClosePopups();
     void ShowCombo(UiRect anchorDip, IReadOnlyList<ComboChoice> choices, string selectedKey,
         Action<ComboChoice> onSelected) => ShowCombo(anchorDip, choices, selectedKey, onSelected, fitChoices: false);
     void ShowCombo(UiRect anchorDip, IReadOnlyList<ComboChoice> choices, string selectedKey,

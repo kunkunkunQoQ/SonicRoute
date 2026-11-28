@@ -51,7 +51,8 @@ public sealed class AndroidPhoneStore
     private readonly object _gate = new();
     private readonly Func<string>? _defaultName;
     private sealed record State(IReadOnlyList<AndroidPhoneProfile> Profiles, string SelectedId,
-        IReadOnlyList<AndroidDevice>? RemovedDevices = null, IReadOnlyList<AndroidPhoneProfile>? RemovedProfiles = null, Dictionary<string, JsonElement>? AdditionalFields = null);
+        IReadOnlyList<AndroidDevice>? RemovedDevices = null, IReadOnlyList<AndroidPhoneProfile>? RemovedProfiles = null,
+        Dictionary<string, JsonElement>? AdditionalFields = null, bool AppSmartVolumeEnabled = false);
     private State _state;
     private Task _save = Task.CompletedTask;
     private bool _writing;
@@ -69,6 +70,7 @@ public sealed class AndroidPhoneStore
     public event Action? OutputsChanged;
     public IReadOnlyList<AndroidPhoneProfile> Profiles { get { lock (_gate) return _state.Profiles; } }
     public AndroidPhoneProfile Profile { get { lock (_gate) return _state.Profiles.First(p => p.Id == _state.SelectedId); } }
+    internal bool AppSmartVolumeEnabled { get { lock (_gate) return _state.AppSmartVolumeEnabled; } }
 
     public AndroidPhoneStore(string filePath) : this(filePath, null) { }
 
@@ -112,6 +114,7 @@ public sealed class AndroidPhoneStore
             Dictionary<string, JsonElement>? additionalFields;
             IReadOnlyList<AndroidDevice>? removed = null;
             IReadOnlyList<AndroidPhoneProfile>? removedProfiles = null;
+            bool appSmartVolume = false;
             if (version == 1)
             {
                 var saved = json.RootElement.Deserialize(AndroidSettingsJsonContext.Default.LegacyFile);
@@ -125,6 +128,7 @@ public sealed class AndroidPhoneStore
                 var saved = json.RootElement.Deserialize(AndroidSettingsJsonContext.Default.PhoneFile);
                 if (saved?.Phones == null || saved.Phones.Length is < 1 or > 32) return false;
                 profiles = saved.Phones.Select(LoadProfile).DistinctBy(p => p.Id).ToArray();
+                appSmartVolume = saved.AppSmartVolumeEnabled;
                 additionalFields = saved.AdditionalFields;
                 selected = saved.SelectedId;
                 removed = Array.AsReadOnly((saved.RemovedDevices ?? []).Where(d => d != null && !string.IsNullOrWhiteSpace(d.Serial)
@@ -134,7 +138,8 @@ public sealed class AndroidPhoneStore
                     removedProfiles = LoadRemovedProfiles(archived);
             }
             else return false;
-            loaded = new(Array.AsReadOnly(profiles), profiles.FirstOrDefault(p => p.Id == selected)?.Id ?? profiles[0].Id, removed, removedProfiles, additionalFields);
+            loaded = new(Array.AsReadOnly(profiles), profiles.FirstOrDefault(p => p.Id == selected)?.Id ?? profiles[0].Id,
+                removed, removedProfiles, additionalFields, appSmartVolume);
             legacy = version < 3;
             return true;
         }
@@ -253,10 +258,11 @@ public sealed class AndroidPhoneStore
 
     public bool IsSmartVolumeEnabled(AndroidDevice? device, string package)
     {
-        if (device?.IsApp == true) return false;
+        if (device?.IsApp == true) return AppSmartVolumeEnabled;
         var profile = device == null ? Profile : FindProfile(device);
         return profile == null || AllowsAdbSettings(profile) && !profile.DisabledSmartVolumeApps.Contains(package, StringComparer.Ordinal);
     }
+    internal void SetAppSmartVolume(bool enabled) => Change(state => state with { AppSmartVolumeEnabled = enabled });
     public bool SelectProfile(string id)
     {
         bool found = false;
@@ -762,7 +768,7 @@ public sealed class AndroidPhoneStore
     {
         if (_legacyFormat) BackupBeforeMigration();
         var saved = new PhoneFile(3, state.SelectedId, state.Profiles.Select(SaveProfile).ToArray(), state.RemovedDevices?.ToArray(),
-            state.RemovedProfiles?.Select(SaveProfile).ToArray()) { AdditionalFields = state.AdditionalFields };
+            state.RemovedProfiles?.Select(SaveProfile).ToArray()) { AdditionalFields = state.AdditionalFields, AppSmartVolumeEnabled = state.AppSmartVolumeEnabled };
         Directory.CreateDirectory(Path.GetDirectoryName(FilePath)!);
         AtomicFile.BackupBeforeWrite(FilePath);
         AtomicFile.Write(FilePath, stream => JsonSerializer.Serialize(stream, saved, AndroidSettingsJsonContext.Default.PhoneFile), beforeCommit);
@@ -795,6 +801,8 @@ public sealed class AndroidPhoneStore
     internal sealed record PhoneFile(int Version, string SelectedId, SavedPhone[] Phones, AndroidDevice[]? RemovedDevices = null,
         SavedPhone[]? RemovedProfiles = null)
     {
+        [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault)]
+        public bool AppSmartVolumeEnabled { get; set; }
         [System.Text.Json.Serialization.JsonExtensionData]
         public Dictionary<string, JsonElement>? AdditionalFields { get; set; }
     }

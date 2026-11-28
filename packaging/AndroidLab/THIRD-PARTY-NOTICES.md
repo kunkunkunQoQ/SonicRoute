@@ -17,13 +17,13 @@ Current project licensing and historical component notices are separated below. 
 | SonicRoute and its Android helpers (historical MIT versions, regardless of when obtained or used) | [Historical MIT notice](#sonicroute-historical-mit-notice-and-catalog-helper) |
 | Concentus / Opus | [Copyright, redistribution conditions and disclaimer](#concentus-222) |
 | NAudio | [MIT and source-file notices](#naudio-221) |
-| Android platform-tools / ADB | [Complete aggregate notice](../../AndroidRuntime/ADB-NOTICE.txt) |
-| scrcpy audio server | [Apache 2.0](../../AndroidRuntime/SCRCPY-LICENSE.txt) |
-| Modified scrcpy video client/server | [Apache 2.0](video-licenses/scrcpy-LICENSE.txt) |
+| Historical Android platform-tools / ADB | [Complete aggregate notice from v1.31](https://github.com/kunkunkunQoQ/SonicRoute/blob/v1.31/AndroidRuntime/ADB-NOTICE.txt) |
+| Historical scrcpy audio server | [Apache 2.0](https://github.com/kunkunkunQoQ/SonicRoute/blob/v1.31/AndroidRuntime/SCRCPY-LICENSE.txt) |
+| Historical modified scrcpy video client/server | [Apache 2.0](https://github.com/kunkunkunQoQ/SonicRoute/blob/v1.31/packaging/AndroidLab/video-licenses/scrcpy-LICENSE.txt) |
 | Historical scrcpy lab integration patches (`packaging/AndroidLab/native/`) | Apache 2.0 (see file headers) |
-| FFmpeg libraries | [LGPL 2.1 or later](video-licenses/FFmpeg-LICENSE.txt) |
-| SDL2 | [zlib license](video-licenses/SDL2-LICENSE.txt) |
-| zlib | [zlib license](video-licenses/zlib-LICENSE.txt) |
+| Historical FFmpeg libraries | [LGPL 2.1 or later](https://github.com/kunkunkunQoQ/SonicRoute/blob/v1.31/packaging/AndroidLab/video-licenses/FFmpeg-LICENSE.txt) |
+| Historical SDL2 | [zlib license](https://github.com/kunkunkunQoQ/SonicRoute/blob/v1.31/packaging/AndroidLab/video-licenses/SDL2-LICENSE.txt) |
+| Historical zlib | [zlib license](https://github.com/kunkunkunQoQ/SonicRoute/blob/v1.31/packaging/AndroidLab/video-licenses/zlib-LICENSE.txt) |
 | QRCoder | [MIT](QRCoder-LICENSE.txt) |
 | System.Management, System.Text.Json, Microsoft.Windows.CsWinRT | MIT (NuGet package metadata) |
 
@@ -41,7 +41,9 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 ### Current .NET Dependencies and Historical Apache-2.0 Lab Files
 
-- **Current `.NET` NuGet dependencies** (`SonicRoute`, `SonicRoute.Core`, `SonicRoute.AndroidAudio`, `StoreInterop`): `System.Management 8.0.0` (MIT), `System.Text.Json 8.0.5` (MIT, `net48` target), `Microsoft.Windows.CsWinRT 2.3.1` (MIT), `QRCoder 1.7.0` (MIT, Full only), `NAudio.Wasapi 2.2.1` / `NAudio.Core 2.2.1` (MIT + Ray Molenkamp zlib source notice, Full / Lite / Legacy), and `Concentus 2.2.2` (BSD-style / Opus license, Full only). All retain their original permissive licenses.
+- **2.00 Windows Full and Lite** include the .NET 10 Native AOT runtime and embedded C#/WinRT projection. Their notices are available offline in Settings under GPL-3.0. [Runtime and C#/WinRT notices](../Licenses/Windows-runtime.txt)
+- **2.00 Full** also includes the QRCoder and Concentus notices, Windows drawing dependency notices, and the AirPlay compatibility and AAC notices. [QRCoder](QRCoder-LICENSE.txt) · [Concentus](#concentus-222) · [Windows drawing](../Licenses/Windows-drawing.txt) · [PlayFair](../../SonicRoute.AndroidAudio/AirPlay/Compatibility/NOTICE.md) · [AAC](../../SonicRoute.AndroidAudio/AirPlay/AacEld.NOTICE.md)
+- **Historical WPF and net48** graphs also included System.Management, NAudio and the net48 System.Text.Json package. Their notices continue to apply to those distributions.
 - **Historical `packaging/AndroidLab/native/` integration patches and helpers**: Files carrying `SPDX-License-Identifier: Apache-2.0` (including `virtual_resize.patch`, `OwnedAppMonitor.java`, `OwnedDisplayPolicy.java`, `PairingControl.java`, `PhoneDisplaySizing.java`, `UnicodeInputBridge.java`, `flex_resize.h`, `ime_routing.h`, `mirror_resize.h`, and `resize_packet.h`) remain under **Apache-2.0** and are not relicensed.
 
 ## Concentus 2.2.2

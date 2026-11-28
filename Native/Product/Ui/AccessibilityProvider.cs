@@ -88,8 +88,14 @@ internal sealed unsafe partial class AccessibleWindow(nint hwnd) : AccessibleEle
                     AccessibilityApi.Changed(entries[i].Control, AccessibilityApi.Name, ComVariant.Create(before.Name), ComVariant.Create(after.Name));
                 if (before.Enabled != after.Enabled)
                     AccessibilityApi.Changed(entries[i].Control, AccessibilityApi.IsEnabled, ComVariant.Create(before.Enabled), ComVariant.Create(after.Enabled));
-                if (before.Range is { } prior && after.Range is { } current && prior.Value != current.Value)
-                    AccessibilityApi.Changed(entries[i].Control, AccessibilityApi.RangeValue, ComVariant.Create(prior.Value), ComVariant.Create(current.Value));
+                if (before.Range is { } prior && after.Range is { } current)
+                {
+                    if (prior.Value != current.Value)
+                        AccessibilityApi.Changed(entries[i].Control, AccessibilityApi.RangeValue, ComVariant.Create(prior.Value), ComVariant.Create(current.Value));
+                    if (prior.Maximum != current.Maximum)
+                        AccessibilityApi.Changed(entries[i].Control, AccessibilityApi.RangeMaximum,
+                            ComVariant.Create(prior.Maximum), ComVariant.Create(current.Maximum));
+                }
                 if (before.Selected is bool was && after.Selected is bool now && was != now)
                 {
                     bool toggle = AccessibleControl.IsToggle(after);

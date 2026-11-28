@@ -518,6 +518,20 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
         MathF.Ceiling(D2dSharedContext.Instance.MeasureText(hint, UiMetrics.FontFamily, 11.5f, 400,
             MathF.Max(1f, width), 2048f, true).Height);
 
+    private static float MeasureDeviceMoreOptions(string label, float width) =>
+        Math.Clamp(MathF.Ceiling(D2dSharedContext.Instance.MeasureText(label, UiMetrics.FontFamily,
+            11.5f, 400, width, 26f, false).Width) + 24f, 102f, MathF.Max(102f, width * 0.45f));
+
+    private static void DrawDeviceMoreOptions(D2dTarget g, UiThemePalette t, UiHitMap hit, string id,
+        UiRect rect, string label, string sectionTitle, bool expanded)
+    {
+        if (hit.AccessibilityEnabled) hit.Describe(id, label + " · " + sectionTitle);
+        g.DrawText(label, new UiRect(rect.X, rect.Y, rect.Width - 22f, rect.Height),
+            hit.IsHover(id) ? t.AccentHover : t.Accent, 11.5f, 400, UiTextAlign.Trailing, UiVertAlign.Center);
+        g.DrawIcon(UiIcon.ChevronDown, new UiRect(rect.Right - 14f, rect.CenterY - 4.5f, 9f, 9f),
+            t.Accent, 1.8f, expanded ? 180f : 0f);
+    }
+
     private float RenderDeviceVisibilityCard(
         D2dTarget g, UiThemePalette t, UiHitMap hit, UiRect viewport,
         float x, float y, float w, AppConfig cfg,
@@ -551,7 +565,10 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
         }
 
         string hint = L10n.T("Settings.KeepHint");
-        float hintWidth = MathF.Max(1f, innerW - 32f - (cfg.CollapseDeviceSections ? 102f : 0f));
+        string title = L10n.T("Settings.KeepTitle");
+        string moreLabel = L10n.T("Exp.MoreOptions");
+        float moreWidth = cfg.CollapseDeviceSections ? MeasureDeviceMoreOptions(moreLabel, innerW) : 0f;
+        float hintWidth = MathF.Max(1f, innerW - 32f - moreWidth);
         float hintHeight = MeasureDeviceHint(hint, hintWidth);
         const float headingHeight = 20f;
         float headerH = headingHeight + 4f + hintHeight + 10f;
@@ -560,17 +577,14 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
         UiPrimitives.DrawCard(g, t, card);
 
         float cy = y + pad;
-        UiPrimitives.DrawSettingsSectionHeader(g, t, new UiRect(x + pad, cy, innerW, headingHeight), UiIcon.Monitor, L10n.T("Settings.KeepTitle"));
+        UiPrimitives.DrawSettingsSectionHeader(g, t, new UiRect(x + pad, cy, innerW - moreWidth, headingHeight), UiIcon.Monitor, title);
         g.DrawText(hint, new UiRect(x + pad + 32f, cy + headingHeight + 4f, hintWidth, hintHeight), t.TextSecondary, 11.5f, 400, UiTextAlign.Leading, UiVertAlign.Top, wrap: true);
 
         if (cfg.CollapseDeviceSections)
         {
-            var toggleRect = new UiRect(x + w - pad - 102f, cy + 2f, 102f, 26f);
+            var toggleRect = new UiRect(x + w - pad - moreWidth, cy + 2f, moreWidth, 26f);
             register("st.keep.toggle", toggleRect, () => { _keepDevicesExpanded = !_keepDevicesExpanded; actions.Invalidate(); }, UiCursorKind.Hand);
-            g.DrawText(L10n.T("Exp.MoreOptions"), new UiRect(toggleRect.X, toggleRect.Y, 80f, toggleRect.Height),
-                hit.IsHover("st.keep.toggle") ? t.AccentHover : t.Accent, 11.5f, 400, UiTextAlign.Trailing, UiVertAlign.Center);
-            g.DrawIcon(UiIcon.ChevronDown, new UiRect(toggleRect.Right - 14f, toggleRect.CenterY - 4.5f, 9f, 9f),
-                t.Accent, 1.8f, _keepDevicesExpanded ? 180f : 0f);
+            DrawDeviceMoreOptions(g, t, hit, "st.keep.toggle", toggleRect, moreLabel, title, _keepDevicesExpanded);
         }
 
         cy += headerH + 6f;
@@ -719,7 +733,10 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
         }
 
         string hint = L10n.T("St.DeviceNamesHint");
-        float hintWidth = MathF.Max(1f, innerW - 32f - (cfg.CollapseDeviceSections ? 102f : 0f));
+        string title = L10n.T("St.DeviceNames");
+        string moreLabel = L10n.T("Exp.MoreOptions");
+        float moreWidth = cfg.CollapseDeviceSections ? MeasureDeviceMoreOptions(moreLabel, innerW) : 0f;
+        float hintWidth = MathF.Max(1f, innerW - 32f - moreWidth);
         float hintHeight = MeasureDeviceHint(hint, hintWidth);
         const float headingHeight = 20f;
         float headerH = headingHeight + 4f + hintHeight + 10f;
@@ -728,17 +745,14 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
         UiPrimitives.DrawCard(g, t, card);
 
         float cy = y + pad;
-        UiPrimitives.DrawSettingsSectionHeader(g, t, new UiRect(x + pad, cy, innerW, headingHeight), UiIcon.Label, L10n.T("St.DeviceNames"));
+        UiPrimitives.DrawSettingsSectionHeader(g, t, new UiRect(x + pad, cy, innerW - moreWidth, headingHeight), UiIcon.Label, title);
         g.DrawText(hint, new UiRect(x + pad + 32f, cy + headingHeight + 4f, hintWidth, hintHeight), t.TextSecondary, 11.5f, 400, UiTextAlign.Leading, UiVertAlign.Top, wrap: true);
 
         if (cfg.CollapseDeviceSections)
         {
-            var toggleRect = new UiRect(x + w - pad - 102f, cy + 2f, 102f, 26f);
+            var toggleRect = new UiRect(x + w - pad - moreWidth, cy + 2f, moreWidth, 26f);
             register("st.names.toggle", toggleRect, () => { _deviceNamesExpanded = !_deviceNamesExpanded; actions.Invalidate(); }, UiCursorKind.Hand);
-            g.DrawText(L10n.T("Exp.MoreOptions"), new UiRect(toggleRect.X, toggleRect.Y, 80f, toggleRect.Height),
-                hit.IsHover("st.names.toggle") ? t.AccentHover : t.Accent, 11.5f, 400, UiTextAlign.Trailing, UiVertAlign.Center);
-            g.DrawIcon(UiIcon.ChevronDown, new UiRect(toggleRect.Right - 14f, toggleRect.CenterY - 4.5f, 9f, 9f),
-                t.Accent, 1.8f, _deviceNamesExpanded ? 180f : 0f);
+            DrawDeviceMoreOptions(g, t, hit, "st.names.toggle", toggleRect, moreLabel, title, _deviceNamesExpanded);
         }
 
         cy += headerH + 6f;
@@ -971,7 +985,11 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
         {
             float width = D2dSharedContext.Instance.MeasureText(text, UiMetrics.FontFamily, 13f, 400, w, 22f, false).Width;
             var rect = new UiRect(cursor, linkY, width, 22f);
-            if (id != null && open != null) register(id, rect, open, UiCursorKind.Hand);
+            if (id != null && open != null)
+            {
+                register(id, rect, open, UiCursorKind.Hand);
+                hit.Describe(id, text);
+            }
             g.DrawText(text, rect, id == null ? t.TextSecondary : hit.IsHover(id) ? t.AccentHover : t.Accent, 13f);
             if (id != null) g.DrawLine(rect.X, rect.Bottom - 4f, rect.Right, rect.Bottom - 4f, t.Accent, .8f, roundCaps: false);
             cursor += width + 3f;
@@ -1365,12 +1383,31 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
     {
         try
         {
-            using var stream = typeof(SettingsPageView).Assembly.GetManifestResourceStream("SonicRoute.License");
-            if (stream == null) return;
-            using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
-            actions.ShowProjectLicense("SonicRoute\r\nCopyright (c) 2026 kunkunkunQoQ\r\nGPL-3.0-only\r\n\r\n" + reader.ReadToEnd());
+            var text = new StringBuilder("SonicRoute\r\nCopyright (c) 2026 kunkunkunQoQ\r\nGPL-3.0-only\r\n\r\n");
+            void Append(System.Reflection.Assembly assembly, string resource)
+            {
+                using var stream = assembly.GetManifestResourceStream(resource) ?? throw new InvalidDataException(resource);
+                using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
+                text.AppendLine(reader.ReadToEnd()).AppendLine();
+            }
+            var product = typeof(SettingsPageView).Assembly;
+            Append(product, "SonicRoute.License");
+            Append(product, "SonicRoute.Licenses.Runtime");
+#if SONICROUTE_PHONE
+            text.AppendLine("QRCoder");
+            Append(product, "SonicRoute.Licenses.QRCoder");
+            Append(product, "SonicRoute.Licenses.Drawing");
+            var audio = typeof(AndroidAudioManager).Assembly;
+            text.AppendLine("Concentus / Opus");
+            Append(audio, "SonicRoute.Licenses.Concentus");
+            Append(audio, "SonicRoute.AirPlay.PlayFair.NOTICE.md");
+            Append(audio, "SonicRoute.AirPlay.PlayFair.LICENSE-MIT.txt");
+            Append(audio, "SonicRoute.AirPlay.AacEld.NOTICE.md");
+            Append(audio, "SonicRoute.AirPlay.AacEld.FFmpeg-LGPL-2.1.txt");
+#endif
+            actions.ShowProjectLicense(text.ToString());
         }
-        catch { }
+        catch (Exception error) { ExceptionDiagnostics.Record("Settings.License", error); actions.ShowNotice(error.Message); }
     }
 
     private static void OpenUrl(string url)

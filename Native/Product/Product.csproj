@@ -24,6 +24,9 @@
     <PackageReference Include="QRCoder" Version="1.7.0" Condition="'$(SonicRouteEdition)'=='Full'" />
     <Compile Include="../Graphics/DirectDrawing.cs;../../SonicRoute.AndroidAudio/WicIconLoader.cs;../../SonicRoute.AndroidAudio/ComInteropHelpers.cs;../../shared/WindowsAudio/Win32Native.cs" />
     <EmbeddedResource Include="../../LICENSE" LogicalName="SonicRoute.License" />
+    <EmbeddedResource Include="../../packaging/Licenses/Windows-runtime.txt" LogicalName="SonicRoute.Licenses.Runtime" />
+    <EmbeddedResource Condition="'$(SonicRouteEdition)'=='Full'" Include="../../packaging/AndroidLab/QRCoder-LICENSE.txt" LogicalName="SonicRoute.Licenses.QRCoder" />
+    <EmbeddedResource Condition="'$(SonicRouteEdition)'=='Full'" Include="../../packaging/Licenses/Windows-drawing.txt" LogicalName="SonicRoute.Licenses.Drawing" />
     <ProjectReference Include="../../SonicRoute.Core/SonicRoute.Core.csproj" />
     <ProjectReference Include="../../StoreInterop/StoreInterop.csproj" />
     <Compile Include="../../SonicRoute/CoalescedVolumeWriter.cs;../../SonicRoute/ForegroundChangeSource.cs;../../SonicRoute/L10n.cs;../../SonicRoute/LanguageFiles.cs;../../SonicRoute/LanguageJsonContext.cs;../../SonicRoute/HostStartup.cs;../../SonicRoute/CommandOutput.cs" />

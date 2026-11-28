@@ -594,6 +594,23 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
 
     private const float PanelPaddingX = 9f;
     private const float PanelPaddingY = 13f;
+    private const float MediaInfoOffsetX = 69f;
+    private const float MediaInfoRightPadding = 6f;
+    private const float MediaTitleHeight = 18f;
+    private const float MediaSubtitleHeight = 14f;
+
+    private (float Title, float Subtitle) MeasureMediaText(float contentWidth)
+    {
+        if (_mediaState?.HasSession == true) return (MediaTitleHeight, MediaSubtitleHeight);
+        float width = MathF.Max(20f, contentWidth - MediaInfoOffsetX - MediaInfoRightPadding);
+        var ctx = D2dSharedContext.Instance;
+        float title = ctx.MeasureText(L10n.T("Phone.MediaDefaultTitle"), UiMetrics.FontFamily,
+            13f, 600, width, 2f * MediaTitleHeight, true).Height;
+        float subtitle = ctx.MeasureText(L10n.T("Phone.MediaNonePlaying"), UiMetrics.FontFamily,
+            10f, 400, width, 2f * MediaSubtitleHeight, true).Height;
+        return (Math.Clamp(MathF.Ceiling(title), MediaTitleHeight, 2f * MediaTitleHeight),
+            Math.Clamp(MathF.Ceiling(subtitle), MediaSubtitleHeight, 2f * MediaSubtitleHeight));
+    }
     private UiRect AirPlayDropBounds(float w, float h)
     {
         float width = w - PanelPaddingX * 2f;
@@ -612,7 +629,9 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
         float contentW = widthDip - padX * 2f;
         float footerH = 36f;
         float footerY = heightDip - padY - footerH;
-        float listY = padY + MediaCardHeight + 6f + (AdbLibrary ? 34f : 0f);
+        var (titleHeight, subtitleHeight) = MeasureMediaText(contentW);
+        float extraHeight = titleHeight + subtitleHeight - MediaTitleHeight - MediaSubtitleHeight;
+        float listY = padY + MediaCardHeight + extraHeight + 6f + (AdbLibrary ? 34f : 0f);
         return new UiRect(padX, listY, contentW, MathF.Max(30f, footerY - 6f - listY));
     }
 
@@ -718,7 +737,9 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
 
         // Android media card and seek bar
         float y = padY;
-        var mediaCard = new UiRect(padX, y, contentW, MediaCardHeight);
+        var (titleHeight, subtitleHeight) = MeasureMediaText(contentW);
+        float extraHeight = titleHeight + subtitleHeight - MediaTitleHeight - MediaSubtitleHeight;
+        var mediaCard = new UiRect(padX, y, contentW, MediaCardHeight + extraHeight);
         UiPrimitives.DrawCard(g, _theme, mediaCard, 10f);
 
         var artRect = new UiRect(mediaCard.X + 7f, mediaCard.Y + 10f, 56f, 56f);
@@ -750,8 +771,8 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
             g.DrawText("♫", artRect, _theme.TextSecondary, 22f, 400, UiTextAlign.Center, UiVertAlign.Center);
         }
 
-        float infoX = artRect.Right + 6f;
-        float infoW = MathF.Max(20f, mediaCard.Right - 6f - infoX);
+        float infoX = mediaCard.X + MediaInfoOffsetX;
+        float infoW = MathF.Max(20f, mediaCard.Width - MediaInfoOffsetX - MediaInfoRightPadding);
         string mediaTitle = _mediaState is { HasSession: true } ms && ms.Title.Length > 0
             ? ms.Title
             : (_mediaState is { HasSession: true } ? mediaApp?.Name ?? _mediaState.Package : L10n.T("Phone.MediaDefaultTitle"));
@@ -761,11 +782,18 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
             mediaSub = session.Artist.Length > 0 ? session.Artist : L10n.T(session.Playing ? "Phone.MediaPlaying" : "Phone.MediaPaused");
             if (mediaApp != null) mediaSub += " · " + mediaApp.Name;
         }
-        _mediaTitleRect = new UiRect(infoX, mediaCard.Y + 5f, infoW, 18f);
-        g.DrawText(mediaTitle, _mediaTitleRect, _theme.TextPrimary, 13f, 600);
-        g.DrawText(mediaSub, new UiRect(infoX, mediaCard.Y + 23f, infoW, 14f), _theme.TextSecondary, 10f);
+        _mediaTitleRect = new UiRect(infoX, mediaCard.Y + 5f, infoW, titleHeight);
+        var mediaSubtitleRect = new UiRect(infoX, _mediaTitleRect.Bottom, infoW, subtitleHeight);
+        bool idle = _mediaState?.HasSession != true;
+        g.DrawText(mediaTitle, _mediaTitleRect, _theme.TextPrimary, 13f, 600, wrap: idle);
+        g.DrawText(mediaSub, mediaSubtitleRect, _theme.TextSecondary, 10f, wrap: idle);
+        if (idle && _hit.AccessibilityEnabled)
+        {
+            _hit.DescribeText("companion.media.title", _mediaTitleRect, mediaTitle);
+            _hit.DescribeText("companion.media.status", mediaSubtitleRect, mediaSub);
+        }
 
-        float ctrlY = mediaCard.Y + 40f;
+        float ctrlY = mediaCard.Y + 40f + extraHeight;
         const float gap = 4f;
         float btnW = MathF.Min(32f, (infoW - 3 * gap) / 3f);
         float ctrlStartX = infoX + (infoW - 3 * btnW - 2 * gap) / 2f;
@@ -787,7 +815,7 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
         TransportButton("companion.next", 2, UiIcon.NextTrack, canNext, "Phone.MediaNext");
 
         // Seek bar row (time · slider · duration)
-        float seekY = mediaCard.Y + 70f;
+        float seekY = mediaCard.Y + 70f + extraHeight;
         long durationMs = Math.Max(0L, _mediaState?.DurationMs ?? 0L);
         double posMs = _seeking
             ? _seekPositionMs

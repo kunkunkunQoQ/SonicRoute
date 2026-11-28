@@ -54,6 +54,8 @@ internal sealed class AirPlayMirrorStream : IAsyncDisposable
 
     internal int DataPort { get; }
     internal int PresentedFrames => Volatile.Read(ref _frames);
+    internal nint PresentedWindowHandle => PresentedFrames > 0 && !_stop.IsCancellationRequested
+        ? Volatile.Read(ref _window)?.WindowHandle ?? 0 : 0;
     internal void Activate() { if (PresentedFrames > 0) Volatile.Read(ref _window)?.Activate(); }
     internal void SetTopmost(bool value) => Volatile.Read(ref _window)?.SetTopmost(value);
     internal void SetFullscreen(bool value)

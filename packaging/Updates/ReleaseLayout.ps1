@@ -21,7 +21,31 @@ function Get-ReleaseSourceState([string]$RepositoryRoot) {
     if($LASTEXITCODE -ne 0 -or $tree -cnotmatch '^[a-f0-9]{40}$'){throw 'Cannot identify source tree.'}
     $status=@(& git -C $RepositoryRoot status --porcelain --untracked-files=all)
     if($LASTEXITCODE -ne 0){throw 'Cannot verify source status.'}
-    [pscustomobject]@{Commit=$commit;Tree=$tree;Clean=($status.Count -eq 0);Status=$status}
+    # HEAD identifies committed sources. Local candidates can also include modified,
+    # deleted and untracked inputs whose names stay unchanged throughout a build.
+    $workingSetHash=$null
+    if($status.Count){
+        $modified=@(& git -C $RepositoryRoot -c core.quotepath=false diff --name-only --no-renames HEAD --)
+        if($LASTEXITCODE){throw 'Cannot enumerate changed source files.'}
+        $untracked=@(& git -C $RepositoryRoot -c core.quotepath=false ls-files --others --exclude-standard)
+        if($LASTEXITCODE){throw 'Cannot enumerate additional source files.'}
+        [string[]]$paths=@($modified)+@($untracked)
+        [Array]::Sort($paths,[StringComparer]::Ordinal)
+        $inventory=[Text.StringBuilder]::new()
+        $staged=@(& git -C $RepositoryRoot -c core.quotepath=false diff --cached --raw --no-abbrev --no-renames HEAD --)
+        if($LASTEXITCODE){throw 'Cannot identify staged source objects.'}
+        foreach($entry in $staged){[void]$inventory.Append($entry).Append([char]0)}
+        [void]$inventory.Append([char]0)
+        foreach($name in $paths){
+            $path=Join-Path $RepositoryRoot $name
+            $digest=if([IO.File]::Exists($path)){(Get-FileHash -LiteralPath $path -Algorithm SHA256 -ErrorAction Stop).Hash}else{'deleted'}
+            [void]$inventory.Append($name).Append([char]0).Append($digest).Append([char]0)
+        }
+        $algorithm=[Security.Cryptography.SHA256]::Create()
+        try{$workingSetHash=[BitConverter]::ToString($algorithm.ComputeHash([Text.Encoding]::UTF8.GetBytes($inventory.ToString()))).Replace('-','').ToLowerInvariant()}
+        finally{$algorithm.Dispose()}
+    }
+    [pscustomobject]@{Commit=$commit;Tree=$tree;Clean=($status.Count -eq 0);Status=$status;WorkingSetHash=$workingSetHash}
 }
 
 function Get-ReleaseMatrix([string]$Version) {

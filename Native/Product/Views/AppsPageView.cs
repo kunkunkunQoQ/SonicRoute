@@ -1295,19 +1295,24 @@ internal sealed partial class AppsPageView : IViewPage, IViewDockPage
         _actions.Invalidate();
     }
 
-    private void ApplyForwardVolume(string targetDeviceId, int percent) =>
-        ChangeForwardGain(targetDeviceId, percent, toggleMute: false);
+    private MirrorGainState GetForwardGain(string targetDeviceId) =>
+        _mirrorGains.GetValueOrDefault(targetDeviceId, MirrorGainState.Default);
+
+    private void ApplyForwardVolume(string targetDeviceId, int percent, bool persist = true) =>
+        ChangeForwardGain(targetDeviceId, percent, persist: persist);
 
     private void ToggleForwardMute(string targetDeviceId) =>
-        ChangeForwardGain(targetDeviceId, null, toggleMute: true);
+        ChangeForwardGain(targetDeviceId, toggleMute: true);
 
-    private void ChangeForwardGain(string targetDeviceId, int? percent, bool toggleMute)
+    private void ChangeForwardGain(string targetDeviceId, int? percent = null, bool toggleMute = false,
+        int? maximumVolumePercent = null, bool persist = true)
     {
         if (_selectedApp is not { IsExternalOffline: false } app || _outputChoicesIdentity != app.Identity
             || !DisplayedOutputs.Contains(targetDeviceId, IdCmp)
             || IdCmp.Equals(GetDisplayedNativeOutputId(app), targetDeviceId)) return;
         _mirrorGainRevision++;
-        _mirrorGains[targetDeviceId] = _actions.Host.Audio.SetMirrorGain(app, targetDeviceId, volumePercent: percent, toggleMute: toggleMute);
+        _mirrorGains[targetDeviceId] = _actions.Host.Audio.SetMirrorGain(app, targetDeviceId,
+            volumePercent: percent, toggleMute: toggleMute, maximumVolumePercent: maximumVolumePercent, persist: persist);
         _actions.Invalidate();
     }
 

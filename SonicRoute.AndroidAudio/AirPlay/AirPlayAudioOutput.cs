@@ -39,7 +39,8 @@ internal sealed class AirPlayAudioOutput : IPhoneAudioSession, IMultiOutputAudio
     internal AirPlayAudioOutput(string name, Action changed, Action failed,
         Func<AndroidPcmSource, string?, CancellationToken, IPcmPlayer> createPlayer,
         Func<Action, IDisposable> watchDefault, CancellationToken lifetime,
-        AndroidAudioSettingsStore? preferences = null, string? preferenceKey = null, Func<string?[], string?[]>? resolveOutputs = null)
+        AndroidAudioSettingsStore? preferences = null, string? preferenceKey = null, Func<string?[], string?[]>? resolveOutputs = null,
+        Func<string?, string, (int VolumePercent, bool Muted)?>? resolveMirrorGain = null)
     {
         Name = name;
         _changed = changed; _failed = failed; _createPlayer = createPlayer; _watchDefault = watchDefault;
@@ -48,6 +49,7 @@ internal sealed class AirPlayAudioOutput : IPhoneAudioSession, IMultiOutputAudio
         _preferences = preferences;
         _resolveOutputs = resolveOutputs;
         PreferenceKey = preferences == null ? null : preferenceKey;
+        if (resolveMirrorGain != null) _mirrors.InitialGain = id => resolveMirrorGain(PreferenceKey, id);
         // A display name is enough for a card, but two senders may share it.
         if (preferenceKey?.StartsWith(ExternalAudioPreference.AirPlayPrefix + "id:", StringComparison.Ordinal) == true)
             _initial = preferences?.FindExternalAudio(preferenceKey);

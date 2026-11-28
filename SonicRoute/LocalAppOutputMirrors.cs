@@ -317,6 +317,9 @@ internal static partial class LocalAppOutputMirrors
     private sealed class Sink(string id, IDisposable player)
     {
         internal readonly string Id = id;
+#if SONICROUTE_NATIVE_PC
+        internal readonly string? GainOutputId = CaptureForwardGainPreferences.PersistentOutputId(id);
+#endif
 #if SONICROUTE_PHONE
         internal AndroidPcmSource? Pcm { get; init; }
         internal DesktopMirrorPlayer? DesktopPlayer => Player as DesktopMirrorPlayer;

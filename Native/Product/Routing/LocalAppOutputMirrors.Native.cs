@@ -1,50 +1,71 @@
 using System.Diagnostics;
 using SonicRoute.Native.Audio;
 using SonicRoute.AndroidAudio;
+using SonicRoute.Core.Models;
 using SonicRoute.Native.Product;
 
 namespace SonicRoute;
 
-internal readonly record struct MirrorGainState(int VolumePercent, bool Muted);
-
 internal static partial class LocalAppOutputMirrors
 {
-    private static readonly object GainGate = new();
-    private static readonly Dictionary<int, Dictionary<string, MirrorGainState>> MirrorGains = new();
-    private static readonly MirrorGainState DefaultGain = new(100, false);
+    private static readonly Dictionary<int, Dictionary<string, MirrorGainState>> LiveMirrorGains = new();
 
     internal static MirrorStatus Status(int pid) => Routes.TryGetValue(pid, out var route)
         ? route.Snapshot() : new(pid,false,false,0,0,0,null,null,null,null,[]);
 
+    internal static bool HasSink(int pid, string sinkId) =>
+        Routes.TryGetValue(pid, out var route) && route.GetSink(sinkId) != null;
+
     internal static MirrorGainState GetSinkGain(int pid, string sinkId)
     {
-        if (pid <= 0 || string.IsNullOrWhiteSpace(sinkId)) return DefaultGain;
-        lock (GainGate)
-            return MirrorGains.TryGetValue(pid, out var gains) && gains.TryGetValue(sinkId, out var state)
-                ? state : DefaultGain;
+        if (pid <= 0 || string.IsNullOrWhiteSpace(sinkId)) return MirrorGainState.Default;
+        lock (CaptureForwardGainPreferences.Gate)
+        {
+            if (!Routes.TryGetValue(pid, out var route) || route.GetSink(sinkId) is not { } sink) return MirrorGainState.Default;
+            return ReadGain(route, sink);
+        }
     }
 
-    internal static MirrorGainState SetSinkGain(int pid, string sinkId, int? volumePercent = null, bool? muted = null, bool toggleMute = false)
+    internal static MirrorGainState SetSinkGain(int pid, string sinkId, int? volumePercent = null, bool? muted = null,
+        bool toggleMute = false, int? maximumVolumePercent = null, bool persist = true)
     {
-        if (pid <= 0 || string.IsNullOrWhiteSpace(sinkId)) return DefaultGain;
-        lock (GainGate)
+        if (pid <= 0 || string.IsNullOrWhiteSpace(sinkId)) return MirrorGainState.Default;
+        lock (CaptureForwardGainPreferences.Gate)
         {
-            if (!MirrorGains.TryGetValue(pid, out var gains))
+            if (!Routes.TryGetValue(pid, out var route) || route.GetSink(sinkId) is not { } current) return MirrorGainState.Default;
+            var next = ReadGain(route, current).WithChange(volumePercent, muted, toggleMute, maximumVolumePercent);
+            if (persist && route.GainAppKey is { } appKey && current.GainOutputId is { } stableOutputId)
             {
-                gains = new(Ids);
-                MirrorGains.Add(pid, gains);
+                CaptureForwardGainPreferences.Save(appKey, stableOutputId, next);
+                foreach (var entry in Routes)
+                {
+                    var active = entry.Value;
+                    if (!Ids.Equals(active.GainAppKey, appKey)) continue;
+                    foreach (var sink in active.Sinks)
+                    {
+                        if (!Ids.Equals(sink.GainOutputId, stableOutputId)) continue;
+                        if (LiveMirrorGains.TryGetValue(active.ProcessId, out var gains))
+                        {
+                            gains.Remove(sink.Id);
+                            if (gains.Count == 0) LiveMirrorGains.Remove(active.ProcessId);
+                        }
+                        ApplyGainToSink(sink, next);
+                    }
+                }
             }
-            var previous = gains.GetValueOrDefault(sinkId, DefaultGain);
-            var next = new MirrorGainState(
-                Math.Clamp(volumePercent ?? previous.VolumePercent, 0, 100),
-                toggleMute ? !previous.Muted : (muted ?? previous.Muted));
-            gains[sinkId] = next;
-            if (Routes.TryGetValue(pid, out var route))
-                foreach (var sink in route.Sinks)
-                    if (Ids.Equals(sink.Id, sinkId)) ApplyGainToSink(sink, next);
+            else
+            {
+                if (!LiveMirrorGains.TryGetValue(pid, out var gains)) LiveMirrorGains.Add(pid, gains = new(Ids));
+                gains[current.Id] = next;
+                ApplyGainToSink(current, next);
+            }
             return next;
         }
     }
+
+    private static MirrorGainState ReadGain(Route route, Sink sink) =>
+        LiveMirrorGains.TryGetValue(route.ProcessId, out var gains) && gains.TryGetValue(sink.Id, out var state)
+            ? state : CaptureForwardGainPreferences.Read(route.GainAppKey, sink.GainOutputId);
 
     private static void ApplyGainToSink(Sink sink, MirrorGainState state)
     {
@@ -52,7 +73,7 @@ internal static partial class LocalAppOutputMirrors
             desktop.SetGain(state.VolumePercent, state.Muted);
 #if SONICROUTE_PHONE
         else if (sink.Pcm is { } pcm)
-            pcm.Volume = state.Muted ? 0f : state.VolumePercent / 100f;
+            pcm.MirrorGain = state.Muted ? 0f : state.VolumePercent / 100f;
 #endif
     }
 
@@ -60,16 +81,25 @@ internal static partial class LocalAppOutputMirrors
     {
         private readonly AutoResetEvent _renderWake = new(false);
         private readonly MirrorMeasurement _measurement = new();
+        internal string? GainAppKey { get; private set; }
+
+        internal Sink? GetSink(string id)
+        {
+            string normalized = CaptureForwardGainPreferences.NormalizeOutputId(id);
+            foreach (var sink in Sinks)
+                if (Ids.Equals(sink.Id, normalized)) return sink;
+            return null;
+        }
+
         internal MirrorStatus Snapshot() => _measurement.Snapshot(ProcessId, Sinks.Select(s => s.DesktopPlayer?.Status()).OfType<MirrorSinkStatus>().ToArray());
 
         private Sink[] PublishSinks(Sink[] next, bool register)
         {
+            if (register) GainAppKey = PlaybackAppIdentity.Read(ProcessId)?.Key;
             // Keep gain edits and publication of the players in the same critical section.
-            lock (GainGate)
+            lock (CaptureForwardGainPreferences.Gate)
             {
-                if (MirrorGains.TryGetValue(ProcessId, out var gains))
-                    foreach (var sink in next)
-                        if (gains.TryGetValue(sink.Id, out var gain)) ApplyGainToSink(sink, gain);
+                foreach (var sink in next) ApplyGainToSink(sink, ReadGain(this, sink));
                 var previous = Interlocked.Exchange(ref _sinks, next);
                 if (register) Routes[ProcessId] = this;
                 return previous;
@@ -78,7 +108,7 @@ internal static partial class LocalAppOutputMirrors
 
         partial void OnRouteStopped()
         {
-            lock (GainGate) MirrorGains.Remove(ProcessId);
+            lock (CaptureForwardGainPreferences.Gate) LiveMirrorGains.Remove(ProcessId);
         }
 
         private Task CaptureNativeAsync(Action started) => Task.Factory.StartNew(() =>

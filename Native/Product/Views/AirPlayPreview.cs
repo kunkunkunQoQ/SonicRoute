@@ -27,6 +27,7 @@ internal sealed class AirPlayPreview : IDisposable
     private int _disposed;
     private bool _watchingNetwork;
     private int _networkQueued;
+    private long _networkRevision;
     private int _checkNetworkOnRelease;
     private readonly object _recoveryGate = new();
     private Task _outputRecovery = Task.CompletedTask;
@@ -45,6 +46,7 @@ internal sealed class AirPlayPreview : IDisposable
     internal event Action? Changed;
     internal AirPlayStatus Status => Volatile.Read(ref _transition) ?? Volatile.Read(ref _receiver)?.Status ?? Volatile.Read(ref _inactive);
     internal AirPlayAudioOutput? Source => Volatile.Read(ref _receiver)?.Source;
+    internal nint MirrorWindowHandle => Volatile.Read(ref _receiver)?.MirrorWindowHandle ?? 0;
     internal int Port => Volatile.Read(ref _receiver)?.Port ?? 0;
     internal bool Enabled => _preferences?.AirPlayEnabled ?? Status.Stage is AirPlayStage.Waiting or AirPlayStage.Connected;
 
@@ -57,6 +59,7 @@ internal sealed class AirPlayPreview : IDisposable
         if (!restart && enabled == (stage is AirPlayStage.Waiting or AirPlayStage.Connected) && enabled == Enabled)
             return;
 
+        long networkRevision = Volatile.Read(ref _networkRevision);
         var transition = new AirPlayStatus(enabled ? AirPlayStage.Starting : AirPlayStage.Stopping);
         if (Interlocked.CompareExchange(ref _transition, transition, null) != null)
             return;
@@ -96,7 +99,8 @@ internal sealed class AirPlayPreview : IDisposable
                             requireCode: config.AirPlayRequireCode,
                             useStorePorts: _isPackaged,
                             preferences: _preferences,
-                            resolveOutputs: ExternalAudioBridge.ResolveAvailableOutputs);
+                            resolveOutputs: ExternalAudioBridge.ResolveAvailableOutputs,
+                            resolveMirrorGain: ExternalAudioBridge.ResolveSavedMirrorGain);
                         receiver.Changed += ReceiverChanged;
                         receiver.DisplayChanged += ReceiverChanged;
                         Volatile.Write(ref _receiver, receiver);
@@ -132,6 +136,7 @@ internal sealed class AirPlayPreview : IDisposable
         finally
         {
             Volatile.Write(ref _transition, null);
+            if (enabled && networkRevision != Volatile.Read(ref _networkRevision)) QueueNetworkCheck();
             NotifyChanged();
         }
     }
@@ -154,6 +159,12 @@ internal sealed class AirPlayPreview : IDisposable
     }
 
     private void OnNetworkChanged(object? sender, EventArgs args)
+    {
+        Interlocked.Increment(ref _networkRevision);
+        QueueNetworkCheck();
+    }
+
+    private void QueueNetworkCheck()
     {
         if (_tryPost == null || Interlocked.Exchange(ref _networkQueued, 1) != 0) return;
         if (!_tryPost(() =>
@@ -189,7 +200,7 @@ internal sealed class AirPlayPreview : IDisposable
     private void ReceiverChanged()
     {
         if (Status.Stage == AirPlayStage.Waiting && Interlocked.Exchange(ref _checkNetworkOnRelease, 0) != 0)
-            OnNetworkChanged(null, EventArgs.Empty);
+            QueueNetworkCheck();
         NotifyChanged();
     }
 

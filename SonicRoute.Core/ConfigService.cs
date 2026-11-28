@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
+using System.Text.Json.Serialization;
+using System.Threading;
 using System.Threading.Tasks;
 using SonicRoute.Core.Interop;
 using SonicRoute.Core.Models;
@@ -137,6 +139,16 @@ namespace SonicRoute.Core
 
         /// <summary>应用路由画布布局：稳定应用标识 → 缩放、偏移及节点坐标（仅保存用户调整过的应用）。</summary>
         public Dictionary<string, AppCanvasLayout> AppCanvasLayouts { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+
+        private Dictionary<string, Dictionary<string, MirrorGainState>>? _captureForwardGains;
+
+        /// <summary>捕获转发设置：稳定应用标识 → 输出端点 → 增益、静音及上限。</summary>
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public Dictionary<string, Dictionary<string, MirrorGainState>>? CaptureForwardGains
+        {
+            get => Volatile.Read(ref _captureForwardGains);
+            set => Volatile.Write(ref _captureForwardGains, value);
+        }
 
         /// <summary>禁用自动切换的应用（进程名列表）：这些应用不会被自动选为"当前应用"（前台跟随/最近使用等），但仍可手动选择。</summary>
         public List<string> DisabledAutoSwitchApps { get; set; } = new();
@@ -324,6 +336,46 @@ namespace SonicRoute.Core
             AppNames = NormalizeMap(AppNames);
             AppIcons = AppIconFiles.NormalizeMappings(AppIcons);
             AppCanvasLayouts = NormalizeCanvasLayouts(AppCanvasLayouts);
+            CaptureForwardGains = NormalizeCaptureForwardGains(CaptureForwardGains);
+        }
+
+        public MirrorGainState GetCaptureForwardGain(string appKey, string outputId) =>
+            CaptureForwardGains is { } gains && gains.TryGetValue(appKey, out var outputs) && outputs.TryGetValue(outputId, out var gain)
+                ? gain : MirrorGainState.Default;
+
+        public bool SetCaptureForwardGain(string appKey, string outputId, MirrorGainState gain)
+        {
+            if (GetCaptureForwardGain(appKey, outputId) == gain) return false;
+            var gains = CaptureForwardGains;
+            Dictionary<string, Dictionary<string, MirrorGainState>> next = gains == null ? new(StringComparer.OrdinalIgnoreCase)
+                : new Dictionary<string, Dictionary<string, MirrorGainState>>(gains, StringComparer.OrdinalIgnoreCase);
+            var outputs = next.TryGetValue(appKey, out var previous)
+                ? new Dictionary<string, MirrorGainState>(previous, StringComparer.OrdinalIgnoreCase)
+                : new(StringComparer.OrdinalIgnoreCase);
+            if (gain == MirrorGainState.Default) outputs.Remove(outputId);
+            else outputs[outputId] = gain;
+            if (outputs.Count == 0) next.Remove(appKey);
+            else next[appKey] = outputs;
+            // Route publication can read the previous set while the settings owner publishes a replacement.
+            CaptureForwardGains = next.Count == 0 ? null : next;
+            return true;
+        }
+
+        private static Dictionary<string, Dictionary<string, MirrorGainState>>? NormalizeCaptureForwardGains(
+            Dictionary<string, Dictionary<string, MirrorGainState>>? source)
+        {
+            if (source == null) return null;
+            var result = new Dictionary<string, Dictionary<string, MirrorGainState>>(StringComparer.OrdinalIgnoreCase);
+            foreach (var app in source)
+            {
+                if (string.IsNullOrWhiteSpace(app.Key) || app.Value == null) continue;
+                var outputs = new Dictionary<string, MirrorGainState>(StringComparer.OrdinalIgnoreCase);
+                foreach (var output in app.Value)
+                    if (!string.IsNullOrWhiteSpace(output.Key) && output.Value != MirrorGainState.Default)
+                        outputs[output.Key] = output.Value;
+                if (outputs.Count != 0) result[app.Key] = outputs;
+            }
+            return result.Count == 0 ? null : result;
         }
 
         public const int MaxCanvasLayouts = 256;
@@ -405,6 +457,7 @@ namespace SonicRoute.Core
             copy.AppNames = new(AppNames ?? new(), AppNames?.Comparer ?? StringComparer.Ordinal);
             copy.AppIcons = new(AppIcons ?? new(), AppIcons?.Comparer ?? StringComparer.OrdinalIgnoreCase);
             copy.AppCanvasLayouts = NormalizeCanvasLayouts(AppCanvasLayouts);
+            copy.CaptureForwardGains = NormalizeCaptureForwardGains(CaptureForwardGains);
             return copy;
         }
     }
@@ -672,7 +725,8 @@ namespace SonicRoute.Core
         {
             lock (_writeLock)
             {
-                lock (_lock) { ++_saveVersion; _pendingSave = null; }
+                long precedingVersion;
+                lock (_lock) precedingVersion = _saveVersion;
                 // This explicit reset is allowed to replace defaults, but retain the previous settings.
                 bool wasBlocked = _savesBlocked;
                 _savesBlocked = false;
@@ -686,9 +740,24 @@ namespace SonicRoute.Core
                 }
                 LoadWarning = null;
                 var cfg = new AppConfig();
-                lock (_lock) { _cache = cfg; _committedSnapshot = _publishedSnapshot = cfg.Snapshot(); }
+                PublishReplacement(precedingVersion, cfg, cfg.Snapshot());
                 result = cfg;
                 return true;
+            }
+        }
+
+        // Called after the disk operation succeeds under _writeLock. On failure the
+        // previous queued save still owns its turn. A newer owner edit keeps its turn too.
+        private static void PublishReplacement(long precedingVersion, AppConfig? live, AppConfig snapshot)
+        {
+            lock (_lock)
+            {
+                _committedSnapshot = snapshot;
+                if (_saveVersion != precedingVersion) return;
+                ++_saveVersion;
+                _pendingSave = null;
+                _cache = live;
+                _publishedSnapshot = snapshot;
             }
         }
 
@@ -766,12 +835,13 @@ namespace SonicRoute.Core
                 byte[] ordinary = TransferJson(document.RootElement, config, null);
                 lock (_writeLock)
                 {
-                    lock (_lock) { ++_saveVersion; _pendingSave = null; }
+                    long precedingVersion;
+                    lock (_lock) precedingVersion = _saveVersion;
                     var dir = Path.GetDirectoryName(ConfigPath);
                     if (dir != null) Directory.CreateDirectory(dir);
                     BackupBeforeWrite();
                     AtomicFile.WriteAllBytes(ConfigPath, ordinary);
-                    lock (_lock) { _cache = null; _committedSnapshot = _publishedSnapshot = null; }
+                    PublishReplacement(precedingVersion, null, config);
                 }
                 return true;
             }
@@ -807,7 +877,12 @@ namespace SonicRoute.Core
             {
                 writer.WriteStartObject();
                 foreach (var property in root.EnumerateObject())
-                    if (property.Name != "AppIconAssets" && property.Name != nameof(AppConfig.AppIcons)) property.WriteTo(writer);
+                {
+                    // An ordinary settings transfer must not install automation on restart.
+                    // An in-place upgrade still migrates the original config via AutoRuleStore.
+                    if (property.Name is not ("AppIconAssets" or nameof(AppConfig.AppIcons) or "AutoRules"))
+                        property.WriteTo(writer);
+                }
                 writer.WritePropertyName(nameof(AppConfig.AppIcons));
                 WriteMap(writer, config.AppIcons);
                 if (assets != null && assets.Count > 0)

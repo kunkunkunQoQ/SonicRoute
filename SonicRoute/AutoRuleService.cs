@@ -162,7 +162,14 @@ namespace SonicRoute
 #if SONICROUTE_NATIVE
         internal static ProductAutomation? Product { get; set; }
         internal static bool WatchesForeground => _foregroundSubscribed;
-        internal static void NotifyForeground(int pid) { if (_foregroundSubscribed) ForegroundChanged(pid); }
+        internal static void NotifyForeground(int pid, nint hwnd)
+        {
+            if (!_foregroundSubscribed) return;
+#if SONICROUTE_PHONE
+            _observedForegroundHwnd = pid == AppInfo.CurrentProcessId ? hwnd : 0;
+#endif
+            ForegroundChanged(pid);
+        }
         internal static string ProcessDetection => _processSnapshot == null ? "off" : _processEvents?.IsAvailable == true ? "wmi" : "snapshot";
         private static IDisposable? _watchFallbackTimer;
 #else
@@ -187,7 +194,7 @@ namespace SonicRoute
         private static ProcessSnapshotService? _processSnapshot;
         private static int _lastFgPid;
         private static int _observedForegroundPid;
-#if SONICROUTE_PHONE && !SONICROUTE_NATIVE
+#if SONICROUTE_PHONE
         private static nint _lastFgHwnd;
         private static nint _observedForegroundHwnd;
 #endif
@@ -199,8 +206,11 @@ namespace SonicRoute
             internal AutoRule Rule = null!;
             internal long Revision, ForegroundSequence;
             internal int ForegroundPid;
-#if SONICROUTE_PHONE && !SONICROUTE_NATIVE
+#if SONICROUTE_PHONE
             internal nint ForegroundHwnd;
+#endif
+#if SONICROUTE_PHONE && SONICROUTE_NATIVE
+            internal string? ForegroundName;
 #endif
         }
         private static readonly LinkedList<WatchRequest> _watchRequests = new();
@@ -252,6 +262,10 @@ namespace SonicRoute
             return string.Equals(NormalizeAppName(ruleApp), NormalizeAppName(processName), StringComparison.OrdinalIgnoreCase);
         }
 
+        private static bool IsExternalTrigger(string? name) =>
+            name?.StartsWith("android:", StringComparison.OrdinalIgnoreCase) == true ||
+            string.Equals(name, "airplay:receiver", StringComparison.OrdinalIgnoreCase);
+
         private static string? ComputeSnapshotTarget(List<AutoRule> rules)
         {
             var targets = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -259,6 +273,7 @@ namespace SonicRoute
             foreach (var rule in rules)
             {
                 if (rule.Trigger is not (AutoRuleTrigger.AppStart or AutoRuleTrigger.AppExit)) continue;
+                if (IsExternalTrigger(rule.TriggerApp)) continue;
                 // 空目标旧规则仍支持任意应用；多目标在缺失时共用一次全量枚举。
                 if (string.IsNullOrWhiteSpace(rule.TriggerApp)) { includeAll = true; continue; }
                 string normalized = NormalizeAppName(rule.TriggerApp);
@@ -295,11 +310,11 @@ namespace SonicRoute
 #endif
             var rules = GetWatchRules();
             bool needsExternal = _hasAppStart || _hasAppExit;
-#if !SONICROUTE_NATIVE
+#if !SONICROUTE_NATIVE || SONICROUTE_PHONE
             RefreshExternalWatcher(needsExternal);
 #endif
             bool needsSnapshot = rules.Any(r => (r.Trigger is AutoRuleTrigger.AppStart or AutoRuleTrigger.AppExit)
-                && !r.TriggerApp.StartsWith("android:", StringComparison.OrdinalIgnoreCase));
+                && !IsExternalTrigger(r.TriggerApp));
             bool needsForeground = _hasAppSwitch;
             bool initializeForeground = needsForeground && !_foregroundSubscribed;
             string? target = _cachedSnapshotTarget;
@@ -307,7 +322,7 @@ namespace SonicRoute
             if (needsForeground && !_foregroundSubscribed)
             {
                 _lastFgPid = -1;
-#if SONICROUTE_PHONE && !SONICROUTE_NATIVE
+#if SONICROUTE_PHONE
                 _lastFgHwnd = 0;
 #endif
 #if !SONICROUTE_NATIVE
@@ -349,7 +364,12 @@ namespace SonicRoute
                 _processSnapshot.Dispose(); _processSnapshot = null;
             }
             UpdateWatchFallbackPolicy();
-            if (initializeForeground) ForegroundChanged(ForegroundAppService.GetForegroundProcessId());
+            if (initializeForeground)
+#if SONICROUTE_NATIVE
+                Product?.RefreshForeground(ShellNative.GetForegroundWindow());
+#else
+                ForegroundChanged(ForegroundAppService.GetForegroundProcessId());
+#endif
         }
 
         internal static void RecoverWatcher()
@@ -404,7 +424,7 @@ namespace SonicRoute
 
         private static void StopWatcher(bool keepExternal = false)
         {
-#if !SONICROUTE_NATIVE
+#if !SONICROUTE_NATIVE || SONICROUTE_PHONE
             if (!keepExternal) RefreshExternalWatcher(false);
 #endif
             ++_watchGeneration;
@@ -505,7 +525,12 @@ namespace SonicRoute
                         if (!ReferenceEquals(rule, request.Rule) && !AutoRuleStore.SameContents(rule, request.Rule)) continue;
                         if (rule.Trigger == AutoRuleTrigger.AppSwitch && (request.ForegroundSequence != _foregroundSequence
                             || request.ForegroundPid != ForegroundAppService.GetForegroundProcessId()
-#if SONICROUTE_PHONE && !SONICROUTE_NATIVE
+#if SONICROUTE_PHONE && SONICROUTE_NATIVE
+                            || (request.ForegroundPid == AppInfo.CurrentProcessId
+                                && (request.ForegroundHwnd != ShellNative.GetForegroundWindow()
+                                    || !string.Equals(request.ForegroundName, Product?.ProcessName(request.ForegroundPid, request.ForegroundHwnd),
+                                        StringComparison.OrdinalIgnoreCase)))
+#elif SONICROUTE_PHONE
                             || (request.ForegroundPid == AppInfo.CurrentProcessId
                                 && request.ForegroundHwnd != ApplicationAudio.GetForegroundWindowHandle())
 #endif
@@ -575,8 +600,11 @@ namespace SonicRoute
             long rulesRevision = _watchRulesRevision;
             List<WatchRequest>? requests = null;
             void Trigger(AutoRule rule, int foregroundPid = 0
-#if SONICROUTE_PHONE && !SONICROUTE_NATIVE
+#if SONICROUTE_PHONE
                 , nint foregroundHwnd = 0
+#endif
+#if SONICROUTE_PHONE && SONICROUTE_NATIVE
+                , string? foregroundName = null
 #endif
                 )
             {
@@ -584,8 +612,11 @@ namespace SonicRoute
                 requests.Add(new WatchRequest
                 {
                     Rule = rule, Revision = rulesRevision, ForegroundPid = foregroundPid,
-#if SONICROUTE_PHONE && !SONICROUTE_NATIVE
+#if SONICROUTE_PHONE
                     ForegroundHwnd = foregroundHwnd,
+#endif
+#if SONICROUTE_PHONE && SONICROUTE_NATIVE
+                    ForegroundName = foregroundName,
 #endif
                     ForegroundSequence = _foregroundSequence
                 });
@@ -677,18 +708,26 @@ namespace SonicRoute
             if (foreground && _hasAppSwitch)
             {
                 int fg = _observedForegroundPid;
-#if SONICROUTE_PHONE && !SONICROUTE_NATIVE
+#if SONICROUTE_PHONE
                 nint fgHwnd = _observedForegroundHwnd;
                 bool fgChanged = fg != 0 && (fg != _lastFgPid || (fg == AppInfo.CurrentProcessId && fgHwnd != _lastFgHwnd));
                 if (fgChanged)
                 {
+#if SONICROUTE_NATIVE
+                    string? name = Product!.ProcessName(fg, fgHwnd);
+#else
                     string? name = ApplicationAudio.ForegroundAppName(fg, fgHwnd);
+#endif
                     if (!string.IsNullOrWhiteSpace(name))
                     {
                         foreach (var r in rules)
                         {
                             if (r.Trigger == AutoRuleTrigger.AppSwitch && MatchApp(r.TriggerApp, name))
+#if SONICROUTE_NATIVE
+                                Trigger(r, fg, fgHwnd, name);
+#else
                                 Trigger(r, fg, fgHwnd);
+#endif
                         }
                     }
                 }

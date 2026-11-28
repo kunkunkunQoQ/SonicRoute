@@ -26,6 +26,16 @@
 - **ADB 调试连接**。通过已授权的 USB 或无线调试，可在电脑上使用鼠标键盘操作独立的应用虚拟屏，也可传输文件和同步文字剪贴板。已保存无线调试连接的后台发现使用 Windows DNS 服务。
 - **AirPlay 接收**。接收兼容 Apple 设备的音频和屏幕镜像。[设备互联操作](https://github.com/kunkunkunQoQ/SonicRoute/wiki/10-%E8%AE%BE%E5%A4%87%E4%BA%92%E8%81%94)
 
+## 可靠性与无障碍
+
+- Windows 报告设备变化时，音频缓存会在后台刷新。导入或重置设置遇到文件占用时，已排队的普通设置仍会保存。
+- “导入设置”只替换普通设置，自动化规则继续由自动化页管理。原地升级仍会迁移旧配置中的规则。
+- 快捷面板的固定、设备、静音和主窗入口支持屏幕阅读器。设置中的 GPL-3.0 窗口可离线查看当前版型附带的第三方声明。
+- Full 恢复了手机音频和 AirPlay 的应用开始、结束触发。独立手机连接的协议读取错误进入既有断线处理，AirPlay 接收器启动期间也会处理网络接口变化。
+- Full 的“切换到应用”规则可选取已打开的 Android 应用虚拟屏和 AirPlay 镜像窗口。仅投画面时也可以新建规则。重新编辑规则时可以保留已离线的原目标。
+- 旧规则的应用目标为空时仍能打开编辑器，选好应用后即可保存。
+- 手机配对、权限与连接提示补齐七种语言。窄幅手机副面板会换行显示媒体说明。关闭连接页时会取消并收回进行中的设备发现请求。
+
 <details>
 <summary>English release notes</summary>
 
@@ -42,6 +52,15 @@
 - **SonicRoute Android app.** Pair on the same local network by comparing the eight-digit code shown on both devices. Send audio in either direction and view the phone screen once the user grants Android’s system permission. The shared screen is view-only. [Android releases](https://github.com/kunkunkunQoQ/SonicRoute-App/releases) · [Get and install the app](https://github.com/kunkunkunQoQ/SonicRoute-App/blob/main/README.md#install)
 - **ADB debugging.** Use authorized USB or wireless debugging for interactive app virtual displays, input controls, file transfers and text clipboard sync. Background discovery of saved wireless debugging connections uses Windows DNS.
 - **AirPlay.** Receive audio and screen mirroring from compatible Apple devices. [Device connection guide](https://github.com/kunkunkunQoQ/SonicRoute/wiki/10-%E8%AE%BE%E5%A4%87%E4%BA%92%E8%81%94)
+
+## Reliability and accessibility
+
+- Windows device notifications now refresh the audio cache on a background thread. A failed settings import or reset preserves edits already queued for saving. Settings imports are separate from automation rules. In-place upgrades still migrate rules from older configurations.
+- Screen readers can access the quick panel's pin, device, mute, and main-window controls. The GPL-3.0 window in Settings includes the third-party notices for the installed edition.
+- Full restores app start and exit triggers for phone audio and AirPlay. Phone protocol read errors enter the existing disconnect recovery path. The AirPlay receiver also handles network changes during startup.
+- Full can select an open Android app virtual display or AirPlay mirror window for an app-switch rule, including video-only sessions. Editing a saved rule preserves its original target when the target is offline.
+- Older rules with an empty app target now open in the editor. Select an app to save the rule.
+- Phone pairing, permission, and connection messages now cover all nine languages. Media instructions wrap in the narrow phone panel. Closing the connection page cancels and completes pending device discovery requests.
 
 </details>
 

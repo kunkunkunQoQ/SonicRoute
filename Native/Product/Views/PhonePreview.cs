@@ -59,6 +59,7 @@ internal sealed partial class PhonePreview : IDisposable
     internal PhoneClipboard Clipboard => adbClipboard.Value;
     internal PhoneClipboard? ActiveClipboard => adbClipboard.IsValueCreated ? adbClipboard.Value : null;
     internal event Action? Changed;
+    internal event Action? AudioSourcesChanged;
     internal string? Error { get; private set; }
 
     internal PhonePreview(string root, NativeApplicationWindow shell, IMainThread owner, AppConfig config,
@@ -87,8 +88,14 @@ internal sealed partial class PhonePreview : IDisposable
         Connections = new(Store, () => Discovery, Settings.MigrateConnectionPreferences, appTransport, adb, Settings.MigrateConnectionPreferences);
         var directOperations = new SrapOperationAdapter(adbOperations, appTransport, Connections.IsCurrent);
         Operations = directOperations;
-        Sources = new(() => Operations.CreateCaptureSession(Settings.GetStreaming, Connections.ResolveKey), Settings,
-            (phone, app) => !phone.IsApp && Store.IsSmartVolumeEnabled(phone, app), Connections.IsCurrent, token, Operations.AppCapture);
+        Sources = new(() =>
+        {
+            var session = Operations.CreateCaptureSession(Settings.GetStreaming, Connections.ResolveKey);
+            session.SetMirrorGainResolver((device, app, id) =>
+                ExternalAudioBridge.ResolveSavedMirrorGain(ExternalAudioPreference.AndroidKey(device, app.Package), id));
+            return session;
+        }, Settings,
+            Store.IsSmartVolumeEnabled, Connections.IsCurrent, token, Operations.AppCapture);
         Pc = adbOperations.CreatePcPlayback(silenceLocalProcess);
         Pc.OpenAppPlayback = directOperations.OpenAppPlaybackAsync;
         Pc.OutputsObserved += (device, outputs) => Store.UpdateOutputs(device, outputs);
@@ -103,7 +110,7 @@ internal sealed partial class PhonePreview : IDisposable
             return bridge;
         });
 
-        Sources.Changed += Notify;
+        Sources.Changed += NotifyAudioSources;
         Sources.ResourcesRetired += QueueSourceReconciliation;
         Sources.CaptureInterrupted += OnPcPlaybackDisconnected;
         Discovery.Changed += Observe;
@@ -995,7 +1002,7 @@ internal sealed partial class PhonePreview : IDisposable
     private void OnStoreChanged()
     {
         PcListening.Reconcile();
-        Sources.SyncSmartVolume((d, p) => !d.IsApp && Store.IsSmartVolumeEnabled(d, p));
+        Sources.SyncSmartVolume(Store.IsSmartVolumeEnabled);
         QueueSourceReconciliation();
         ScheduleAdbToolsReconciliation();
         Notify();
@@ -1034,11 +1041,19 @@ internal sealed partial class PhonePreview : IDisposable
         if (Volatile.Read(ref closed) == 0) Changed?.Invoke();
     }
 
+    private void NotifyAudioSources()
+    {
+        if (Volatile.Read(ref closed) != 0) return;
+        AudioSourcesChanged?.Invoke();
+        Changed?.Invoke();
+    }
+
     public void Dispose()
     {
         if (Interlocked.Exchange(ref closed, 1) != 0) return;
         Store.OutputsChanged -= OnPlaybackDevicesChanged;
         appTransport.Changed -= OnAppTransportChanged;
+        Sources.Changed -= NotifyAudioSources;
         Sources.ResourcesRetired -= QueueSourceReconciliation;
         Sources.CaptureInterrupted -= OnPcPlaybackDisconnected;
         Sources.BeginShutdown();
@@ -1097,6 +1112,7 @@ internal sealed partial class ApplicationHost
                 () => HasAirPlay ? AirPlay : null, ExternalAudioSettings,
                 _environment.IsolatedAdbFixturePort() is { } port ? new AdbSocketClient(port) : null);
             created.Changed += OnExternalSourcesChanged;
+            created.AudioSourcesChanged += AutoRuleService.ExternalSessionsChanged;
             phone = created;
             EnsureExternalOutputTopology();
             return created;
@@ -1111,6 +1127,7 @@ internal sealed partial class ApplicationHost
                 (pcm, endpoint, cancel) => PcRoutingApi.CreatePhonePcmPlayer(pcm, endpoint, cancel),
                 ExternalAudioSettings, _config, TryPost);
             created.Changed += OnExternalSourcesChanged;
+            created.Changed += AutoRuleService.ExternalSessionsChanged;
             airPlay = created;
             EnsureExternalOutputTopology();
             return created;
@@ -1177,8 +1194,16 @@ internal sealed partial class ApplicationHost
     private void StopFull()
     {
         externalOutputTopology?.Dispose();
-        if (phone != null) phone.Changed -= OnExternalSourcesChanged;
-        if (airPlay != null) airPlay.Changed -= OnExternalSourcesChanged;
+        if (phone != null)
+        {
+            phone.Changed -= OnExternalSourcesChanged;
+            phone.AudioSourcesChanged -= AutoRuleService.ExternalSessionsChanged;
+        }
+        if (airPlay != null)
+        {
+            airPlay.Changed -= OnExternalSourcesChanged;
+            airPlay.Changed -= AutoRuleService.ExternalSessionsChanged;
+        }
         airPlay?.Dispose();
         phone?.Dispose();
         externalAudioSettings?.FlushAsync().GetAwaiter().GetResult();

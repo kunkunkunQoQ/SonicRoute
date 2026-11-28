@@ -8,12 +8,29 @@ internal static partial class Program
 {
     private static readonly JsonSerializerOptions ReflectionJson = new() { WriteIndented = true };
     private static int _checks;
-    private static JsonSerializerOptions ProductJson => (JsonSerializerOptions)typeof(ConfigService)
-        .GetField("SaveOptions", BindingFlags.Static | BindingFlags.NonPublic)!.GetValue(null)!;
+    private static readonly List<string> Failures = new();
+    private static JsonSerializerOptions ProductJson => OptionsFor(typeof(ConfigService));
+    private static bool PreservesUnknownFields => typeof(AppConfig).Assembly.GetName().Version!.Major >= 2;
+
+    private static JsonSerializerOptions OptionsFor(Type store)
+    {
+        const BindingFlags flags = BindingFlags.Static | BindingFlags.NonPublic;
+#if NET10_0_OR_GREATER
+        var contract = (System.Text.Json.Serialization.Metadata.JsonTypeInfo)store.GetProperty("WriteContract", flags)!.GetValue(null)!;
+        return contract.Options;
+#else
+        return (JsonSerializerOptions)store.GetField("WriteContract", flags)!.GetValue(null)!;
+#endif
+    }
 
     private static void Check(bool condition, string label)
     {
-        if (!condition) throw new InvalidOperationException(label);
+        if (!condition)
+        {
+            Failures.Add(label);
+            Console.Error.WriteLine("FAIL " + label);
+            return;
+        }
         Console.WriteLine("PASS " + label); _checks++;
     }
 
@@ -41,6 +58,15 @@ internal static partial class Program
             else if (type == typeof(DateTime)) property.SetValue(config, new DateTime(2026, 10, 23, 1, 2, 3, DateTimeKind.Utc));
             else if (type == typeof(List<string>)) property.SetValue(config, new List<string> { "中文.exe", "value & < >" });
             else if (type == typeof(Dictionary<string, string>)) property.SetValue(config, new Dictionary<string, string> { ["中文"] = "空 格 & <>" });
+            else if (type == typeof(Dictionary<string, JsonElement>))
+            {
+                using var document = JsonDocument.Parse("{\"retained\":[1,true]}");
+                property.SetValue(config, new Dictionary<string, JsonElement> { ["FutureField"] = document.RootElement.Clone() });
+            }
+            else if (type == typeof(Dictionary<string, AppCanvasLayout>))
+                config.SaveCanvasLayout("canvas.exe", new AppCanvasLayout { Zoom = 1.25f, AppNode = new CanvasPoint { X = 12, Y = 56 } });
+            else if (type == typeof(Dictionary<string, Dictionary<string, MirrorGainState>>))
+                config.SetCaptureForwardGain("canvas.exe", "device", new MirrorGainState(72, true, 130));
             else throw new InvalidOperationException("Add fixture for new config property: " + property.Name);
         }
         config.AppIcons.Clear(); // Real API only persists validated managed icon filenames.
@@ -107,9 +133,27 @@ internal static partial class Program
         Check(!string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("SONICROUTE_DATA_DIRECTORY")), "isolated data root required");
 #if NET10_0_OR_GREATER
         Check(ProductJson.TypeInfoResolver!.GetType().Name == "PersistenceJsonContext", "NET10 uses generated contracts");
-        Check(ProductJson.GetTypeInfo(typeof(AppConfig)) is System.Text.Json.Serialization.Metadata.JsonTypeInfo<AppConfig> { SerializeHandler: not null }, "config write fast path exists");
-        Check(ProductJson.GetTypeInfo(typeof(AutoRule)) is System.Text.Json.Serialization.Metadata.JsonTypeInfo<AutoRule> { SerializeHandler: not null }, "rule write fast path exists");
-        Check(ReferenceEquals(ProductJson, typeof(AutoRuleStore).GetField("SaveOptions", BindingFlags.Static | BindingFlags.NonPublic)!.GetValue(null)), "config and rules share options/type metadata");
+        if (PreservesUnknownFields)
+        {
+            // Extension data uses generated metadata on .NET 10. Verify the actual
+            // generated contracts can preserve fields written by another version.
+            string unknown = "{\"Id\":\"future-rule\",\"FutureOption\":{\"values\":[7,true]}}";
+            foreach (var type in new[] { typeof(AppConfig), typeof(AutoRule) })
+            {
+                var contract = ProductJson.GetTypeInfo(type);
+                var decoded = JsonSerializer.Deserialize(unknown, contract);
+                using var encoded = JsonDocument.Parse(JsonSerializer.Serialize(decoded, contract));
+                Check(contract.Properties.Count(p => p.IsExtensionData) == 1
+                    && encoded.RootElement.GetProperty("FutureOption").GetProperty("values")[1].GetBoolean(),
+                    type.Name + " generated read and write round-trip unknown nested fields");
+            }
+        }
+        else
+        {
+            Check(ProductJson.GetTypeInfo(typeof(AppConfig)) is System.Text.Json.Serialization.Metadata.JsonTypeInfo<AppConfig> { SerializeHandler: not null }, "config write fast path exists");
+            Check(ProductJson.GetTypeInfo(typeof(AutoRule)) is System.Text.Json.Serialization.Metadata.JsonTypeInfo<AutoRule> { SerializeHandler: not null }, "rule write fast path exists");
+        }
+        Check(ReferenceEquals(ProductJson, OptionsFor(typeof(AutoRuleStore))), "config and rules share options/type metadata");
 #else
         Check(typeof(ConfigService).Assembly.GetType("SonicRoute.Core.PersistenceJsonContext") == null, "older runtime excludes generated context");
 #endif
@@ -124,8 +168,12 @@ internal static partial class Program
                 && retained.QuickPanelCustomX == 120 && retained.VolumeStep == 7
                 && retained.HiddenPanelApps.Single() == "HiddenApp" && retained.DeviceNames["device"] == "Custom",
                 "obsolete panel preference preserves other settings: " + oldStyle);
-            Check(ConfigService.TrySave(retained) && !File.ReadAllText(ConfigService.ConfigPath).Contains("\"QuickPanelStyle\""),
-                "normal save omits obsolete panel preference: " + oldStyle);
+            Check(ConfigService.TrySave(retained), "save historical panel preference: " + oldStyle);
+            using var saved = JsonDocument.Parse(File.ReadAllText(ConfigService.ConfigPath));
+            bool stored = saved.RootElement.TryGetProperty("QuickPanelStyle", out var style);
+            Check(PreservesUnknownFields ? stored && style.GetString() == oldStyle : !stored,
+                (PreservesUnknownFields ? "normal save preserves historical field for downgrade: "
+                    : "normal save omits obsolete panel preference: ") + oldStyle);
         }
         Same(new AppConfig { AppIcons = new(StringComparer.OrdinalIgnoreCase) { ["App.EXE"] = new string('a', 64) + ".png" } }, "custom icon mapping");
         Same(new AutoRule { Id = "default-id" }, "default rule"); Same(Rule(), "all 37 actions/nested launch items");
@@ -221,10 +269,13 @@ internal static partial class Program
             }
             if (args.Length > 0 && args[0] == "perf") { Perf(args[1], args[2]); return 0; }
 #endif
+            if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("SONICROUTE_DATA_DIRECTORY")))
+                throw new InvalidOperationException("Set an isolated data directory before exercising persistence.");
             if (args.Length > 0 && args[0] == "abcde") Abcde();
             else if (args.Length > 0 && args[0] == "shutdown") ShutdownCallbacks();
             else if (args.Length > 0 && args[0] == "legacy") Legacy(); else Checks();
-            Console.WriteLine("PASS total=" + _checks); return 0;
+            Console.WriteLine($"RESULT passed={_checks} failed={Failures.Count}");
+            return Failures.Count == 0 ? 0 : 1;
         }
         catch (Exception error) { Console.Error.WriteLine(error); return 1; }
     }

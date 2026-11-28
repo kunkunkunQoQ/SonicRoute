@@ -568,17 +568,19 @@ internal static class UiPrimitives
 
     public static void DrawVolumeSlider(
         D2dTarget g, UiThemePalette t, UiHitMap hit, string id, UiRect rect,
-        float value01, float peak01, bool muted, bool showPeak, bool enabled = true, bool compact = false, bool dimUnavailable = false) =>
-        DrawSlider(g, t, hit, id, rect, value01, peak01, muted, showPeak, enabled, outlinedThumb: !compact, dimUnavailable);
+        float value01, float peak01, bool muted, bool showPeak, bool enabled = true, bool compact = false,
+        bool dimUnavailable = false, string? tooltip = null) =>
+        DrawSlider(g, t, hit, id, rect, value01, peak01, muted, showPeak, enabled, outlinedThumb: !compact, dimUnavailable, tooltip);
 
     public static void DrawValueSlider(D2dTarget g, UiThemePalette t, UiHitMap hit, string id, UiRect rect,
         float value01, bool enabled = true) =>
         DrawSlider(g, t, hit, id, rect, value01, 0f, muted: false, showPeak: false, enabled, outlinedThumb: true);
 
     private static void DrawSlider(D2dTarget g, UiThemePalette t, UiHitMap hit, string id, UiRect rect,
-        float value01, float peak01, bool muted, bool showPeak, bool enabled, bool outlinedThumb, bool dimUnavailable = false)
+        float value01, float peak01, bool muted, bool showPeak, bool enabled, bool outlinedThumb,
+        bool dimUnavailable = false, string? tooltip = null)
     {
-        if (enabled) hit.Add(id, rect, UiCursorKind.Hand);
+        if (enabled) hit.Add(id, rect, UiCursorKind.Hand, tooltip);
         bool hot = enabled && hit.IsHoverOrActive(id);
         var track = SliderTrack(rect, outlinedThumb);
         float r = track.Height * 0.5f;
@@ -632,16 +634,16 @@ internal static class UiPrimitives
         return new UiRect(rect.X + inset, rect.CenterY - 2f, MathF.Max(1f, rect.Width - inset * 2f), 4f);
     }
 
-    public static int VolumeSliderValueFromX(UiRect rect, float mouseX, bool compact = false) =>
-        SliderValueFromX(rect, mouseX, outlinedThumb: !compact);
+    public static int VolumeSliderValueFromX(UiRect rect, float mouseX, bool compact = false, int maximum = 100) =>
+        SliderValueFromX(rect, mouseX, outlinedThumb: !compact, maximum);
 
     public static int ValueSliderValueFromX(UiRect rect, float mouseX) => SliderValueFromX(rect, mouseX, outlinedThumb: true);
 
-    private static int SliderValueFromX(UiRect rect, float mouseX, bool outlinedThumb)
+    private static int SliderValueFromX(UiRect rect, float mouseX, bool outlinedThumb, int maximum = 100)
     {
         var track = SliderTrack(rect, outlinedThumb);
         float t = Math.Clamp((mouseX - track.X) / track.Width, 0f, 1f);
-        return (int)MathF.Round(t * 100f);
+        return (int)MathF.Round(t * maximum);
     }
 
     public static void DrawComboBox(D2dTarget g, UiThemePalette t, UiHitMap hit, string id, UiRect rect, string text,

@@ -11,12 +11,14 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../Native/Audio/Audio.csproj" />
-    <PackageReference Include="Concentus" Version="2.2.2" />
+    <PackageReference Include="Concentus" Version="2.2.2" GeneratePathProperty="true" />
+    <EmbeddedResource Include="$(PkgConcentus)/LICENSE" LogicalName="SonicRoute.Licenses.Concentus" />
     <EmbeddedResource Include="AndroidRuntime.files.json" />
     <EmbeddedResource Include="../AndroidRuntime/*" Exclude="../AndroidRuntime/*.txt" LogicalName="SonicRoute.AndroidRuntime.%(Filename)%(Extension)" />
     <EmbeddedResource Include="../AndroidRuntime/VirtualDisplay/phone-icon.png" LogicalName="SonicRoute.AndroidRuntime.VirtualDisplay.phone-icon.png" />
     <EmbeddedResource Include="AirPlay/Compatibility/playfair-tables.dat" LogicalName="SonicRoute.AirPlay.PlayFair.Tables" />
     <EmbeddedResource Include="AirPlay/Compatibility/LICENSE-MIT.txt" LogicalName="SonicRoute.AirPlay.PlayFair.LICENSE-MIT.txt" />
+    <EmbeddedResource Include="AirPlay/Compatibility/NOTICE.md" LogicalName="SonicRoute.AirPlay.PlayFair.NOTICE.md" />
     <EmbeddedResource Include="AirPlay/AacEld.NOTICE.md" LogicalName="SonicRoute.AirPlay.AacEld.NOTICE.md" />
     <EmbeddedResource Include="AirPlay/FFmpeg-LGPL-2.1.txt" LogicalName="SonicRoute.AirPlay.AacEld.FFmpeg-LGPL-2.1.txt" />
     <Compile Include="../SonicRoute.Core/AtomicFile.cs" Link="Shared/AtomicFile.cs" />

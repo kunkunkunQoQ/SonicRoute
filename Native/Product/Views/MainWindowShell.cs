@@ -919,7 +919,7 @@ internal sealed partial class MainWindowShell : LayeredWindow, IViewHostActions
             NavigateTo(MainNavTab.Settings);
     }
 
-    private void ClosePopups()
+    public void ClosePopups()
     {
         if (_activeMenu is { IsVisible: true }) _activeMenu.CloseWindow();
         _activeMenu = null;

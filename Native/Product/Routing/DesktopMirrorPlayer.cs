@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
+using SonicRoute.Core.Models;
 using SonicRoute.Native.Audio;
 using SonicRoute.Native.Product;
 
@@ -17,15 +18,26 @@ internal sealed class DesktopMirrorPlayer : IDisposable
     private Func<nint,int,int>? _copyPending;
     private RegisteredWaitHandle? _writable;
     private int _active, _closed, _failed;
-    private const int MuteBit = 1 << 8;
-    private int _gain = 100;
+    private const int MuteBit = 1 << 9;
+    private int _gain = MirrorGainState.DefaultMaximumVolumePercent;
     private byte[]? _gainBuffer;
     private long _written, _dropped, _emptyAfterStart, _firstWrite, _signalFrames;
     internal string EndpointId { get; }
     internal event Action<Exception>? Failed;
 
     internal void SetGain(int volumePercent, bool muted) =>
-        Volatile.Write(ref _gain, volumePercent | (muted ? MuteBit : 0));
+        Volatile.Write(ref _gain, Math.Clamp(volumePercent, 0, MirrorGainState.MaximumSupportedVolumePercent)
+            | (muted ? MuteBit : 0));
+
+    internal static void ScaleSamples(ReadOnlySpan<short> source, Span<short> destination, int volumePercent)
+    {
+        int q15 = (volumePercent * 32768 + 50) / 100;
+        for (int i = 0; i < source.Length; i++)
+        {
+            int sample = (int)(((long)source[i] * q15) >> 15);
+            destination[i] = (short)Math.Clamp(sample, short.MinValue, short.MaxValue);
+        }
+    }
 
     internal DesktopMirrorPlayer(string? endpointId, AutoResetEvent renderWake, MirrorMeasurement measurement)
     {
@@ -65,7 +77,7 @@ internal sealed class DesktopMirrorPlayer : IDisposable
             int gain = Volatile.Read(ref _gain);
             bool muted = (gain & MuteBit) != 0;
             int vol = gain & (MuteBit - 1);
-            if ((muted || vol < 100) && !packet.IsEmpty)
+            if ((muted || vol != 100) && !packet.IsEmpty)
             {
                 if (_gainBuffer == null || _gainBuffer.Length < packet.Length)
                     _gainBuffer = new byte[Math.Max(packet.Length, 4096)];
@@ -78,9 +90,7 @@ internal sealed class DesktopMirrorPlayer : IDisposable
                 {
                     var src = MemoryMarshal.Cast<byte, short>(packet.Span);
                     var dst = MemoryMarshal.Cast<byte, short>(dstBytes);
-                    int q15 = (vol * 32768 + 50) / 100;
-                    for (int i = 0; i < src.Length; i++)
-                        dst[i] = (short)((src[i] * q15) >> 15);
+                    ScaleSamples(src, dst, vol);
                 }
                 packet = _gainBuffer.AsMemory(0, packet.Length);
             }

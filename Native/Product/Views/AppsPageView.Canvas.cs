@@ -29,6 +29,12 @@ internal sealed partial class AppsPageView
     private enum WireDragOriginKind { NativePort, ForwardPort, AddOutputPort, MicPort, RenderDevicePort, CaptureDevicePort }
     private enum RenderDeviceDropKind { None, Native, ForwardRow, AddOutput }
 
+    private const string ForwardRowPrefix = "canvas.fwd.row:";
+    private const string ForwardSliderPrefix = "canvas.fwd.vol:";
+    private const string ForwardLimitEditorPrefix = "canvas.fwd.limit:";
+    private static readonly int[] ForwardVolumeLimitPresets =
+        [MirrorGainState.DefaultMaximumVolumePercent, 150, 200, 250, MirrorGainState.MaximumSupportedVolumePercent];
+
     // Reusable single canvas state (incrementally updated when switching apps)
     private readonly Dictionary<string, CanvasDeviceNode> _deviceNodes = new(IdCmp);
     private readonly HashSet<string> _seenNodeKeys = new(IdCmp);
@@ -976,7 +982,7 @@ internal sealed partial class AppsPageView
             string fid = forwardIds[i];
             if (!_deviceNodes.TryGetValue(DeviceNodeKey(Flow.Render, fid), out var devNode)) continue;
             if (!_appForwardPortsWorld.TryGetValue(fid, out var port)) continue;
-            var gain = _mirrorGains.GetValueOrDefault(fid, new MirrorGainState(100, false));
+            var gain = GetForwardGain(fid);
             _wires.Add(new CanvasWire
             {
                 Key = devNode.NodeKey,
@@ -1226,15 +1232,17 @@ internal sealed partial class AppsPageView
             var devNode = _deviceNodes.GetValueOrDefault(DeviceNodeKey(Flow.Render, fid));
             UiColor fwdColor = devNode?.WireColor ?? t.Accent;
             string fwdName = devNode?.PrimaryName ?? DeviceLabel(fid, Flow.Render);
-            var gain = _mirrorGains.GetValueOrDefault(fid, new MirrorGainState(100, false));
-            int fwdVol = (_interaction == InteractionMode.DraggingForwardVolume && IdCmp.Equals(_dragForwardDeviceId, fid))
-                ? _dragVolumeVal : gain.VolumePercent;
+            var gain = GetForwardGain(fid);
+            int fwdVol = gain.VolumePercent;
             bool fwdReady = outputReady && (devNode?.IsAvailable ?? true);
+            bool canSetLimit = fwdReady && _pendingOutputs == null && ProductAudio.SupportsMirrorVolumeLimit(app, fid);
             bool fwdDropHot = renderDropTarget == RenderDeviceDropKind.ForwardRow && renderDropFwdId != null && IdCmp.Equals(renderDropFwdId, fid);
 
             var subRow = new UiRect(x, y + 2f, w, 48f);
             g.FillRoundedRect(subRow, 8f, fwdDropHot ? t.NavSelected : t.SurfaceAlt);
             g.DrawRoundedRect(subRow, 8f, fwdDropHot ? _wireDragColor : t.Border, fwdDropHot ? 1.3f : 0.8f);
+            string? limitHint = canSetLimit ? string.Format(L10n.T("Apps.Canvas.ForwardVolumeLimitHint"), gain.MaximumVolumePercent) : null;
+            if (canSetLimit) hit.Add(ForwardRowPrefix + fid, subRow, UiCursorKind.Arrow, limitHint);
 
             // Top line: color dot + name + remove button
             g.FillEllipse(subRow.X + 9f, subRow.Y + 11f, 3.2f, 3.2f, fwdColor);
@@ -1266,13 +1274,24 @@ internal sealed partial class AppsPageView
             g.DrawText($"{fwdVol}%", fPctR, fwdReady ? t.TextPrimary : t.TextSecondary, 11f, 600, UiTextAlign.Trailing, UiVertAlign.Center, wrap: false, ellipsis: false);
 
             var fSliderR = new UiRect(fMuteR.Right + 4f, ctrlY, MathF.Max(30f, fPctR.X - fMuteR.Right - 6f), 26f);
-            string fSliderId = "canvas.fwd.vol:" + fid;
+            string fSliderId = ForwardSliderPrefix + fid;
             _sliderWorldRects[fSliderId] = fSliderR;
-            UiPrimitives.DrawVolumeSlider(g, t, hit, fSliderId, fSliderR,
-                fwdVol / 100f, 0f, gain.Muted, showPeak: false, enabled: fwdReady, compact: true);
-            if (hit.AccessibilityEnabled)
-                hit.DescribeVolume(fSliderId, fSliderR, fwdName, fwdReady, fwdVol, app.Identity,
-                    (_, value) => ApplyForwardVolume(capturedFid, (int)Math.Round(value)));
+            if (canSetLimit && _actions.ActiveInlineEditTag is { } editorId
+                && editorId.StartsWith(ForwardLimitEditorPrefix, StringComparison.Ordinal)
+                && editorId.AsSpan(ForwardLimitEditorPrefix.Length).Equals(fid.AsSpan(), StringComparison.OrdinalIgnoreCase))
+            {
+                UiPrimitives.DrawTextBox(g, t, hit, editorId, fSliderR, "",
+                    placeholder: L10n.T("Apps.Canvas.ForwardVolumeLimit"), focused: true, fontSize: 11f, centered: true);
+            }
+            else
+            {
+                UiPrimitives.DrawVolumeSlider(g, t, hit, fSliderId, fSliderR,
+                    (float)fwdVol / gain.MaximumVolumePercent, 0f, gain.Muted, showPeak: false, enabled: fwdReady, compact: true,
+                    tooltip: limitHint);
+                if (hit.AccessibilityEnabled)
+                    hit.DescribeVolume(fSliderId, fSliderR, fwdName, fwdReady, fwdVol, app.Identity,
+                        (_, value) => ApplyForwardVolume(capturedFid, (int)Math.Round(value)), maximum: gain.MaximumVolumePercent);
+            }
 
             // Forwarding port on right edge of App Node
             if (_appForwardPortsWorld.TryGetValue(fid, out var fwdPort))
@@ -1876,13 +1895,14 @@ internal sealed partial class AppsPageView
             }
             case InteractionMode.DraggingForwardVolume:
             {
-                if (_dragForwardDeviceId != null && _sliderWorldRects.TryGetValue("canvas.fwd.vol:" + _dragForwardDeviceId, out var sr))
+                if (_dragForwardDeviceId is { } fid && _sliderWorldRects.TryGetValue(ForwardSliderPrefix + fid, out var sr))
                 {
-                    int next = UiPrimitives.VolumeSliderValueFromX(sr, ScreenToWorldX(x), compact: true);
+                    int next = UiPrimitives.VolumeSliderValueFromX(sr, ScreenToWorldX(x), compact: true,
+                        maximum: GetForwardGain(fid).MaximumVolumePercent);
                     if (next != _dragVolumeVal)
                     {
                         _dragVolumeVal = next;
-                        ApplyForwardVolume(_dragForwardDeviceId, next);
+                        ApplyForwardVolume(fid, next, persist: false);
                     }
                 }
                 return true;
@@ -1989,6 +2009,12 @@ internal sealed partial class AppsPageView
                 return true;
             }
             if (overTools || targetId == DockToolsId) return true;
+            if (targetId?.StartsWith("canvas.fwd.", StringComparison.Ordinal) == true)
+            {
+                int separator = targetId.IndexOf(':');
+                if (separator >= 0 && ShowForwardVolumeLimitMenu(targetId[(separator + 1)..], new UiRect(e.X, e.Y, 1f, 1f)))
+                    return true;
+            }
             if (targetId == "canvas.app.icon" && _selectedApp != null)
             {
                 ShowAppIconContextMenu(_selectedApp);
@@ -2047,14 +2073,15 @@ internal sealed partial class AppsPageView
             return true;
         }
 
-        if (targetId.StartsWith("canvas.fwd.vol:", StringComparison.Ordinal) && _selectedApp is { IsExternalOffline: false }
+        if (targetId.StartsWith(ForwardSliderPrefix, StringComparison.Ordinal) && _selectedApp is { IsExternalOffline: false }
             && _sliderWorldRects.TryGetValue(targetId, out var fwdSr))
         {
-            string fid = targetId["canvas.fwd.vol:".Length..];
+            string fid = targetId[ForwardSliderPrefix.Length..];
             _interaction = InteractionMode.DraggingForwardVolume;
             _dragForwardDeviceId = fid;
-            _dragVolumeVal = UiPrimitives.VolumeSliderValueFromX(fwdSr, ScreenToWorldX(e.X), compact: true);
-            ApplyForwardVolume(fid, _dragVolumeVal);
+            _dragVolumeVal = UiPrimitives.VolumeSliderValueFromX(fwdSr, ScreenToWorldX(e.X), compact: true,
+                maximum: GetForwardGain(fid).MaximumVolumePercent);
+            ApplyForwardVolume(fid, _dragVolumeVal, persist: false);
             return true;
         }
 
@@ -2119,7 +2146,8 @@ internal sealed partial class AppsPageView
         }
 
         // 3. Node Body Dragging (ignore clicks on buttons/switches/combos/inputs!)
-        if (targetId is "canvas.node.app" or "canvas.app.icon" or "canvas.app.meta")
+        if (targetId is "canvas.node.app" or "canvas.app.icon" or "canvas.app.meta"
+            || targetId.StartsWith(ForwardRowPrefix, StringComparison.Ordinal))
         {
             _interaction = InteractionMode.DraggingNode;
             _dragNodeKey = null;
@@ -2187,8 +2215,7 @@ internal sealed partial class AppsPageView
                     return true;
 
                 case InteractionMode.DraggingForwardVolume:
-                    _interaction = InteractionMode.None;
-                    _dragForwardDeviceId = null;
+                    CancelCanvasInteraction(commitLayout: false);
                     return true;
 
                 case InteractionMode.DraggingNode:
@@ -2250,11 +2277,11 @@ internal sealed partial class AppsPageView
             _actions.Host.FlushVolumeWrites();
             return true;
         }
-        if (id.StartsWith("canvas.fwd.vol:", StringComparison.Ordinal) && _selectedApp is { IsExternalOffline: false })
+        if (id.StartsWith(ForwardSliderPrefix, StringComparison.Ordinal) && _selectedApp is { IsExternalOffline: false })
         {
-            string fid = id["canvas.fwd.vol:".Length..];
-            var cur = _mirrorGains.GetValueOrDefault(fid, new MirrorGainState(100, false));
-            if (ViewSliderKeys.TryChange(vk, cur.VolumePercent, 0, 100, 1, 10, out double nextFwd))
+            string fid = id[ForwardSliderPrefix.Length..];
+            var cur = GetForwardGain(fid);
+            if (ViewSliderKeys.TryChange(vk, cur.VolumePercent, 0, cur.MaximumVolumePercent, 1, 10, out double nextFwd))
             {
                 ApplyForwardVolume(fid, (int)nextFwd);
                 return true;
@@ -2294,11 +2321,11 @@ internal sealed partial class AppsPageView
         string? target = _hit?.HitTest(x, y)?.Id;
         if (target == "canvas.app.vol")
             ApplyAppSliderVolume(Math.Clamp(_selectedVolume + change, 0, 100));
-        else if (target?.StartsWith("canvas.fwd.vol:", StringComparison.Ordinal) == true)
+        else if (target?.StartsWith(ForwardSliderPrefix, StringComparison.Ordinal) == true)
         {
-            string id = target["canvas.fwd.vol:".Length..];
-            var gain = _mirrorGains.GetValueOrDefault(id, new MirrorGainState(100, false));
-            ApplyForwardVolume(id, Math.Clamp(gain.VolumePercent + change, 0, 100));
+            string id = target[ForwardSliderPrefix.Length..];
+            var gain = GetForwardGain(id);
+            ApplyForwardVolume(id, Math.Clamp(gain.VolumePercent + change, 0, gain.MaximumVolumePercent));
         }
         else if (target?.StartsWith("canvas.dev.vol:", StringComparison.Ordinal) == true
             && _deviceNodes.TryGetValue(target["canvas.dev.vol:".Length..], out var node))
@@ -2310,6 +2337,11 @@ internal sealed partial class AppsPageView
 
     public bool OnKeyDown(int vk, bool ctrl, bool shift, bool alt)
     {
+        if (!ctrl && !alt && (vk == 0x5D /*VK_APPS*/ || (shift && vk == 0x79 /*VK_F10*/))
+            && _interaction == InteractionMode.None && _hit != null && _hit.TryGetFocus(out var target, out var bounds)
+            && target.Id.StartsWith(ForwardSliderPrefix, StringComparison.Ordinal))
+            return ShowForwardVolumeLimitMenu(target.Id[ForwardSliderPrefix.Length..], bounds);
+
         if (vk == 0x1B /*VK_ESCAPE*/)
         {
             if (_dockToolsOpen)
@@ -2597,6 +2629,61 @@ internal sealed partial class AppsPageView
         return best;
     }
 
+    private bool ShowForwardVolumeLimitMenu(string targetDeviceId, UiRect anchor)
+    {
+        if (_selectedApp is not { } app || !CanChangeForwardVolumeLimit(app, targetDeviceId)) return false;
+
+        int maximum = GetForwardGain(targetDeviceId).MaximumVolumePercent;
+        var items = new List<UiMenuItem>(ForwardVolumeLimitPresets.Length + 2)
+        {
+            new() { Text = $"{L10n.T("Apps.Canvas.ForwardVolumeLimit")} · {maximum}%", Enabled = false },
+        };
+        foreach (int preset in ForwardVolumeLimitPresets)
+        {
+            items.Add(new UiMenuItem
+            {
+                Text = $"{preset}%",
+                Checked = maximum == preset,
+                Click = () => SetMaximum(preset),
+            });
+        }
+        items.Add(new UiMenuItem
+        {
+            Text = string.Format(L10n.T("Apps.Canvas.ForwardVolumeLimitCustom"),
+                MirrorGainState.MinimumSupportedVolumePercent, MirrorGainState.MaximumSupportedVolumePercent),
+            Checked = !ForwardVolumeLimitPresets.Contains(maximum),
+            Click = () =>
+            {
+                if (!CanChangeForwardVolumeLimit(app, targetDeviceId)
+                    || !_sliderWorldRects.TryGetValue(ForwardSliderPrefix + targetDeviceId, out var slider)) return;
+                _actions.StartInlineEdit(ForwardLimitEditorPrefix + targetDeviceId, WorldToScreen(slider),
+                    GetForwardGain(targetDeviceId).MaximumVolumePercent.ToString(CultureInfo.InvariantCulture),
+                    null, (text, _) =>
+                    {
+                        if (int.TryParse(text.Trim().TrimEnd('%'), NumberStyles.Integer, CultureInfo.InvariantCulture, out int percent))
+                            SetMaximum(percent);
+                    }, selectAll: true, maxLength: 4, centered: true);
+            },
+        });
+
+        _actions.ShowMenu(anchor, items);
+        return true;
+
+        void SetMaximum(int percent)
+        {
+            if (CanChangeForwardVolumeLimit(app, targetDeviceId))
+                ChangeForwardGain(targetDeviceId, maximumVolumePercent: percent);
+        }
+    }
+
+    private bool CanChangeForwardVolumeLimit(AudioAppInfo app, string targetDeviceId) =>
+        _selectedApp is { IsExternalOffline: false } selected && selected.Identity == app.Identity
+        && _outputChoicesIdentity == selected.Identity && _pendingOutputs == null
+        && _selectedOutputs.Contains(targetDeviceId, IdCmp)
+        && !IdCmp.Equals(GetDisplayedNativeOutputId(selected), targetDeviceId)
+        && ProductAudio.SupportsMirrorVolumeLimit(selected, targetDeviceId)
+        && (!_deviceNodes.TryGetValue(DeviceNodeKey(Flow.Render, targetDeviceId), out var node) || node.IsAvailable);
+
     private void ShowWireContextMenu(CanvasWire wire)
     {
         var app = _selectedApp;
@@ -2652,6 +2739,8 @@ internal sealed partial class AppsPageView
         if (_interaction == InteractionMode.None) return;
         if (_interaction is InteractionMode.DraggingAppVolume or InteractionMode.DraggingDeviceVolume)
             _actions.Host.FlushVolumeWrites();
+        else if (_interaction == InteractionMode.DraggingForwardVolume && _dragForwardDeviceId is { } target)
+            ApplyForwardVolume(target, GetForwardGain(target).VolumePercent);
         if (!commitLayout)
         {
             if (_interaction == InteractionMode.DraggingNode && _dragMoved)

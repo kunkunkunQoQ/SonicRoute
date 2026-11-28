@@ -15,6 +15,7 @@ public sealed class AndroidAudioSession : IAsyncDisposable, SonicRoute.AirPlay.I
     private int _defaultOutputRevision, _defaultOutputRefreshQueued;
     private readonly Queue<string> _logs = new();
     private AndroidAudioState _state = new(CaptureState.Idle);
+    private volatile bool _hasSmartVolumePreference;
     private CancellationTokenSource? _run, _pendingRun;
     private IAudioTransport? _transport;
     internal Func<AndroidDevice, SrapSession>? AppSession { private get; set; }
@@ -74,6 +75,9 @@ public sealed class AndroidAudioSession : IAsyncDisposable, SonicRoute.AirPlay.I
         _streaming = streaming;
         _resolvePhone = resolvePhone;
     }
+
+    internal void SetMirrorGainResolver(Func<AndroidDevice, AndroidApp, string, (int VolumePercent, bool Muted)?> resolve) =>
+        _mirrors.InitialGain = id => State is { Device: { } device, App: { } app } ? resolve(device, app, id) : null;
 
     private IPcmPlayer CreatePlayer(AndroidDevice device, AndroidPcmSource pcm, string? id, CancellationToken token,
         AndroidOutputSwitchTiming? timing = null)
@@ -147,7 +151,8 @@ public sealed class AndroidAudioSession : IAsyncDisposable, SonicRoute.AirPlay.I
             int generation = ++_generation;
             _renderFailure = null;
             runToken.ThrowIfCancellationRequested();
-            Update(s => s with { State = CaptureState.Starting, Device = device, App = app, SmartVolume = !device.IsApp && s.SmartVolume, Error = null, ErrorCode = null });
+            Update(s => s with { State = CaptureState.Starting, Device = device, App = app,
+                SmartVolume = _hasSmartVolumePreference ? s.SmartVolume : !device.IsApp, Error = null, ErrorCode = null });
             if (device.IsApp)
             {
                 var session = AppSession?.Invoke(device) ?? throw new SrapException("unsupported");
@@ -160,12 +165,14 @@ public sealed class AndroidAudioSession : IAsyncDisposable, SonicRoute.AirPlay.I
                 Log($"Start {app.Package}, UID {app.Uid}, phone audio {keepPhoneAudio}, codec {streaming.AudioCodec}, latency {streaming.AudioLatencyMode}");
                 _transport = _transportFactory();
             }
-            _pcm = warmPcm ?? new AndroidPcmSource(streaming.EffectiveAudioLatencyMode);
-            _pcm.LatencyMode = streaming.EffectiveAudioLatencyMode;
-            var state = State;
-            _pcm.Volume = state.Muted ? 0 : state.Volume / 100f;
-            _pcm.SmartVolume = state.SmartVolume;
-            _mirrors.SetLevels(_pcm.Volume, _pcm.SmartVolume);
+            lock (_stateGate)
+            {
+                _pcm = warmPcm ?? new AndroidPcmSource(streaming.EffectiveAudioLatencyMode);
+                _pcm.LatencyMode = streaming.EffectiveAudioLatencyMode;
+                _pcm.Volume = _state.Muted ? 0 : _state.Volume / 100f;
+                _pcm.SmartVolume = _state.SmartVolume;
+                _mirrors.SetLevels(_pcm.Volume, _pcm.SmartVolume);
+            }
             _mirrors.SetLatencyMode(streaming.EffectiveAudioLatencyMode);
             if (string.IsNullOrEmpty(endpointId)) WatchDefaultOutput();
             Task<Stream>? connecting = _transport == null ? null : timing == null ? _transport.ConnectAsync(device, app, keepPhoneAudio, runToken)
@@ -305,13 +312,17 @@ public sealed class AndroidAudioSession : IAsyncDisposable, SonicRoute.AirPlay.I
     }
     public void SetSmartVolume(bool enabled)
     {
-        if (State.SmartVolume == enabled) return;
+        if (_hasSmartVolumePreference && State.SmartVolume == enabled) return;
         ChangeSmartVolume(enabled);
     }
     // Keep the capturing delegates out of the no-change fast path.
     private void ChangeVolume(int volume) => Update(s => s with { Volume = volume });
     private void ChangeMute(bool muted) => Update(s => s with { Muted = muted });
-    private void ChangeSmartVolume(bool enabled) => Update(s => s with { SmartVolume = enabled && s.Device?.IsApp != true });
+    private void ChangeSmartVolume(bool enabled) => Update(s =>
+    {
+        _hasSmartVolumePreference = true;
+        return s with { SmartVolume = enabled };
+    });
     string?[] IMultiOutputAudioSession.GetOutputs() => [State.OutputId, .. Volatile.Read(ref _extraIds)];
     Task IMultiOutputAudioSession.SetOutputsAsync(IReadOnlyList<string?> outputs) => ApplyOutputsAsync(outputs.ToArray(), true);
     (int VolumePercent, bool Muted) IMultiOutputAudioSession.GetMirrorGain(string id) => _mirrors.GetGain(id);

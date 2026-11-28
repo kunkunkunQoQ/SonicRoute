@@ -1,4 +1,5 @@
 using SonicRoute.Core;
+using SonicRoute.Core.Compat;
 using SonicRoute.Core.Models;
 
 namespace SonicRoute.Native.Product;
@@ -16,7 +17,27 @@ internal sealed partial class ProductAutomation(ApplicationHost host, NativeAppl
 
     internal bool NeedsForeground => resident && AutoRuleService.WatchesForeground;
     internal IReadOnlyDictionary<string, string> HotkeyStatuses => hotkeys?.RegistrationStatus ?? EmptyStatuses;
-    internal string? ProcessName(int pid) => ForegroundAppService.GetProcessNameSafe(pid);
+    internal string? ProcessName(int pid, nint hwnd = 0)
+    {
+#if SONICROUTE_PHONE
+        if (pid == AppInfo.CurrentProcessId && hwnd != 0 && audio.ExternalAudio?.ResolveAutomationWindow(hwnd, pid) is { } external)
+            return external;
+#endif
+        return ForegroundAppService.GetProcessNameSafe(pid);
+    }
+
+    internal void RefreshForeground(nint hwnd)
+    {
+        if (NeedsForeground) AutoRuleService.NotifyForeground(ProductWindowPid(hwnd), hwnd);
+    }
+#if SONICROUTE_PHONE
+    internal List<AudioAppInfo> ExternalApps()
+    {
+        var apps = new List<AudioAppInfo>();
+        audio.ExternalAudio?.AppendExternalApps(apps, includeOffline: false);
+        return apps;
+    }
+#endif
 
     // Watcher diff/baseline mutations remain on the STA even across asynchronous process queries.
     // Commands from pipes use independent tasks and only dispatch their visual feedback.
@@ -133,7 +154,7 @@ internal sealed partial class ProductAutomation(ApplicationHost host, NativeAppl
         {
             case ShellSignalKind.Hotkey: hotkeys?.Dispatch((int)signal.Value); break;
             case ShellSignalKind.TrayWheel: Wheel(signal); break;
-            case ShellSignalKind.Foreground: AutoRuleService.NotifyForeground(ForegroundAppService.GetForegroundProcessId()); break;
+            case ShellSignalKind.Foreground: RefreshForeground(signal.Window); break;
             case ShellSignalKind.Time when scheduled: AutoRuleScheduler.RefreshScheduler(false); break;
             case ShellSignalKind.Power when signal.Value is 6 or 7 or 18:
             case ShellSignalKind.Session when signal.Value is 1 or 3 or 8:

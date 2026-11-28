@@ -19,7 +19,7 @@ namespace SonicRoute.Native.Product;
 /// Native AOT Full-edition bridge connecting PhonePreview / AirPlayPreview external sessions and
 /// PC-to-phone audio routing into ProductAudio, ProductRouting, and ProductCurrentApp without WPF/NAudio.
 /// </summary>
-internal sealed class ExternalAudioBridge : IDisposable
+internal sealed partial class ExternalAudioBridge : IDisposable
 {
     private readonly Func<PhonePreview?> _tryGetPhone;
     private readonly Func<PhonePreview> _getPhone;
@@ -464,6 +464,18 @@ internal sealed class ExternalAudioBridge : IDisposable
         if (phone.Displays.FindApplication(hwnd, pid) is { } match)
             return "android:" + match.App.Package;
         return null;
+    }
+
+    internal string? ResolveAutomationWindow(nint hwnd, int pid) => TryResolveVirtualDisplayPackage(hwnd, pid)
+        ?? (hwnd != 0 && _tryGetAirPlay()?.MirrorWindowHandle == hwnd ? "airplay:receiver" : null);
+
+    internal IEnumerable<AudioAppInfo> GetWindowTriggerApps()
+    {
+        if (_tryGetPhone() is { } phone)
+            foreach (var app in phone.Displays.GetOpenApplications())
+                yield return AndroidCard(app, app.Name, null, null);
+        if (_tryGetAirPlay()?.MirrorWindowHandle is { } hwnd && hwnd != 0)
+            yield return AirPlayCard("AirPlay", null, null);
     }
 
     internal IPcProcessSilenceLease? AcquireLocalSilenceLease(int pid) => PhoneMirrorIsolation.AcquireLegacy(pid);

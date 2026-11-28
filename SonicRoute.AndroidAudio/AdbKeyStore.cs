@@ -88,11 +88,14 @@ internal sealed class AdbKeyStore : IDisposable
                 DateTimeOffset.UtcNow.AddDays(-1),
                 DateTimeOffset.UtcNow.AddYears(10));
             byte[] pfx = ephemeral.Export(X509ContentType.Pfx);
-            // Exportable | UserKeySet ensures Schannel / NCrypt can access the private key during TLS 1.3 handshake cleanly.
-            // Try EphemeralKeySet first if caller checks SslStream; Windows SChannel requires non-ephemeral or CNG-backed key for some SSPI paths,
-            // so we keep the X509Certificate2 cached per AdbKeyStore lifetime and dispose it on Dispose().
-            _tlsCert = X509CertificateLoader.LoadPkcs12(pfx, ReadOnlySpan<char>.Empty, X509KeyStorageFlags.Exportable | X509KeyStorageFlags.UserKeySet);
-            return _tlsCert;
+            try
+            {
+                // Schannel needs the imported key for TLS 1.3. The certificate is cached for the store's lifetime.
+                _tlsCert = X509CertificateLoader.LoadPkcs12(pfx, ReadOnlySpan<char>.Empty,
+                    X509KeyStorageFlags.Exportable | X509KeyStorageFlags.UserKeySet);
+                return _tlsCert;
+            }
+            finally { CryptographicOperations.ZeroMemory(pfx); }
         }
     }
 

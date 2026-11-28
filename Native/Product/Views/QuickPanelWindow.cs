@@ -774,7 +774,7 @@ internal sealed class QuickPanelWindow : LayeredWindow
         float titleWidth = D2dSharedContext.Instance.MeasureText(BuildIdentity.DisplayName, UiMetrics.FontFamily,
             14f, 700, innerW, 28f, false).Width;
         var titleRect = new UiRect(padX, y, titleWidth + 4f, 28f);
-        _hit.Add("qp.title", titleRect, UiCursorKind.Hand);
+        _hit.Add("qp.title", titleRect, UiCursorKind.Hand, L10n.T(_pinned ? "Qp.UnpinPanel" : "Qp.PinPanel"));
         if (_hit.IsHover("qp.title") || _hit.IsActive("qp.title"))
             g.FillRoundedRect(titleRect, 4f, theme.NavHover);
         g.DrawText(BuildIdentity.DisplayName, titleRect, _pinned ? theme.Accent : theme.TextPrimary,
@@ -785,7 +785,7 @@ internal sealed class QuickPanelWindow : LayeredWindow
         var phoneRect = new UiRect(rx - phoneBtnW, y - 1f, phoneBtnW, 28f);
         bool phoneOpen = _phoneCompanion is { IsVisible: true };
         UiPrimitives.DrawSecondaryButton(g, theme, _hit, "qp.phone", phoneRect, "",
-            radius: 8f, icon: UiIcon.Devices, active: phoneOpen);
+            radius: 8f, icon: UiIcon.Devices, active: phoneOpen, tooltip: L10n.T("Phone.Title"));
         rx = phoneRect.X - 6f;
 #endif
 
@@ -800,14 +800,17 @@ internal sealed class QuickPanelWindow : LayeredWindow
         const float expBtnSize = 32f;
         var outputsToggleRect = new UiRect(padX + innerW - expBtnSize, y, expBtnSize, expBtnSize);
         bool outPopOpen = _outputVolumesPopup is { IsVisible: true };
-        _hit.Add("qp.outputs", outputsToggleRect, UiCursorKind.Hand);
+        _hit.Add("qp.outputs", outputsToggleRect, UiCursorKind.Hand,
+            L10n.T(outPopOpen ? "Qp.CollapseOutputVolumes" : "Qp.ExpandOutputVolumes"));
         g.FillRoundedRect(outputsToggleRect, 8f, outPopOpen ? theme.NavSelected : _hit.IsHover("qp.outputs") ? theme.NavHover : theme.SurfaceBg);
         g.DrawRoundedRect(outputsToggleRect, 8f, outPopOpen || _hit.IsHover("qp.outputs") ? theme.Accent : theme.Border, 1f);
         g.DrawIcon(UiIcon.ChevronUp, new UiRect(outputsToggleRect.CenterX - 5f, outputsToggleRect.CenterY - 5f, 10f, 10f),
             outPopOpen ? theme.Accent : theme.TextSecondary, 1.8f, outPopOpen ? 180f : 0f);
 
         var masterComboRect = new UiRect(padX, y, MathF.Max(60f, outputsToggleRect.X - 6f - padX), 32f);
-        _hit.Add("qp.masterdev", masterComboRect, UiCursorKind.Hand);
+        _hit.Add("qp.masterdev", masterComboRect, UiCursorKind.Hand, devName);
+        if (_hit.AccessibilityEnabled)
+            _hit.Describe("qp.masterdev", L10n.T("St.Output") + " · " + devName, UiAccessibleRole.ComboBox);
         bool comboHot = _hit.IsHover("qp.masterdev");
         bool comboOpen = _comboPopup is { IsDisposed: false, IsVisible: true };
         g.FillRoundedRect(masterComboRect, 8f, theme.SurfaceBg);
@@ -823,7 +826,7 @@ internal sealed class QuickPanelWindow : LayeredWindow
         string muteText = L10n.T("Qp.Mute");
         float muteW = MathF.Max(54f, D2dSharedContext.Instance.MeasureText(muteText, UiMetrics.FontFamily, 12f, 400, innerW, 28f, false).Width + 22f);
         var masterMuteRect = new UiRect(padX, y + 2f, muteW, 28f);
-        DrawToolButton(g, theme, "qp.mastermute", masterMuteRect, muteText, active: _masterMuted);
+        DrawToolButton(g, theme, "qp.mastermute", masterMuteRect, muteText, active: _masterMuted, toggle: true);
 
         var pctRect = new UiRect(padX + innerW - 42f, y, 42f, 32f);
         g.DrawText($"{_masterVolume}%", pctRect, theme.TextPrimary, 12.5f, 600, UiTextAlign.Trailing, UiVertAlign.Center, wrap: false, ellipsis: false);
@@ -1128,6 +1131,9 @@ internal sealed class QuickPanelWindow : LayeredWindow
         var iconBtnRect = new UiRect(headerRect.X + 4f, headerRect.CenterY - 15f, 30f, 30f);
         string iconHitId = $"qp.appmute:{row.HitKey}";
         _hit.Add(iconHitId, iconBtnRect, row.Available ? UiCursorKind.Hand : UiCursorKind.Arrow, row.DisplayName);
+        if (_hit.AccessibilityEnabled)
+            _hit.Describe(iconHitId, L10n.T("Qp.Mute") + " · " + row.DisplayName,
+                UiAccessibleRole.CheckBox, row.Muted, row.Available);
         if (row.Available && _hit.IsHover(iconHitId))
         {
             g.FillRoundedRect(iconBtnRect, 6f, theme.NavHover);
@@ -1172,6 +1178,8 @@ internal sealed class QuickPanelWindow : LayeredWindow
         var expandRect = new UiRect(headerRect.Right - expandW - 2f, headerRect.CenterY - expandH * 0.5f, expandW, expandH);
         string expandId = $"qp.expand:{row.HitKey}";
         _hit.Add(expandId, expandRect, UiCursorKind.Hand);
+        if (_hit.AccessibilityEnabled)
+            _hit.Describe(expandId, L10n.T("Exp.MoreOptions") + " · " + row.DisplayName);
         if (row.Expanded) g.FillRoundedRect(expandRect, 6f, theme.NavSelected);
         else if (_hit.IsHover(expandId)) g.FillRoundedRect(expandRect, 6f, theme.NavHover);
 
@@ -1225,7 +1233,7 @@ internal sealed class QuickPanelWindow : LayeredWindow
             if (isExit)
             {
                 string exitId = $"qp.appexit:{row.HitKey}";
-                _hit.Add(exitId, btnRect, UiCursorKind.Hand);
+                _hit.Add(exitId, btnRect, UiCursorKind.Hand, label);
                 bool exitHot = _hit.IsHover(exitId);
                 g.FillRoundedRect(btnRect, 7f, theme.SurfaceBg);
                 g.DrawRoundedRect(btnRect, 7f, exitHot ? theme.Fail : theme.Border, 1f);
@@ -1234,7 +1242,8 @@ internal sealed class QuickPanelWindow : LayeredWindow
             }
 
             string hitId = $"qp.appdev:{row.HitKey}:{devId}";
-            if (row.Available) _hit.Add(hitId, btnRect, UiCursorKind.Hand);
+            if (row.Available) _hit.Add(hitId, btnRect, UiCursorKind.Hand, label);
+            else _hit.DescribeDisabled(hitId, btnRect, label);
 
             bool isNative = IdCmp.Equals(row.NativeOutputId, devId);
             bool isMirror = !isNative && row.SelectedOutputs.Contains(devId);
@@ -1267,6 +1276,7 @@ internal sealed class QuickPanelWindow : LayeredWindow
                 _hit.Add(hitId, btnRect, UiCursorKind.Hand);
 
                 bool isNativeIn = IdCmp.Equals(row.NativeInputId, devId);
+                _hit.Describe(hitId, label, UiAccessibleRole.RadioButton, isNativeIn);
                 bool hot = _hit.IsHover(hitId);
 
                 UiColor bg = isNativeIn ? theme.DeviceNativeBg : theme.SurfaceBg;
@@ -1282,18 +1292,38 @@ internal sealed class QuickPanelWindow : LayeredWindow
 
     private void RenderFooterBar(D2dTarget g, UiThemePalette theme, UiRect rect)
     {
-        const float gap = 6f, mainWidth = 76f, micWidth = 120f, muteWidth = 112f;
-        float left = rect.Right - mainWidth - micWidth - muteWidth - 3 * gap;
-        DrawToolButton(g, theme, "qp.globalmute", new UiRect(left, rect.Y, muteWidth, 28), L10n.T("Qp.GlobalMute"), active: _globalPlaybackMuted);
+        const float gap = 6f;
+        string muteLabel = L10n.T("Qp.GlobalMute");
+        string micLabel = L10n.T("Qp.MicMute");
+        string mainLabel = L10n.T("Qp.FullUi");
+        float available = rect.Width - 2f * gap;
+        float muteWidth = MeasureToolButton(muteLabel, available);
+        float micWidth = MeasureToolButton(micLabel, available);
+        float mainWidth = MeasureToolButton(mainLabel, available);
+        float labelWidth = muteWidth + micWidth + mainWidth;
+        float spare = MathF.Max(0f, available - labelWidth) / 3f;
+        float scale = MathF.Min(1f, available / labelWidth);
+        muteWidth = muteWidth * scale + spare;
+        micWidth = micWidth * scale + spare;
+        mainWidth = mainWidth * scale + spare;
+        float left = rect.X;
+        DrawToolButton(g, theme, "qp.globalmute", new UiRect(left, rect.Y, muteWidth, 28), muteLabel,
+            active: _globalPlaybackMuted, toggle: true);
         left += muteWidth + gap;
-        DrawToolButton(g, theme, "qp.mic", new UiRect(left, rect.Y, micWidth, 28), L10n.T("Qp.MicMute"), enabled: _micKnown, active: _globalMicMuted);
-        DrawToolButton(g, theme, "qp.settings", new UiRect(left + micWidth + gap, rect.Y, mainWidth, 28), L10n.T("Qp.FullUi"));
+        DrawToolButton(g, theme, "qp.mic", new UiRect(left, rect.Y, micWidth, 28), micLabel,
+            enabled: _micKnown, active: _globalMicMuted, toggle: true);
+        DrawToolButton(g, theme, "qp.settings", new UiRect(left + micWidth + gap, rect.Y, mainWidth, 28), mainLabel);
     }
 
+    private static float MeasureToolButton(string label, float available) =>
+        MathF.Ceiling(D2dSharedContext.Instance.MeasureText(label, UiMetrics.FontFamily, 12f, 400, available, 28f, false).Width) + 8f;
+
     private void DrawToolButton(D2dTarget g, UiThemePalette theme, string id, UiRect rect, string label,
-        bool enabled = true, bool active = false)
+        bool enabled = true, bool active = false, bool toggle = false)
     {
-        if (enabled) _hit.Add(id, rect, UiCursorKind.Hand);
+        if (enabled) _hit.Add(id, rect, UiCursorKind.Hand, label);
+        _hit.DescribeControl(id, rect, label, toggle ? UiAccessibleRole.CheckBox : UiAccessibleRole.Button,
+            toggle ? active : null, enabled);
         bool hovered = enabled && _hit.IsHover(id);
         if (hovered || _hit.IsActive(id))
             g.FillRoundedRect(rect, 8f, theme.NavHover);
