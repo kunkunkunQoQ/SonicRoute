@@ -41,12 +41,11 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64（實驗性） · 支援九種介�
 
 v2.00 提供 **Full** 和 **Lite** 可攜版。需要連接 Android 手機或接收 AirPlay，請選 Full。只管理電腦音訊，請選 Lite。請依電腦的處理器架構選擇 x64 或 ARM64。
 
-| 版本 | 可攜版程式 | 系統需求 |
+| 版本或管道 | 下載 | 安裝與執行 |
 |---|---|---|
 | ⭐ Full（電腦音訊、Android 與 AirPlay） | `SonicRoute-v2.00-x64.exe`<br>`SonicRoute-v2.00-arm64.exe` | 單一執行檔，內含 .NET 10 Native AOT 執行階段，無須另外安裝 .NET 執行階段。 |
 | ⚡ Lite（僅電腦音訊） | `SonicRoute-v2.00-Lite-x64.exe`<br>`SonicRoute-v2.00-Lite-arm64.exe` | 單一執行檔，內含 .NET 10 Native AOT 執行階段，無須另外安裝 .NET 執行階段。 |
-
-Microsoft Store · [Full](https://apps.microsoft.com/detail/9NQZGRTPM1NT) / [Lite](https://apps.microsoft.com/detail/9N37LQ8SMLF6) — 由 Microsoft Store 獨立提供安裝與更新。上架版本請見商店頁面。
+| 🔄 **Microsoft Store** | [Full](https://apps.microsoft.com/detail/9NQZGRTPM1NT) / [Lite](https://apps.microsoft.com/detail/9N37LQ8SMLF6) | 由 Microsoft Store 獨立提供安裝與更新。上架版本請見商店頁面。 |
 
 📱 [Android App 下載頁](https://github.com/kunkunkunQoQ/SonicRoute-App/releases) · [安裝說明](https://github.com/kunkunkunQoQ/SonicRoute-App/blob/main/README.md#install)
 
@@ -63,7 +62,8 @@ Microsoft Store · [Full](https://apps.microsoft.com/detail/9NQZGRTPM1NT) / [Lit
 
 ## ✨ SonicRoute 的功能
 
-- **在快速面板選擇要擷取哪個應用程式的聲音。** 展開電腦上的應用程式，按住 `Ctrl` 再點選另一個播放裝置，即可讓該程式的聲音同時從兩個裝置播放。在設定中開啟「麥克風選項」和「在快速面板顯示麥克風」後，可在同一列指定麥克風。在畫布上拖曳實線可切換主要輸出，按「+」可加入轉送，並個別調整每路轉送的音量或靜音。
+- **在快速面板選擇要擷取哪個應用程式的聲音。** 展開電腦上的應用程式，按住 `Ctrl` 再點選另一個播放裝置，即可讓該程式的聲音同時從兩個裝置播放。在設定中開啟「麥克風選項」和「在快速面板顯示麥克風」後，可在同一列指定麥克風。
+- **分別儲存各路轉送的音量設定。** 在畫布上拖曳實線可切換主要輸出，按「+」可加入轉送。音量、靜音狀態與音量上限會依應用程式和輸出裝置分別儲存。在該路轉送的音量滑桿上按一下滑鼠右鍵，即可將上限設為 1% 至 300%。
 - **查看並調整各個程式的音量。** 快速面板的音量表會顯示哪些程式正在發出聲音。拖曳滑桿可分別調整音量，在系統匣圖示上捲動滑鼠滾輪可調整目前程式的音量。用全域快速鍵即可一次將所有麥克風靜音或解除靜音。
 - **讓例行操作自動執行。** 使用 6 種觸發條件和 39 種動作組合規則，例如啟動遊戲時切換到耳機並調整音量。也可在命令列用 `sr` 執行已儲存的規則。
 - **在電腦上使用 Android 與 AirPlay（Full）。** 在同一個區域網路與 SonicRoute Android App 核對八位數字後，即可雙向傳輸音訊，並觀看經手機授權的投放畫面。透過 ADB 可操作獨立應用程式虛擬螢幕、傳送輸入、傳輸檔案及同步剪貼簿。電腦也能接收 Apple 裝置的 AirPlay 音訊和螢幕鏡像。
@@ -112,7 +112,7 @@ Full 和 Lite 可攜版已內含 .NET 10 Native AOT 執行階段，無須另行�
 
 **全新開始**
 
-Full 和 Lite 改用內含執行階段的 .NET 10 Native AOT 單一執行檔。新的「應用程式」畫布同時顯示播放、錄音與轉送連線，可拖曳實線切換主要輸出，也可新增轉送並獨立調整各路音量及靜音。
+Full 和 Lite 改用內含執行階段的 .NET 10 Native AOT 單一執行檔。新的「應用程式」畫布同時顯示播放、錄音與轉送連線，可拖曳實線切換主要輸出，也可新增轉送。同一應用程式與輸出裝置重新連線時，可還原該路轉送的音量、靜音狀態與音量上限。上限可設為 1% 至 300%。
 
 Full 可在同一個區域網路與 SonicRoute Android App 核對八位數字後配對，雙向傳輸音訊，並觀看經手機授權的投放畫面。透過 ADB 可操作獨立虛擬螢幕、傳輸檔案及同步剪貼簿。Full 也支援接收 AirPlay。詳見 [版本紀錄](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2)。
 

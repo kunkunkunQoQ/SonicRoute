@@ -20,8 +20,8 @@
     "downloadTitle": "Télécharger et commencer",
     "releaseNotes": "Notes de version (en anglais et en chinois)",
     "downloadIntro": "SonicRoute {release} se décline en deux éditions. Choisissez **Full** pour l’audio du PC, Android et AirPlay, ou **Lite** pour l’audio du PC. Sélectionnez l’architecture qui correspond à votre machine, x64 ou ARM64.",
-    "edition": "Édition",
-    "requirements": "Configuration requise",
+    "edition": "Édition ou canal",
+    "requirements": "Installation et prérequis",
     "singleExe": "Un seul EXE",
     "storeInstall": "Installer depuis le Store",
     "liteRequirement": "Exécutable portable avec .NET 10 Native AOT intégré, sans installation d’un environnement d’exécution séparé.",
@@ -77,7 +77,7 @@
     "automationAlt": "Cliquez sur le petit robot pour découvrir les règles d’automatisation",
     "footerTitle": "Un œuf de Pâques : hier et demain",
     "guideTitle": "Guide d’utilisation (en chinois)",
-    "downloadColumn": "Paquets portables",
+    "downloadColumn": "Téléchargement",
     "license": "GPL-3.0",
     "licenseTitle": "Licence",
     "thirdPartyNotices": "mentions des composants tiers",
@@ -87,7 +87,8 @@
         "**Portée et licences antérieures.** Depuis le 17 novembre 2026, la GPL-3.0-only couvre l’ensemble du projet dans cette révision, code antérieur compris, dans la limite des droits que peut accorder le titulaire. Les autorisations déjà accordées au titre de la licence MIT et de l’ancienne licence propre au projet restent valables. Les tags et les binaires déjà publiés conservent leur mention de licence d’origine. Les composants tiers restent soumis à leurs propres licences (voir les {noticesLink})."
     ],
     "features": [
-        "**Choisissez dans le panneau rapide l’application dont vous voulez capturer le son.** Dépliez sa ligne et cliquez sur un deuxième périphérique de lecture tout en maintenant la touche `Ctrl` enfoncée pour entendre l’application sur les deux sorties. Maj+clic ajoute une plage de sorties. Activez « Afficher le micro dans le panneau rapide » pour choisir aussi son micro sur la même ligne. Sur le canevas, faites glisser le trait plein pour changer la sortie principale ou cliquez sur « + » pour ajouter un relais avec son propre volume et sa commande de sourdine.",
+        "**Choisissez dans le panneau rapide l’application dont vous voulez capturer le son.** Dépliez sa ligne et cliquez sur un deuxième périphérique de lecture tout en maintenant la touche `Ctrl` enfoncée pour entendre l’application sur les deux sorties. Maj+clic ajoute une plage de sorties. Activez « Afficher le micro dans le panneau rapide » pour choisir aussi son micro sur la même ligne.",
+        "**Mémorisez les réglages de volume de chaque sortie redirigée.** Sur le canevas, faites glisser le trait plein pour changer la sortie principale ou cliquez sur « + » pour ajouter un relais. SonicRoute mémorise le volume, l’état de sourdine et la limite de volume pour chaque combinaison d’application et de périphérique de sortie. Faites un clic droit sur le curseur de volume du relais pour régler sa limite de 1 % à 300 %.",
         "**Réglez le volume de chaque application.** Les indicateurs de niveau du panneau rapide montrent quelles applications émettent du son. Chacune a son propre curseur de volume. Utilisez la molette sur l’icône de notification pour régler l’application ciblée. Un raccourci clavier permet de couper puis de réactiver tous les micros.",
         "**Automatisez les réglages courants.** Vous disposez de {triggerCount} déclencheurs et de {actionCount} actions pour créer vos règles. À l’ouverture d’un jeu, une règle peut sélectionner le casque et lancer votre application de discussion vocale. La commande `sr` permet aussi d’exécuter une règle depuis un terminal ou un script.",
         "**Connectez un téléphone Android ou recevez des contenus AirPlay (Full).** Associez l’application SonicRoute sur le même réseau local et confirmez que le code à huit chiffres est identique sur les deux appareils. Vous pouvez transmettre le son dans les deux sens et regarder l’écran partagé du téléphone sur le PC. Une connexion ADB permet d’ouvrir un écran virtuel indépendant avec contrôle des entrées, de transférer des fichiers et de synchroniser le presse-papiers. Full reçoit aussi le son et la recopie d’écran AirPlay des appareils Apple."

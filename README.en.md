@@ -41,12 +41,11 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64 (experimental) · Nine languages ·
 
 v2.00 comes in two portable editions. Choose **Full** for Windows audio, Android and AirPlay, or **Lite** for Windows audio. Pick x64 or ARM64 to match your PC.
 
-| Edition | Portable package | Requirements |
+| Edition or channel | Download | Installation and requirements |
 |---|---|---|
 | ⭐ Full (PC, Android and AirPlay) | `SonicRoute-v2.00-x64.exe`<br>`SonicRoute-v2.00-arm64.exe` | Single EXE with the .NET 10 Native AOT runtime built in. No separate .NET installation required. |
 | ⚡ Lite (PC audio) | `SonicRoute-v2.00-Lite-x64.exe`<br>`SonicRoute-v2.00-Lite-arm64.exe` | Single EXE with the .NET 10 Native AOT runtime built in. No separate .NET installation required. |
-
-Microsoft Store · [Full](https://apps.microsoft.com/detail/9NQZGRTPM1NT) / [Lite](https://apps.microsoft.com/detail/9N37LQ8SMLF6) — Install and update through the Microsoft Store. See the Store listing for the available version.
+| 🔄 **Microsoft Store** | [Full](https://apps.microsoft.com/detail/9NQZGRTPM1NT) / [Lite](https://apps.microsoft.com/detail/9N37LQ8SMLF6) | Install and update through the Microsoft Store. See the Store listing for the available version. |
 
 📱 [Android app releases](https://github.com/kunkunkunQoQ/SonicRoute-App/releases) · [Installation instructions](https://github.com/kunkunkunQoQ/SonicRoute-App/blob/main/README.md#install)
 
@@ -63,7 +62,8 @@ Microsoft Store · [Full](https://apps.microsoft.com/detail/9NQZGRTPM1NT) / [Lit
 
 ## ✨ What SonicRoute offers
 
-- **Choose which app’s audio to capture in the quick panel.** Expand a PC app and `Ctrl`-click a second playback device to send that app’s sound to both outputs. In Microphone options, turn on “Show microphone in quick panel” to choose the app’s recording input in the same row. On the Apps canvas, drag the solid line to change the primary output or click + to add a forward with its own volume and mute controls.
+- **Choose which app’s audio to capture in the quick panel.** Expand a PC app and `Ctrl`-click a second playback device to send that app’s sound to both outputs. In Microphone options, turn on “Show microphone in quick panel” to choose the app’s recording input in the same row.
+- **Save volume settings for each forwarded output.** On the Apps canvas, drag the solid line to change the primary output or click + to add a forwarded output. SonicRoute saves the volume, mute state and volume limit for each combination of app and output device. Right-click a forwarded output’s volume slider to set its limit from 1% to 300%.
 - **See what’s playing and adjust its volume.** Live level meters show which apps are playing, each with its own volume slider. Scroll over the tray icon to adjust the current app’s volume, or use a hotkey to mute and unmute your microphones.
 - **Automate routine changes.** Choose one of 6 triggers and build a sequence from 39 available actions. When a game starts, a rule can switch to your headset and open voice chat. You can also run a saved rule from a terminal or script with `sr`.
 - **Connect Android or receive AirPlay (Full).** On the same local network, pair with the SonicRoute Android app by comparing an eight-digit code. Send audio in either direction and view a screen shared with the phone’s permission. Use ADB for an independent virtual display with input controls, file transfers and clipboard sync. Full also receives AirPlay audio and screen mirroring from Apple devices.
@@ -112,7 +112,7 @@ In Full, connect the phone over ADB and open its audio settings. The default lat
 
 **A New Beginning**
 
-Full and Lite move to self-contained .NET 10 Native AOT executables. The new Apps canvas shows playback, recording and forwarding routes together. Drag the solid line to switch the primary output and add forwarded outputs with their own volume and mute controls.
+Full and Lite move to self-contained .NET 10 Native AOT executables. The new Apps canvas shows playback, recording and forwarding routes together. Drag the solid line to switch the primary output, or click **+** to add a forwarded output. When the same app and output reconnect, SonicRoute can restore the volume, mute state and volume limit. The limit is adjustable from 1% to 300%.
 
 Full pairs with the SonicRoute Android app over the local network by comparing an eight-digit code. Once paired, you can send audio in either direction and view a screen shared with the phone’s permission. Use ADB for an interactive virtual display, file transfer and clipboard sync. Full also receives AirPlay. See [Version history](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2).
 

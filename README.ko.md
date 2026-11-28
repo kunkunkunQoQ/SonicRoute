@@ -41,12 +41,11 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64 (실험 버전) · 9개 언어 지�
 
 v2.00 포터블 패키지는 Android 연동과 AirPlay 수신을 지원하는 **Full**과 PC 오디오를 관리하는 **Lite**로 제공됩니다. PC에 맞는 x64 또는 ARM64 패키지를 선택하세요.
 
-| 에디션 | 포터블 패키지 | 요구 사항 |
+| 에디션 또는 배포 경로 | 다운로드 | 설치 및 실행 환경 |
 |---|---|---|
 | ⭐ Full(PC 오디오·Android·AirPlay) | `SonicRoute-v2.00-x64.exe`<br>`SonicRoute-v2.00-arm64.exe` | 단일 EXE에 .NET 10 Native AOT 런타임이 포함되어 있어 런타임을 별도로 설치할 필요가 없습니다. |
 | ⚡ Lite(PC 오디오 전용) | `SonicRoute-v2.00-Lite-x64.exe`<br>`SonicRoute-v2.00-Lite-arm64.exe` | 단일 EXE에 .NET 10 Native AOT 런타임이 포함되어 있어 런타임을 별도로 설치할 필요가 없습니다. |
-
-Microsoft Store · [Full](https://apps.microsoft.com/detail/9NQZGRTPM1NT) / [Lite](https://apps.microsoft.com/detail/9N37LQ8SMLF6) — Microsoft Store 버전은 스토어에서 별도로 배포하고 업데이트합니다. 제공 중인 버전은 스토어에서 확인하세요.
+| 🔄 **Microsoft Store** | [Full](https://apps.microsoft.com/detail/9NQZGRTPM1NT) / [Lite](https://apps.microsoft.com/detail/9N37LQ8SMLF6) | Microsoft Store 버전은 스토어에서 별도로 배포하고 업데이트합니다. 제공 중인 버전은 스토어에서 확인하세요. |
 
 📱 [Android 앱 릴리스](https://github.com/kunkunkunQoQ/SonicRoute-App/releases) · [설치 안내](https://github.com/kunkunkunQoQ/SonicRoute-App/blob/main/README.md#install)
 
@@ -63,7 +62,8 @@ Microsoft Store · [Full](https://apps.microsoft.com/detail/9NQZGRTPM1NT) / [Lit
 
 ## ✨ SonicRoute의 주요 기능
 
-- **빠른 패널에서 소리를 캡처할 앱을 선택하세요.** PC 앱의 행을 펼치고 `Ctrl` 키를 누른 채 다른 재생 장치를 클릭하면 그 앱의 소리가 두 장치에서 동시에 재생됩니다. Shift 키를 누르고 클릭하면 여러 출력을 한꺼번에 추가할 수 있습니다. ‘빠른 패널에 마이크 표시’를 켜면 같은 행에서 앱의 녹음용 마이크도 고를 수 있습니다. 캔버스에서는 실선을 끌어 기본 출력을 바꾸거나 ‘+’로 전달할 출력을 추가하고 각 출력의 음량과 음소거를 따로 조절할 수 있습니다.
+- **빠른 패널에서 소리를 캡처할 앱을 선택하세요.** PC 앱의 행을 펼치고 `Ctrl` 키를 누른 채 다른 재생 장치를 클릭하면 그 앱의 소리가 두 장치에서 동시에 재생됩니다. Shift 키를 누르고 클릭하면 여러 출력을 한꺼번에 추가할 수 있습니다. ‘빠른 패널에 마이크 표시’를 켜면 같은 행에서 앱의 녹음용 마이크도 고를 수 있습니다.
+- **전달 출력마다 음량 설정을 저장하세요.** 캔버스에서는 실선을 끌어 기본 출력을 바꾸거나 ‘+’로 전달 출력을 추가할 수 있습니다. 음량, 음소거 상태, 음량 상한은 앱과 출력 장치의 조합별로 저장됩니다. 각 전달 출력의 음량 슬라이더를 마우스 오른쪽 버튼으로 클릭하면 상한을 1%에서 300%까지 설정할 수 있습니다.
 - **앱별 볼륨을 바로 조절하세요.** 빠른 패널의 레벨 미터로 소리가 나는 앱을 확인하고 슬라이더로 볼륨을 조절하세요. 알림 영역의 SonicRoute 아이콘 위에서 휠을 굴리면 현재 앱의 볼륨이 바뀝니다. 전역 단축키로 모든 마이크의 음소거를 한꺼번에 켜거나 끌 수도 있습니다.
 - **자주 쓰는 작업을 규칙으로 만드세요.** 실행 조건 6가지와 작업 39가지를 조합해 장치를 바꾸거나 볼륨을 조절하거나 프로그램을 실행할 수 있습니다. 명령줄에서도 `sr`로 저장한 규칙을 실행할 수 있습니다.
 - **Android 연동 및 AirPlay 수신(Full).** 같은 로컬 네트워크에서 양쪽에 표시된 8자리 숫자를 확인해 SonicRoute 앱과 페어링하세요. 휴대폰과 PC 사이에서 양방향으로 소리를 보내고, 휴대폰에서 공유한 화면을 PC에서 볼 수 있습니다. 독립 가상 화면에서 앱을 조작하거나 파일을 주고받고 텍스트 클립보드를 동기화하려면 ADB로 연결하세요. Apple 기기의 AirPlay 오디오와 화면 미러링도 받을 수 있습니다.
@@ -112,7 +112,7 @@ Full에서 ADB로 연결한 휴대폰의 장치 설정을 여세요. 기본 지�
 
 **새로운 시작**
 
-Full과 Lite는 .NET 10 Native AOT로 전환했으며 런타임을 포함한 단일 EXE로 실행됩니다. 앱 페이지의 캔버스에서 실선은 Windows가 직접 재생하는 출력을 나타냅니다. 「＋」로 전달 출력을 추가하고, 각 전달 경로의 음량과 음소거를 따로 조절할 수 있습니다.
+Full과 Lite는 .NET 10 Native AOT로 전환했으며 런타임을 포함한 단일 EXE로 실행됩니다. 앱 페이지의 캔버스에서 실선은 Windows가 직접 재생하는 출력을 나타냅니다. 「＋」로 전달 출력을 추가할 수 있습니다. 같은 앱을 같은 출력 장치에 다시 연결하면 해당 경로의 음량, 음소거 상태, 음량 상한을 복원할 수 있습니다. 상한은 1%에서 300%까지 설정할 수 있습니다.
 
 Full의 장치 페이지에서 같은 로컬 네트워크에 연결된 SonicRoute 앱과 양쪽의 8자리 숫자를 확인해 페어링하면, PC와 휴대폰 간 양방향 오디오와 화면 공유를 이용할 수 있습니다. ADB 연결은 독립 가상 화면과 입력, 파일 전송 및 클립보드 동기화를 지원합니다. AirPlay 오디오와 화면 미러링도 수신할 수 있습니다. 자세한 내용은 [버전 기록](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2)에서 확인하세요.
 

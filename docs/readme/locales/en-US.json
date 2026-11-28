@@ -20,8 +20,8 @@
     "downloadTitle": "Download and get started",
     "releaseNotes": "Release notes (English and Chinese)",
     "downloadIntro": "{release} comes in two portable editions. Choose **Full** for Windows audio, Android and AirPlay, or **Lite** for Windows audio. Pick x64 or ARM64 to match your PC.",
-    "edition": "Edition",
-    "requirements": "Requirements",
+    "edition": "Edition or channel",
+    "requirements": "Installation and requirements",
     "singleExe": "Single EXE",
     "storeInstall": "Install from the Store",
     "liteRequirement": "Single EXE with the .NET 10 Native AOT runtime built in. No separate .NET installation required.",
@@ -77,7 +77,7 @@
     "automationAlt": "Click the little robot to learn about automation rules",
     "footerTitle": "An Easter egg: yesterday and tomorrow",
     "guideTitle": "User guide (Chinese)",
-    "downloadColumn": "Portable package",
+    "downloadColumn": "Download",
     "license": "GPL-3.0",
     "licenseTitle": "License",
     "thirdPartyNotices": "third-party notices",
@@ -87,7 +87,8 @@
         "**Scope and earlier licenses.** As of November 17, 2026, GPL-3.0-only covers this revision of the project, including earlier code, to the extent the copyright holder can license it. Permissions already granted under the MIT license and the former custom license remain valid. Existing tags and previously released binaries retain their original licensing. Third-party components retain their own licenses (see {noticesLink})."
     ],
     "features": [
-        "**Choose which app’s audio to capture in the quick panel.** Expand a PC app and `Ctrl`-click a second playback device to send that app’s sound to both outputs. In Microphone options, turn on “Show microphone in quick panel” to choose the app’s recording input in the same row. On the Apps canvas, drag the solid line to change the primary output or click + to add a forward with its own volume and mute controls.",
+        "**Choose which app’s audio to capture in the quick panel.** Expand a PC app and `Ctrl`-click a second playback device to send that app’s sound to both outputs. In Microphone options, turn on “Show microphone in quick panel” to choose the app’s recording input in the same row.",
+        "**Save volume settings for each forwarded output.** On the Apps canvas, drag the solid line to change the primary output or click + to add a forwarded output. SonicRoute saves the volume, mute state and volume limit for each combination of app and output device. Right-click a forwarded output’s volume slider to set its limit from 1% to 300%.",
         "**See what’s playing and adjust its volume.** Live level meters show which apps are playing, each with its own volume slider. Scroll over the tray icon to adjust the current app’s volume, or use a hotkey to mute and unmute your microphones.",
         "**Automate routine changes.** Choose one of {triggerCount} triggers and build a sequence from {actionCount} available actions. When a game starts, a rule can switch to your headset and open voice chat. You can also run a saved rule from a terminal or script with `sr`.",
         "**Connect Android or receive AirPlay (Full).** On the same local network, pair with the SonicRoute Android app by comparing an eight-digit code. Send audio in either direction and view a screen shared with the phone’s permission. Use ADB for an independent virtual display with input controls, file transfers and clipboard sync. Full also receives AirPlay audio and screen mirroring from Apple devices."

@@ -41,12 +41,11 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64（实验版） · 九种语言 · [
 
 v2.00 提供 **Full** 和 **Lite** 两种便携版。需要 Android 互联或 AirPlay 接收，请选 Full。只管理电脑音频，可选 Lite。请按电脑的处理器架构选择 x64 或 ARM64。
 
-| 版本 | 便携包 | 运行要求 |
+| 版本或渠道 | 下载 | 安装与运行 |
 |---|---|---|
 | ⭐ Full（电脑音频、Android 和 AirPlay） | `SonicRoute-v2.00-x64.exe`<br>`SonicRoute-v2.00-arm64.exe` | 单个 EXE，内置 .NET 10 Native AOT 运行时，无需另行安装 .NET 运行时。 |
 | ⚡ Lite（仅电脑音频） | `SonicRoute-v2.00-Lite-x64.exe`<br>`SonicRoute-v2.00-Lite-arm64.exe` | 单个 EXE，内置 .NET 10 Native AOT 运行时，无需另行安装 .NET 运行时。 |
-
-Microsoft Store · [Full](https://apps.microsoft.com/detail/9NQZGRTPM1NT) / [Lite](https://apps.microsoft.com/detail/9N37LQ8SMLF6) — 通过 Microsoft Store 单独安装和更新，在架版本以商店页面为准。
+| 🔄 **Microsoft Store** | [Full](https://apps.microsoft.com/detail/9NQZGRTPM1NT) / [Lite](https://apps.microsoft.com/detail/9N37LQ8SMLF6) | 通过 Microsoft Store 单独安装和更新，在架版本以商店页面为准。 |
 
 📱 [Android App 下载页](https://github.com/kunkunkunQoQ/SonicRoute-App/releases) · [安装说明](https://github.com/kunkunkunQoQ/SonicRoute-App/blob/main/README.md#install)
 
@@ -63,7 +62,8 @@ Microsoft Store · [Full](https://apps.microsoft.com/detail/9NQZGRTPM1NT) / [Lit
 
 ## ✨ 主要功能
 
-- **在快速面板选择要捕获的应用声音。** 展开目标电脑应用的设备列表，按住 `Ctrl` 单击另一台播放设备，就能让该应用同时从两处播放。在设置中启用「麦克风选项」和「在快速面板显示麦克风」后，还能在同一行选择应用使用的麦克风。画布上可拖动实线切换主输出，点「+」添加转发，并单独调节每路转发的音量或静音。
+- **在快速面板选择要捕获的应用声音。** 展开目标电脑应用的设备列表，按住 `Ctrl` 单击另一台播放设备，就能让该应用同时从两处播放。在设置中启用「麦克风选项」和「在快速面板显示麦克风」后，还能在同一行选择应用使用的麦克风。
+- **按转发输出保存音量设置。** 画布上可拖动实线切换主输出，点「+」添加转发。音量、静音状态和音量上限按应用与输出设备分别保存。右键单击该路转发的音量滑块，可将上限设为 1%–300%。
 - **查看和调节应用音量。** 快速面板的电平表会显示哪些应用正在发声。拖动滑块可单独调节应用音量，也可在托盘图标上滚动滚轮调节当前应用。用全局快捷键可将所有麦克风静音或恢复。
 - **让常用操作自动执行。** 从 6 种触发条件和 39 种操作中组合规则，例如在游戏启动时切换到耳机并调节音量。也可用 `sr` 从命令行执行已保存的规则。
 - **在电脑上使用 Android 和 AirPlay（Full）。** 在同一局域网内与 SonicRoute Android App 核对八位数字后，可双向传输声音，并查看经手机授权的投屏。通过 ADB 可操作独立的应用虚拟屏、发送输入、传输文件和同步剪贴板。电脑也能接收 Apple 设备的 AirPlay 音频与屏幕镜像。
@@ -112,7 +112,7 @@ SonicRoute 主要依靠系统事件检测变化，必要时才每秒检查一次
 
 **全新开始**
 
-Full 和 Lite 改用自带运行时的 .NET 10 Native AOT 单文件 EXE。新的「应用」画布同时显示播放、录音和转发连接，可拖动实线切换主输出，添加转发后单独调整各路音量与静音。
+Full 和 Lite 改用自带运行时的 .NET 10 Native AOT 单文件 EXE。新的「应用」画布同时显示播放、录音和转发连接，可拖动实线切换主输出，也可添加转发。同一应用和输出设备重新连接时，可恢复该路转发的音量、静音状态和音量上限。上限可设为 1%–300%。
 
 Full 可在同一局域网与 SonicRoute Android App 核对八位数字完成配对，双向传输声音，并查看经手机授权的投屏。使用 ADB 可操作独立虚拟屏、传输文件和同步剪贴板。Full 还支持 AirPlay 接收。详见[版本历史](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2)。
 

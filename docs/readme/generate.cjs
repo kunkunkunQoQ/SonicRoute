@@ -87,7 +87,8 @@ function render(language, text, releaseSummary = text.releaseSummary, previousRe
   const scenarioIcons = ['🎮 ', '🎵 ', '⚡ ', '🎙️ ', '📹 ', '📱 '];
   const rows = [
     ['⭐ ' + text.editionFull, portableFile('Full', 'x64') + '<br>' + portableFile('Full', 'arm64'), text.fullRequirement],
-    ['⚡ ' + text.editionLite, portableFile('Lite', 'x64') + '<br>' + portableFile('Lite', 'arm64'), text.liteRequirement]
+    ['⚡ ' + text.editionLite, portableFile('Lite', 'x64') + '<br>' + portableFile('Lite', 'arm64'), text.liteRequirement],
+    ['🔄 **' + text.editionStore + '**', link('Full', shared.store) + ' / ' + link('Lite', shared.storeLite), text.storeRequirement]
   ];
   const navigation = shared.languages.map(item => item.locale === language.locale ? `**${item.name}**` : link(item.name, item.file)).join(' | ') + ' | ' + link('🤖 AI', 'README.ai.md');
   const badge = (alt, imageUrl, target) => link(`![${alt}](${imageUrl})`, target);
@@ -136,7 +137,6 @@ function render(language, text, releaseSummary = text.releaseSummary, previousRe
     fill(text.downloadIntro), '',
     '| ' + [text.edition, text.downloadColumn, text.requirements].join(' | ') + ' |', '|---|---|---|',
     ...rows.map(row => '| ' + row.map(tableCell).join(' | ') + ' |'), '',
-    text.editionStore + ' · ' + link('Full', shared.store) + ' / ' + link('Lite', shared.storeLite) + ' — ' + text.storeRequirement, '',
     '📱 ' + link(text.androidReleases, androidReleases) + ' · ' + link(text.androidInstall, androidInstall), '',
     '> [!NOTE]',
     '> ' + fill(text.runtimeNote), '',
@@ -235,7 +235,7 @@ function renderAI(shared) {
     '  SONICROUTE_v200:',
     '    - "Native AOT (.NET 10 PublishAot=true, reflection JSON disabled) single-EXE desktop host for Full & Lite; removes WPF, WinForms, XAML, NAudio, and System.Management from Full/Lite."',
     '    - "Custom Win32 LayeredWindow + Direct2D/DirectWrite UI matching v1.36 theme/metrics, per-monitor DPI, and event-driven device notifications."',
-    '    - "Redesigned Apps workspace (AppsPageView.Canvas + AppsCanvasEngine + OutputConnectionPopupWindow): per-app node/wire routing canvas, partitioned collision-free layout, solid native / dashed forward / emerald mic wires, independent per-forward Q15 PCM gain/mute, and bounded AppCanvasLayouts persistence."',
+    '    - "Redesigned Apps workspace (AppsPageView.Canvas + AppsCanvasEngine + OutputConnectionPopupWindow): per-app node/wire routing canvas, partitioned collision-free layout, solid native / dashed forward / emerald mic wires, saved per-output volume, mute and volume ceiling (1%–300%), and bounded AppCanvasLayouts persistence."',
     '    - "Adaptive UiDockRail for Apps and Devices with floating search/filter/refresh tools."',
     '    - "Unified Devices tab (MainNavTab.Devices / PhoneDevicePageView) combining Android Configure/Connect and AirPlay receiver settings."',
     '    - "Native Full pairs with a nearby Android companion using an eight-digit comparison code. A trusted phone or PC can start and stop sound sharing in either direction and request a view of the phone screen. The quick panel displays icons for active phone media sessions."',
@@ -245,11 +245,11 @@ function renderAI(shared) {
     '    - "Windows DNS-SD (DnsServiceBrowse) background detection for saved Android devices without triggering firewall prompts when AirPlay is off."',
     '    - "Source-generated COM ([GeneratedComInterface]/[GeneratedComClass]) for Core Audio, VAD\\\\Process_Loopback, and MTA WMI ProcessTraceSubscription."',
     '    - "Isolated diagnostic/test IPC (--control over SonicRoute.NativeControl.*) gated by CandidateEnvironment."',
+    '    - "Microsoft Store has separate listings for SonicRoute (Full) and SonicRoute Lite. Build-Package.ps1 supports both editions. The release workflow builds an unsigned Full x64 MSIX."',
     '  EXPERIMENTAL:',
     '    - "ExperimentalMode page (unlock by clicking author name 5x in Settings, restart required): BackgroundPollingFallbackEnabled (1s fallback), ExecutionHistoryEnabled (bounded JSONL), MicInPanel, and Config export/import/clear."',
     '    - "ExperimentalMic (default true; per-app capture routing & mic canvas partition; unsupported on external Android/AirPlay sources)."',
     '    - "ARM64 portable Native AOT builds (win-arm64 marked EXPERIMENTAL in release matrix)."',
-    '    - "StoreLite MSIX packaging path (AppxManifest.Lite.xml + Build-Package.ps1 -Edition Lite; release.yml currently produces Full x64 MSIX)."',
     '  HISTORICAL_WPF_v136:',
     '    - "WPF/.NET 10 Desktop Runtime (Full/Lite x64; ARM64 experimental) and .NET Framework 4.8 (Legacy x64)."',
     '    - "Per-app primary playback/capture routing, multi-device playback mirrors & restart restore, global hotkeys, tray wheel, 6x39 automation, CLI sr/--run-rule, Protocol 2 updater."',
@@ -350,7 +350,7 @@ function renderAI(shared) {
     '      - "Cross-instance process lock Local\\\\SonicRoute.AudioMirror.{pid} prevents Full & Lite side-by-side from double-capturing the same PID."',
     '    facts:',
     '      - "One event-driven ProcessCapture per PID feeds multiple DesktopMirrorPlayer (WASAPI render) or AndroidPhonePcmPlayer sinks."',
-    '      - "Right-click an active forwarded output on the Apps canvas to set its volume ceiling (1–300%, default 100%). Its slider and mute affect only that copy. DesktopMirrorPlayer scales PCM with saturation and passes unmuted audio at 100% through unchanged."',
+    '      - "Right-click an active forwarded output’s volume slider on the Apps canvas to set its ceiling (1%–300%, default 100%). Its slider and mute affect only that copy. DesktopMirrorPlayer applies Q15 PCM gain with saturation and passes unmuted audio at 100% through unchanged."',
     '      - "CaptureForwardGains in config.json restores gain, mute and ceiling for a stable app and output pair. During a slider drag, changes apply live. Releasing the slider saves the final value. Sources without a stable identity keep session-local settings."',
     '      - "AppPlaybackRestore persists multi-output selections in SavedPlaybackStore and restores them via PlaybackSessionWatch (IAudioSessionNotification) when apps restart or devices return."',
     '      - "Routing a PC app exclusively to a phone (PhoneMirrorIsolation + LocalSilenceLeasePool + SourceSpeakerLeases) reserves an unoccupied non-default muted endpoint or speaker mute lease via AudioPolicyConfig and rolls back automatically on unplug or external route migration."',
@@ -493,7 +493,7 @@ function renderAI(shared) {
     `    source: ["${versionNotes}", "docs/release-v1.36.md"]`,
     `    symbols: ["${version}"]`,
     '    facts:',
-    '      - "v2.00 — 全新开始 (A New Beginning). .NET 10 Native AOT + Win32/Direct2D/DirectWrite UI, redesigned Apps routing canvas + per-forward Q15 gain, adaptive UiDockRail, unified Devices tab, Windows DNS-SD Android background browse, --control isolated IPC."',
+    '      - "v2.00 — 全新开始 (A New Beginning). .NET 10 Native AOT + Win32/Direct2D/DirectWrite UI, redesigned Apps routing canvas with volume, mute and ceiling saved per app/output pair, adaptive UiDockRail, unified Devices tab, Windows DNS-SD Android background browse, --control isolated IPC."',
     '      - "v2.00 Full and the Android 1.0 companion support nearby pairing, two-way audio, screen viewing and a shared ADB/app device profile. See ANDROID_APP_SRAP for the device evidence and transport-specific tools."',
     '      - "v1.36 (published 2026-11-24): Shared Apps/QuickPanel multi-output selections (Ctrl/Shift/Ctrl+Shift), persistent sidebar collapse, AudioDeviceNotificationHub, AirPlay multi-output, Android 11+ Opus/PCM + 3 latency modes, AdaptiveBitrateController, Store AUMID & AirPlay firewall rules."',
     '      - "v1.34-v1.35: Multi-PC playback selection & restart restore, shared WH_MOUSE_LL hook, optimistic QuickPanel/external switching, 45ms/500ms OSD thresholds, Android file browser/transfer, clipboard cancellation on phone disable."',

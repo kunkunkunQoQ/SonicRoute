@@ -41,12 +41,11 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64 (expérimental) · Interface dispon
 
 SonicRoute v2.00 se décline en deux éditions. Choisissez **Full** pour l’audio du PC, Android et AirPlay, ou **Lite** pour l’audio du PC. Sélectionnez l’architecture qui correspond à votre machine, x64 ou ARM64.
 
-| Édition | Paquets portables | Configuration requise |
+| Édition ou canal | Téléchargement | Installation et prérequis |
 |---|---|---|
 | ⭐ Full (PC, Android et AirPlay) | `SonicRoute-v2.00-x64.exe`<br>`SonicRoute-v2.00-arm64.exe` | Exécutable portable avec .NET 10 Native AOT intégré, sans installation d’un environnement d’exécution séparé. |
 | ⚡ Lite (audio du PC) | `SonicRoute-v2.00-Lite-x64.exe`<br>`SonicRoute-v2.00-Lite-arm64.exe` | Exécutable portable avec .NET 10 Native AOT intégré, sans installation d’un environnement d’exécution séparé. |
-
-Microsoft Store · [Full](https://apps.microsoft.com/detail/9NQZGRTPM1NT) / [Lite](https://apps.microsoft.com/detail/9N37LQ8SMLF6) — La distribution et les mises à jour passent séparément par le Microsoft Store. La version disponible figure sur sa fiche.
+| 🔄 **Microsoft Store** | [Full](https://apps.microsoft.com/detail/9NQZGRTPM1NT) / [Lite](https://apps.microsoft.com/detail/9N37LQ8SMLF6) | La distribution et les mises à jour passent séparément par le Microsoft Store. La version disponible figure sur sa fiche. |
 
 📱 [Versions de l’application Android](https://github.com/kunkunkunQoQ/SonicRoute-App/releases) · [Instructions d’installation](https://github.com/kunkunkunQoQ/SonicRoute-App/blob/main/README.md#install)
 
@@ -63,7 +62,8 @@ Microsoft Store · [Full](https://apps.microsoft.com/detail/9NQZGRTPM1NT) / [Lit
 
 ## ✨ Ce que propose SonicRoute
 
-- **Choisissez dans le panneau rapide l’application dont vous voulez capturer le son.** Dépliez sa ligne et cliquez sur un deuxième périphérique de lecture tout en maintenant la touche `Ctrl` enfoncée pour entendre l’application sur les deux sorties. Maj+clic ajoute une plage de sorties. Activez « Afficher le micro dans le panneau rapide » pour choisir aussi son micro sur la même ligne. Sur le canevas, faites glisser le trait plein pour changer la sortie principale ou cliquez sur « + » pour ajouter un relais avec son propre volume et sa commande de sourdine.
+- **Choisissez dans le panneau rapide l’application dont vous voulez capturer le son.** Dépliez sa ligne et cliquez sur un deuxième périphérique de lecture tout en maintenant la touche `Ctrl` enfoncée pour entendre l’application sur les deux sorties. Maj+clic ajoute une plage de sorties. Activez « Afficher le micro dans le panneau rapide » pour choisir aussi son micro sur la même ligne.
+- **Mémorisez les réglages de volume de chaque sortie redirigée.** Sur le canevas, faites glisser le trait plein pour changer la sortie principale ou cliquez sur « + » pour ajouter un relais. SonicRoute mémorise le volume, l’état de sourdine et la limite de volume pour chaque combinaison d’application et de périphérique de sortie. Faites un clic droit sur le curseur de volume du relais pour régler sa limite de 1 % à 300 %.
 - **Réglez le volume de chaque application.** Les indicateurs de niveau du panneau rapide montrent quelles applications émettent du son. Chacune a son propre curseur de volume. Utilisez la molette sur l’icône de notification pour régler l’application ciblée. Un raccourci clavier permet de couper puis de réactiver tous les micros.
 - **Automatisez les réglages courants.** Vous disposez de 6 déclencheurs et de 39 actions pour créer vos règles. À l’ouverture d’un jeu, une règle peut sélectionner le casque et lancer votre application de discussion vocale. La commande `sr` permet aussi d’exécuter une règle depuis un terminal ou un script.
 - **Connectez un téléphone Android ou recevez des contenus AirPlay (Full).** Associez l’application SonicRoute sur le même réseau local et confirmez que le code à huit chiffres est identique sur les deux appareils. Vous pouvez transmettre le son dans les deux sens et regarder l’écran partagé du téléphone sur le PC. Une connexion ADB permet d’ouvrir un écran virtuel indépendant avec contrôle des entrées, de transférer des fichiers et de synchroniser le presse-papiers. Full reçoit aussi le son et la recopie d’écran AirPlay des appareils Apple.
@@ -112,7 +112,7 @@ Dans Full, ouvrez les paramètres du téléphone connecté par ADB. Dans la rubr
 
 **Un nouveau départ**
 
-Full et Lite utilisent .NET 10 Native AOT. Les exécutables portables x64 et ARM64 intègrent l’environnement d’exécution. Le nouvel espace de routage visualise la sortie principale et les redirections d’une application. Le volume et la sourdine se règlent pour chaque redirection.
+Full et Lite utilisent .NET 10 Native AOT. Les exécutables portables x64 et ARM64 intègrent l’environnement d’exécution. Le nouvel espace de routage visualise la sortie principale et les redirections d’une application. Quand la même application est reconnectée au même périphérique de sortie, SonicRoute peut rétablir le volume, l’état de sourdine et la limite de volume de la redirection. Cette limite se règle de 1 % à 300 %.
 
 Dans Full, la page Appareils réunit Android et AirPlay. Associez l’application SonicRoute sur le réseau local avec un code à huit chiffres pour transférer le son dans les deux sens ou afficher l’écran du téléphone sur le PC. La connexion ADB donne accès à un écran virtuel indépendant avec contrôle des entrées, au transfert de fichiers et au presse-papiers. Pour les autres versions, consultez l’[Historique des versions](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2).
 

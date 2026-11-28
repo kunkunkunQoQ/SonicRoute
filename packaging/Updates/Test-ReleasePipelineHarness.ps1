@@ -197,6 +197,7 @@ try {
         foreach($metadata in @('SonicRoute-update.json','SHA256SUMS.txt')){
             Require ($notes.Contains("https://github.com/example/SonicRoute/releases/download/v2.34/$metadata")) 'Missing current metadata download link'
         }
+        Require ($notes.Contains('**Microsoft Store** | [Full](https://apps.microsoft.com/detail/9NQZGRTPM1NT) / [Lite](https://apps.microsoft.com/detail/9N37LQ8SMLF6) |')) 'The Store row must link to the listings for both Full and Lite'
         Require ([regex]::Matches($notes,'https://github\.com/example/SonicRoute/releases/download/v2\.34/').Count -eq 6) 'Expected exactly six linked Windows assets'
         Require ($notes.Contains('https://github.com/example/SonicRoute/releases/tag/v2.34') -and $notes.Contains('https://github.com/example/SonicRoute/compare/v1.24...v2.34') -and $notes.Contains('https://github.com/example/SonicRoute/blob/v2.34/LICENSE')) 'Expected target version in navigation, source and license links'
         Require (!$notes.Contains('Legacy-x64.zip') -and !$notes.Contains('.NET 10 Desktop Runtime') -and $notes.Contains('Native AOT') -and $notes.Contains('不是独立发布者数字签名') -and !$notes.Contains('无损继承') -and $notes -notmatch '发布日期|发布时间|\b\d{4}-\d{2}-\d{2}\b') 'Copied historical requirements, inferred a date or overstated upgrade guarantees'

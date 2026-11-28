@@ -20,8 +20,8 @@
     "downloadTitle": "Descarga y primeros pasos",
     "releaseNotes": "Notas de la versión (en chino e inglés)",
     "downloadIntro": "SonicRoute {release} tiene dos ediciones. Elige **Full** para usar el audio del PC, Android y AirPlay, o **Lite** para gestionar el audio del PC. Selecciona x64 o ARM64 según la arquitectura de tu equipo.",
-    "edition": "Edición",
-    "requirements": "Requisitos",
+    "edition": "Edición o canal",
+    "requirements": "Instalación y requisitos",
     "singleExe": "Un solo EXE",
     "storeInstall": "Instalar desde Store",
     "liteRequirement": "EXE portátil con .NET 10 Native AOT integrado. No requiere instalar un entorno de ejecución aparte.",
@@ -77,7 +77,7 @@
     "automationAlt": "Haz clic en el pequeño robot para conocer las reglas de automatización",
     "footerTitle": "Un huevo de Pascua: ayer y mañana",
     "guideTitle": "Guía de usuario (en chino)",
-    "downloadColumn": "Paquetes portátiles",
+    "downloadColumn": "Descarga",
     "license": "GPL-3.0",
     "licenseTitle": "Licencia",
     "thirdPartyNotices": "avisos de terceros",
@@ -87,7 +87,8 @@
         "**Alcance y licencias anteriores.** Desde el 17 de noviembre de 2026, la GPL-3.0-only se aplica a todo el proyecto cubierto en esta revisión, incluido el código anterior, en la medida en que el titular de los derechos pueda otorgar esa licencia. Los permisos ya concedidos bajo la licencia MIT y la anterior licencia propia del proyecto siguen vigentes. Las etiquetas y los binarios ya publicados conservan su indicación de licencia original. Los componentes de terceros conservan sus propias licencias (véanse los {noticesLink})."
     ],
     "features": [
-        "**Elige en el panel rápido de qué aplicación capturar el audio.** Despliega la fila de la aplicación y haz clic en otro dispositivo de reproducción mientras pulsas `Ctrl` para que suene en ambos. Con Mayús+clic puedes añadir un rango de salidas. Activa «Mostrar micrófono en el panel rápido» para elegir también el micrófono de esa aplicación en la misma fila. En el lienzo, arrastra la línea continua para cambiar la salida principal o pulsa «+» para añadir un reenvío con volumen y silencio independientes.",
+        "**Elige en el panel rápido de qué aplicación capturar el audio.** Despliega la fila de la aplicación y haz clic en otro dispositivo de reproducción mientras pulsas `Ctrl` para que suene en ambos. Con Mayús+clic puedes añadir un rango de salidas. Activa «Mostrar micrófono en el panel rápido» para elegir también el micrófono de esa aplicación en la misma fila.",
+        "**Guarda los ajustes de volumen de cada reenvío.** En el lienzo, arrastra la línea continua para cambiar la salida principal o pulsa «+» para añadir un reenvío. SonicRoute guarda el volumen, el estado de silencio y el límite de volumen para cada combinación de aplicación y dispositivo de salida. Haz clic derecho en el control de volumen del reenvío para fijar el límite entre el 1 % y el 300 %.",
         "**Ajusta el volumen sin salir del juego o de la llamada.** Los medidores del panel rápido muestran qué aplicaciones están sonando. Ajusta cada una con su control deslizante o usa la rueda sobre el icono de SonicRoute para regular la aplicación actual. Un atajo global permite silenciar o reactivar todos los micrófonos.",
         "**Automatiza los cambios de audio.** Combina {triggerCount} disparadores con {actionCount} acciones para cambiar de dispositivo, ajustar el volumen o abrir un programa. También puedes ejecutar una regla guardada desde la línea de comandos con `sr`.",
         "**Conecta Android o recibe AirPlay (Full).** Empareja la aplicación SonicRoute en la misma red local y confirma que el código de ocho dígitos coincide en ambos dispositivos. Puedes transmitir audio en ambos sentidos y ver en el PC la pantalla que comparte el móvil. Para usar una pantalla virtual independiente con control de entrada, transferir archivos o sincronizar el portapapeles, usa una conexión ADB. Full también recibe audio y duplicación de pantalla de dispositivos Apple mediante AirPlay."

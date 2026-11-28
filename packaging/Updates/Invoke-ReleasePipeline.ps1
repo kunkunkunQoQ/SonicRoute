@@ -477,9 +477,8 @@ function Get-OrGenerateChangelog {
         $legacy = $matrix | Where-Object { $_.Edition -ceq 'Legacy' }
         [void]$sb.AppendLine("| **Legacy x64** | [完整 ZIP]($downloadUrl/$($legacy.Asset)) | Windows 本机音频，需 .NET Framework 4.8，完整解压后运行。 |")
     }
-    $storeLinks = '[Full](https://apps.microsoft.com/detail/9NQZGRTPM1NT)'
-    if ($includesLegacy) { $storeLinks += ' / [Lite](https://apps.microsoft.com/detail/9N37LQ8SMLF6)' }
-    [void]$sb.AppendLine("| **Microsoft Store** | $storeLinks | 由商店单独分发和更新。在架版本见商店页面。 |")
+    $storeLinks = '[Full](https://apps.microsoft.com/detail/9NQZGRTPM1NT) / [Lite](https://apps.microsoft.com/detail/9N37LQ8SMLF6)'
+    [void]$sb.AppendLine("| 🔄 **Microsoft Store** | $storeLinks | 两个版型分别通过 Microsoft Store 安装和更新。在架版本见各自的商店页面 |")
     [void]$sb.AppendLine("| **更新清单** | [``SonicRoute-update.json``]($downloadUrl/SonicRoute-update.json) | 便携更新按版型、运行时和架构选包。 |")
     [void]$sb.AppendLine("| **校验散列** | [``SHA256SUMS.txt``]($downloadUrl/SHA256SUMS.txt) | 便携包与更新清单的 SHA-256 校验值。 |")
     if ($supportsAndroidPairing) {
@@ -495,7 +494,7 @@ function Get-OrGenerateChangelog {
     $legacyUpgradeEn = if ($includesLegacy) { ' For Legacy, extract the entire new ZIP.' } else { '' }
     [void]$sb.AppendLine("手动升级便携版时，先从托盘退出对应版型，再替换匹配的 EXE。$legacyUpgradeZh 设置与规则保留在用户数据目录。切换版型、运行时或架构时请手动选包。商店版通过 Microsoft Store 更新。")
     [void]$sb.AppendLine("")
-    [void]$sb.AppendLine("To upgrade a portable edition, exit it from the system tray and replace its matching executable.$legacyUpgradeEn Settings and rules remain in the user data directory. Choose a package manually when switching editions, runtimes or architectures. Microsoft Store updates are handled separately.")
+    [void]$sb.AppendLine("To upgrade a portable edition, exit it from the system tray and replace its matching executable.$legacyUpgradeEn Settings and rules remain in the user data directory. Choose a package manually when switching editions, runtimes or architectures. The Microsoft Store handles installation and updates for both Full and Lite.")
     [void]$sb.AppendLine("")
     [void]$sb.AppendLine("---")
     [void]$sb.AppendLine("")
