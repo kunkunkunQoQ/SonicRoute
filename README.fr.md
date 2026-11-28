@@ -48,6 +48,8 @@ SonicRoute v2.00 se décline en deux éditions. Choisissez **Full** pour l’aud
 
 Microsoft Store · [Full](https://apps.microsoft.com/detail/9NQZGRTPM1NT) / [Lite](https://apps.microsoft.com/detail/9N37LQ8SMLF6) — La distribution et les mises à jour passent séparément par le Microsoft Store. La version disponible figure sur sa fiche.
 
+📱 [Versions de l’application Android](https://github.com/kunkunkunQoQ/SonicRoute-App/releases) · [Instructions d’installation](https://github.com/kunkunkunQoQ/SonicRoute-App/blob/main/README.md#install)
+
 <details>
 <summary><sub>📦 Anciennes éditions pour .NET 8 (fin de maintenance)</sub></summary>
 
@@ -70,7 +72,7 @@ Microsoft Store · [Full](https://apps.microsoft.com/detail/9NQZGRTPM1NT) / [Lit
 
 ## ✨ Ce que propose SonicRoute
 
-- **Affectez les sorties audio de chaque application.** Dans « Applications », un trait plein représente la sortie principale utilisée directement par Windows. Le bouton « + Ajouter une sortie » ajoute une sortie de redirection. Chaque redirection a ses propres réglages de volume et de sourdine. Vous pouvez aussi attribuer un périphérique d’enregistrement dans cet espace. Dans le panneau rapide, utilisez Ctrl+clic ou Maj+clic pour sélectionner plusieurs sorties.
+- **Choisissez dans le panneau rapide l’application dont vous voulez capturer le son.** Dépliez sa ligne et cliquez sur un deuxième périphérique de lecture tout en maintenant la touche `Ctrl` enfoncée pour entendre l’application sur les deux sorties. Maj+clic ajoute une plage de sorties. Activez « Afficher le micro dans le panneau rapide » pour choisir aussi son micro sur la même ligne. Sur le canevas, faites glisser le trait plein pour changer la sortie principale ou cliquez sur « + » pour ajouter un relais avec son propre volume et sa commande de sourdine.
 - **Réglez le volume de chaque application.** Les indicateurs de niveau du panneau rapide montrent quelles applications émettent du son. Chacune a son propre curseur de volume. Utilisez la molette sur l’icône de notification pour régler l’application ciblée. Un raccourci clavier permet de couper puis de réactiver tous les micros.
 - **Automatisez les réglages courants.** Vous disposez de 6 déclencheurs et de 39 actions pour créer vos règles. À l’ouverture d’un jeu, une règle peut sélectionner le casque et lancer votre application de discussion vocale. La commande `sr` permet aussi d’exécuter une règle depuis un terminal ou un script.
 - **Connectez un téléphone Android ou recevez des contenus AirPlay (Full).** Associez l’application SonicRoute sur le même réseau local et confirmez que le code à huit chiffres est identique sur les deux appareils. Vous pouvez transmettre le son dans les deux sens et regarder l’écran partagé du téléphone sur le PC. Une connexion ADB permet d’ouvrir un écran virtuel indépendant avec contrôle des entrées, de transférer des fichiers et de synchroniser le presse-papiers. Full reçoit aussi le son et la recopie d’écran AirPlay des appareils Apple.
@@ -116,6 +118,8 @@ SonicRoute réagit principalement aux événements de Windows. Il ne vérifie l�
 Dans Full, ouvrez les paramètres du téléphone connecté par ADB. Dans la rubrique « Audio », choisissez « Équilibré », « Latence minimale » ou « Stable ». En cas de coupures, essayez « Stable ». Pour le son non compressé, choisissez « Raw PCM » au lieu d’Opus. Les réglages s’appliquent à la prochaine transmission audio depuis ce téléphone.
 
 ## 🆕 Points forts de la version v2.00
+
+**Un nouveau départ**
 
 Full et Lite utilisent .NET 10 Native AOT. Les exécutables portables x64 et ARM64 intègrent l’environnement d’exécution. Le nouvel espace de routage visualise la sortie principale et les redirections d’une application. Le volume et la sourdine se règlent pour chaque redirection.
 

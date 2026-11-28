@@ -48,6 +48,8 @@ v2.00 提供 **Full** 和 **Lite** 可攜版。需要連接 Android 手機或接
 
 Microsoft Store · [Full](https://apps.microsoft.com/detail/9NQZGRTPM1NT) / [Lite](https://apps.microsoft.com/detail/9N37LQ8SMLF6) — 由 Microsoft Store 獨立提供安裝與更新。上架版本請見商店頁面。
 
+📱 [Android App 下載頁](https://github.com/kunkunkunQoQ/SonicRoute-App/releases) · [安裝說明](https://github.com/kunkunkunQoQ/SonicRoute-App/blob/main/README.md#install)
+
 <details>
 <summary><sub>📦 下載舊版 NET8 相容版本（已停止維護）</sub></summary>
 
@@ -70,7 +72,7 @@ Microsoft Store · [Full](https://apps.microsoft.com/detail/9NQZGRTPM1NT) / [Lit
 
 ## ✨ SonicRoute 的功能
 
-- **為各個應用程式指定播放與錄音裝置。** 畫布上的實線是 Windows 的主要輸出，拖曳實線即可切換裝置。按一下「+」可新增轉送，每路轉送可個別調整音量與靜音。畫布也可顯示程式的麥克風連線。
+- **在快速面板選擇要擷取哪個應用程式的聲音。** 展開電腦上的應用程式，按住 `Ctrl` 再點選另一個播放裝置，即可讓該程式的聲音同時從兩個裝置播放。在設定中開啟「麥克風選項」和「在快速面板顯示麥克風」後，可在同一列指定麥克風。在畫布上拖曳實線可切換主要輸出，按「+」可加入轉送，並個別調整每路轉送的音量或靜音。
 - **查看並調整各個程式的音量。** 快速面板的音量表會顯示哪些程式正在發出聲音。拖曳滑桿可分別調整音量，在系統匣圖示上捲動滑鼠滾輪可調整目前程式的音量。用全域快速鍵即可一次將所有麥克風靜音或解除靜音。
 - **讓例行操作自動執行。** 使用 6 種觸發條件和 39 種動作組合規則，例如啟動遊戲時切換到耳機並調整音量。也可在命令列用 `sr` 執行已儲存的規則。
 - **在電腦上使用 Android 與 AirPlay（Full）。** 在同一個區域網路與 SonicRoute Android App 核對八位數字後，即可雙向傳輸音訊，並觀看經手機授權的投放畫面。透過 ADB 可操作獨立應用程式虛擬螢幕、傳送輸入、傳輸檔案及同步剪貼簿。電腦也能接收 Apple 裝置的 AirPlay 音訊和螢幕鏡像。
@@ -116,6 +118,8 @@ Full 和 Lite 可攜版已內含 .NET 10 Native AOT 執行階段，無須另行�
 在 Full 版透過 ADB 連線後，開啟該手機的音訊設定。音訊延遲預設為「平衡」。想縮短延遲可試「超低延遲」，若音訊斷斷續續可切換為「穩定」。預設以 Opus 傳輸音訊，需要未壓縮音訊時可選 Raw PCM。設定會按手機儲存，並在下次開始傳輸時生效。
 
 ## 🆕 v2.00 更新重點
+
+**全新開始**
 
 Full 和 Lite 改用內含執行階段的 .NET 10 Native AOT 單一執行檔。新的「應用程式」畫布同時顯示播放、錄音與轉送連線，可拖曳實線切換主要輸出，也可新增轉送並獨立調整各路音量及靜音。
 

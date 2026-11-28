@@ -48,6 +48,8 @@ v2.00 comes in two portable editions. Choose **Full** for Windows audio, Android
 
 Microsoft Store · [Full](https://apps.microsoft.com/detail/9NQZGRTPM1NT) / [Lite](https://apps.microsoft.com/detail/9N37LQ8SMLF6) — Install and update through the Microsoft Store. See the Store listing for the available version.
 
+📱 [Android app releases](https://github.com/kunkunkunQoQ/SonicRoute-App/releases) · [Installation instructions](https://github.com/kunkunkunQoQ/SonicRoute-App/blob/main/README.md#install)
+
 <details>
 <summary><sub>📦 Archived .NET 8 downloads (no longer maintained)</sub></summary>
 
@@ -70,7 +72,7 @@ Microsoft Store · [Full](https://apps.microsoft.com/detail/9NQZGRTPM1NT) / [Lit
 
 ## ✨ What SonicRoute offers
 
-- **Choose playback and recording devices for each app.** On the Apps canvas, drag the solid line to switch the app’s primary Windows playback device. Click + to add a forwarded output, with its own volume and mute controls. The canvas can also show the app’s microphone connection.
+- **Choose which app’s audio to capture in the quick panel.** Expand a PC app and `Ctrl`-click a second playback device to send that app’s sound to both outputs. In Microphone options, turn on “Show microphone in quick panel” to choose the app’s recording input in the same row. On the Apps canvas, drag the solid line to change the primary output or click + to add a forward with its own volume and mute controls.
 - **See what’s playing and adjust its volume.** Live level meters show which apps are playing, each with its own volume slider. Scroll over the tray icon to adjust the current app’s volume, or use a hotkey to mute and unmute your microphones.
 - **Automate routine changes.** Choose one of 6 triggers and build a sequence from 39 available actions. When a game starts, a rule can switch to your headset and open voice chat. You can also run a saved rule from a terminal or script with `sr`.
 - **Connect Android or receive AirPlay (Full).** On the same local network, pair with the SonicRoute Android app by comparing an eight-digit code. Send audio in either direction and view a screen shared with the phone’s permission. Use ADB for an independent virtual display with input controls, file transfers and clipboard sync. Full also receives AirPlay audio and screen mirroring from Apple devices.
@@ -116,6 +118,8 @@ SonicRoute relies on Windows notifications and checks process state once a secon
 In Full, connect the phone over ADB and open its audio settings. The default latency mode is Balanced. Try Ultra-low latency for a shorter delay or Stable if you hear dropouts. Opus is the default. Choose Raw PCM for uncompressed audio. Settings are saved per phone and apply the next time you start an audio stream.
 
 ## 🆕 What’s new in v2.00
+
+**A New Beginning**
 
 Full and Lite move to self-contained .NET 10 Native AOT executables. The new Apps canvas shows playback, recording and forwarding routes together. Drag the solid line to switch the primary output and add forwarded outputs with their own volume and mute controls.
 

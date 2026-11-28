@@ -48,6 +48,8 @@ SonicRoute v2.00 gibt es in zwei Editionen. **Full** ergänzt PC-Audio um Androi
 
 Microsoft Store · [Full](https://apps.microsoft.com/detail/9NQZGRTPM1NT) / [Lite](https://apps.microsoft.com/detail/9N37LQ8SMLF6) — Die Verteilung und Aktualisierung laufen getrennt über den Microsoft Store. Die dort verfügbare Version steht auf der Produktseite.
 
+📱 [Releases der Android-App](https://github.com/kunkunkunQoQ/SonicRoute-App/releases) · [Installationsanleitung](https://github.com/kunkunkunQoQ/SonicRoute-App/blob/main/README.md#install)
+
 <details>
 <summary><sub>📦 Ältere Ausgaben für .NET 8 (eingestellt)</sub></summary>
 
@@ -70,7 +72,7 @@ Microsoft Store · [Full](https://apps.microsoft.com/detail/9NQZGRTPM1NT) / [Lit
 
 ## ✨ Das bietet SonicRoute
 
-- **Audioverbindungen pro App einrichten.** Auf der Seite „Apps“ zeigt eine durchgezogene Linie die Hauptausgabe, über die Windows den Ton direkt wiedergibt. Über „+ Ausgabe hinzufügen“ fügen Sie eine Weiterleitung an ein weiteres Gerät hinzu und stellen für diesen Ausgang Lautstärke und Stummschaltung separat ein. Auf der Arbeitsfläche können Sie auch ein Aufnahmegerät zuweisen. Im Schnellpanel wählen Sie mehrere Ausgänge per Strg- oder Umschalt-Klick.
+- **Im Schnellpanel auswählen, welche App ihren Ton an ein zweites Gerät sendet.** Klappen Sie die Zeile der PC-App auf und klicken Sie bei gedrückter `Strg`-Taste auf ein weiteres Wiedergabegerät. Der Ton dieser App ist auf beiden Geräten zu hören. Mit Umschalt+Klick fügen Sie mehrere Ausgänge auf einmal hinzu. Aktivieren Sie „Mikrofon im Schnellpanel anzeigen“, um in derselben Zeile das Aufnahmemikrofon zu wählen. Auf der Arbeitsfläche wechseln Sie den Hauptausgang durch Ziehen der durchgezogenen Linie. Mit + fügen Sie eine Weiterleitung mit eigenem Lautstärkeregler und eigener Stummschaltung hinzu.
 - **Die Lautstärke einzelner Apps regeln.** Im Schnellpanel sehen Sie an den Pegelanzeigen, welche Apps gerade Ton ausgeben. Jede App hat einen eigenen Lautstärkeregler. Mit dem Mausrad über dem Symbol im Infobereich ändern Sie die Lautstärke der aktuellen App. Per Tastenkürzel können Sie alle Mikrofone stummschalten und die Stummschaltung wieder aufheben.
 - **Wiederkehrende Aufgaben automatisieren.** Für Regeln stehen 6 Auslöser und 39 Aktionen zur Verfügung. Beim Start eines Spiels kann eine Regel zum Headset wechseln und den Sprachchat öffnen. Gespeicherte Regeln lassen sich mit `sr` auch im Terminal oder aus einem Skript ausführen.
 - **Android verbinden oder AirPlay empfangen (Full).** Koppeln Sie die SonicRoute-App im selben lokalen Netzwerk und bestätigen Sie den achtstelligen Code, wenn er auf beiden Geräten übereinstimmt. Danach können Sie Audio in beide Richtungen übertragen und die freigegebene Bildschirmansicht des Smartphones am PC ansehen. Für einen eigenständigen virtuellen Bildschirm mit Eingabesteuerung, Dateiübertragung und Zwischenablagesynchronisierung verwenden Sie eine ADB-Verbindung. Full kann auch AirPlay-Audio und Bildschirmspiegelungen von Apple-Geräten empfangen.
@@ -116,6 +118,8 @@ SonicRoute reagiert vor allem auf Windows-Ereignisse. Nur wenn nötig, prüft es
 Öffnen Sie in Full die Einstellungen des über ADB verbundenen Smartphones. Im Audiobereich stehen „Ausgewogen“, „Sehr geringe Latenz“ und „Stabil“ zur Wahl. Bei Tonaussetzern probieren Sie „Stabil“. Für unkomprimierten Ton wählen Sie „Raw PCM“ anstelle von Opus. Die Einstellungen gelten ab der nächsten Audioübertragung von diesem Gerät.
 
 ## 🆕 Neu in v2.00
+
+**Ein neuer Anfang**
 
 Full und Lite verwenden .NET 10 Native AOT. Die portablen EXE-Dateien für x64 und ARM64 bringen die Laufzeit mit. Die neue Audio-Arbeitsfläche zeigt die Hauptausgabe und Weiterleitungen einer App. Jede Weiterleitung lässt sich einzeln regeln und stummschalten.
 

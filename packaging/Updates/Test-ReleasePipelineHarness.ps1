@@ -175,7 +175,7 @@ try {
     }
     Case 'retry executes real action until success' {$script:n=0;$r=Invoke-WithRetry -Action {$script:n++;if($n -lt 3){throw 'transient'};'ok'};Require ($n -eq 3 -and $r -eq 'ok') 'Retry count/result incorrect'}
     Case 'permanent failure stops after bound' {$script:n=0;Reject {Invoke-WithRetry -Action {$script:n++;throw 'permanent'}} 'permanent';Require ($n -eq 3) 'Retry bound incorrect'}
-    Case 'generated notes follow v1.27 layout with current links and complete details' {
+    Case 'generated notes follow v1.36 layout with versioned links and complete details' {
         $root=Join-Path $harnessRoot 'generated-notes'
         $mock.Commits=@(
             (('a'*40)+"`tfeat: new feature`ttester`taaaaaaa"),
@@ -186,7 +186,7 @@ try {
         $target=Join-Path $harnessRoot 'generated-notes.md'
         $notes=Get-OrGenerateChangelog '2.34' $target 'example/SonicRoute'
         $last=-1
-        foreach($heading in @('## ✨ 核心更新亮点','## 📋 详细演进说明','## 📋 升级与验证说明','## 🚀 资产下载矩阵','## 🔄 升级与数据保留指引','## 📚 相关链接')){
+        foreach($heading in @('# 🎧 SonicRoute v2.34','## ✨ 更新亮点','## 🛠️ 详细更新','<details>','<summary>English release notes</summary>','</details>','## 📦 资产下载与校验','手动升级便携版时','To upgrade a portable edition','## 📜 许可证说明（GPL-3.0-only）')){
             $index=$notes.IndexOf($heading,[StringComparison]::Ordinal)
             Require ($index -gt $last) "Missing or misordered section: $heading";$last=$index
         }
@@ -194,7 +194,17 @@ try {
         foreach($asset in @('x64.exe','arm64.exe','Lite-x64.exe','Lite-arm64.exe')){
             Require ($notes.Contains("https://github.com/example/SonicRoute/releases/download/v2.34/SonicRoute-v2.34-$asset")) 'Download link has a stale version/repository'
         }
-        Require (!$notes.Contains('v1.27') -and !$notes.Contains('Legacy-x64.zip') -and !$notes.Contains('.NET 10 Desktop Runtime') -and $notes.Contains('Native AOT') -and $notes.Contains('不是独立发布者数字签名') -and !$notes.Contains('无损继承')) 'Copied old version facts or overstated upgrade guarantees'
+        foreach($metadata in @('SonicRoute-update.json','SHA256SUMS.txt')){
+            Require ($notes.Contains("https://github.com/example/SonicRoute/releases/download/v2.34/$metadata")) 'Missing current metadata download link'
+        }
+        Require ([regex]::Matches($notes,'https://github\.com/example/SonicRoute/releases/download/v2\.34/').Count -eq 6) 'Expected exactly six linked Windows assets'
+        Require ($notes.Contains('https://github.com/example/SonicRoute/releases/tag/v2.34') -and $notes.Contains('https://github.com/example/SonicRoute/compare/v1.24...v2.34') -and $notes.Contains('https://github.com/example/SonicRoute/blob/v2.34/LICENSE')) 'Expected target version in navigation, source and license links'
+        Require (!$notes.Contains('Legacy-x64.zip') -and !$notes.Contains('.NET 10 Desktop Runtime') -and $notes.Contains('Native AOT') -and $notes.Contains('不是独立发布者数字签名') -and !$notes.Contains('无损继承') -and $notes -notmatch '发布日期|发布时间|\b\d{4}-\d{2}-\d{2}\b') 'Copied historical requirements, inferred a date or overstated upgrade guarantees'
+        foreach($url in @('https://github.com/kunkunkunQoQ/SonicRoute-App/releases','https://github.com/kunkunkunQoQ/SonicRoute-App/blob/main/README.md#install')){
+            Require ($notes.Contains($url)) 'Missing official Android app link'
+        }
+        $historical=Get-OrGenerateChangelog '1.35' $null 'example/SonicRoute'
+        Require ($historical.Contains('https://github.com/example/SonicRoute/releases/download/v1.35/SonicRoute-v1.35-Legacy-x64.zip') -and $historical.Contains('.NET Framework 4.8') -and !$historical.Contains('SonicRoute-App/') -and !$historical.Contains('Native AOT')) 'Historical packaging or Android pairing links changed'
         Require ([IO.File]::ReadAllText($target,[Text.UTF8Encoding]::new($false,$true)) -ceq $notes) 'Saved generated UTF8 differs'
         Require ($mock.Mutations -eq 0) 'Generating notes mutated GitHub'
     }
@@ -202,7 +212,7 @@ try {
         $root=Join-Path $harnessRoot 'limited-highlights'
         $mock.Commits=@(1..8|ForEach-Object{('a'*40)+"`tfix: distinct item $_`ttester`taaaaaaa"})
         $notes=Get-OrGenerateChangelog '2.34' $null 'example/SonicRoute'
-        $overview=($notes -split '## 📋 详细演进说明',2)[0]
+        $overview=($notes -split '## 🛠️ 详细更新',2)[0]
         Require ([regex]::Matches($overview,'(?m)^- fix: distinct item ').Count -eq 6) 'Highlight limit was not six'
         Require ([regex]::Matches($notes,'(?m)^- fix: distinct item 8 ').Count -eq 1) 'Omitted highlight was lost from details'
     }

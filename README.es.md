@@ -48,6 +48,8 @@ SonicRoute v2.00 tiene dos ediciones. Elige **Full** para usar el audio del PC, 
 
 Microsoft Store · [Full](https://apps.microsoft.com/detail/9NQZGRTPM1NT) / [Lite](https://apps.microsoft.com/detail/9N37LQ8SMLF6) — La distribución y las actualizaciones se gestionan por separado en Microsoft Store. Consulta la versión disponible en la ficha de la tienda.
 
+📱 [Versiones de la aplicación Android](https://github.com/kunkunkunQoQ/SonicRoute-App/releases) · [Instrucciones de instalación](https://github.com/kunkunkunQoQ/SonicRoute-App/blob/main/README.md#install)
+
 <details>
 <summary><sub>📦 Ediciones anteriores para .NET 8 (sin mantenimiento)</sub></summary>
 
@@ -70,7 +72,7 @@ Microsoft Store · [Full](https://apps.microsoft.com/detail/9NQZGRTPM1NT) / [Lit
 
 ## ✨ Qué ofrece SonicRoute
 
-- **Configura las conexiones de audio de cada aplicación.** En «Aplicaciones», una línea continua indica la salida principal por la que Windows reproduce el sonido directamente. Pulsa «+ Añadir salida» para reenviar audio a otra salida y ajusta por separado su volumen o silenciamiento. También puedes asignar un dispositivo de grabación desde el mismo espacio. En el panel rápido, Ctrl+clic y Mayús+clic permiten seleccionar varias salidas.
+- **Elige en el panel rápido de qué aplicación capturar el audio.** Despliega la fila de la aplicación y haz clic en otro dispositivo de reproducción mientras pulsas `Ctrl` para que suene en ambos. Con Mayús+clic puedes añadir un rango de salidas. Activa «Mostrar micrófono en el panel rápido» para elegir también el micrófono de esa aplicación en la misma fila. En el lienzo, arrastra la línea continua para cambiar la salida principal o pulsa «+» para añadir un reenvío con volumen y silencio independientes.
 - **Ajusta el volumen sin salir del juego o de la llamada.** Los medidores del panel rápido muestran qué aplicaciones están sonando. Ajusta cada una con su control deslizante o usa la rueda sobre el icono de SonicRoute para regular la aplicación actual. Un atajo global permite silenciar o reactivar todos los micrófonos.
 - **Automatiza los cambios de audio.** Combina 6 disparadores con 39 acciones para cambiar de dispositivo, ajustar el volumen o abrir un programa. También puedes ejecutar una regla guardada desde la línea de comandos con `sr`.
 - **Conecta Android o recibe AirPlay (Full).** Empareja la aplicación SonicRoute en la misma red local y confirma que el código de ocho dígitos coincide en ambos dispositivos. Puedes transmitir audio en ambos sentidos y ver en el PC la pantalla que comparte el móvil. Para usar una pantalla virtual independiente con control de entrada, transferir archivos o sincronizar el portapapeles, usa una conexión ADB. Full también recibe audio y duplicación de pantalla de dispositivos Apple mediante AirPlay.
@@ -116,6 +118,8 @@ SonicRoute responde principalmente a eventos de Windows. Cuando es necesario, co
 En Full, abre los ajustes del móvil conectado por ADB. En «Audio» puedes elegir «Equilibrado», «Latencia ultrabaja» o «Estable». Si oyes cortes, prueba «Estable». Para transmitir sin compresión, elige «Raw PCM» en lugar de Opus. Los cambios se aplican en la siguiente transmisión desde ese móvil.
 
 ## 🆕 Aspectos destacados de la versión v2.00
+
+**Un nuevo comienzo**
 
 Full y Lite usan .NET 10 Native AOT. Los ejecutables portátiles para x64 y ARM64 incluyen el entorno de ejecución. El nuevo espacio de enrutamiento muestra la salida principal y los reenvíos de cada aplicación, con controles de volumen y silencio por reenvío.
 

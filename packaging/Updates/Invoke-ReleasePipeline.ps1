@@ -377,17 +377,22 @@ function Get-OrGenerateChangelog {
         }
     }
 
+    $repositoryUrl = "https://github.com/$TargetRepo"
+    $releaseUrl = "$repositoryUrl/releases/tag/v$Version"
+    $guideUrl = "$repositoryUrl/wiki/01-%E4%BD%BF%E7%94%A8%E6%8C%87%E5%8D%97"
+    $sourceUrl = if ($prevTag) { "$repositoryUrl/compare/$prevTag...v$Version" } else { "$repositoryUrl/commits/v$Version" }
+
     $sb = [System.Text.StringBuilder]::new()
-    [void]$sb.AppendLine("# 🎧 SonicRoute v$Version 正式版")
+    [void]$sb.AppendLine("# 🎧 SonicRoute v$Version")
     [void]$sb.AppendLine("")
-    [void]$sb.AppendLine("> **发布时间**：$((Get-Date).ToString('yyyy-MM-dd')) · [📥 资产下载](https://github.com/$TargetRepo/releases/tag/v$Version) · [📖 使用指南](https://github.com/$TargetRepo/wiki/01-%E4%BD%BF%E7%94%A8%E6%8C%87%E5%8D%97)")
+    [void]$sb.AppendLine("> [📥 发布页]($releaseUrl) · [📖 使用指南]($guideUrl) · [源代码变更]($sourceUrl)")
     [void]$sb.AppendLine("")
     [void]$sb.AppendLine("---")
     [void]$sb.AppendLine("")
 
-    # Follow the v1.27 layout, deriving the content from this version's commits.
+    # Follow the v1.36 layout using this version's commit history.
     # Curated notes above remain authoritative and are never reformatted.
-    [void]$sb.AppendLine("## ✨ 核心更新亮点")
+    [void]$sb.AppendLine("## ✨ 更新亮点")
     [void]$sb.AppendLine("")
     $highlights = @($features + $fixes + $improvements)
     if ($highlights.Count -eq 0) { $highlights = @($others) }
@@ -396,7 +401,7 @@ function Get-OrGenerateChangelog {
     [void]$sb.AppendLine("")
     [void]$sb.AppendLine("---")
     [void]$sb.AppendLine("")
-    [void]$sb.AppendLine("## 📋 详细演进说明")
+    [void]$sb.AppendLine("## 🛠️ 详细更新")
     [void]$sb.AppendLine("")
     $section = 0
 
@@ -434,58 +439,69 @@ function Get-OrGenerateChangelog {
 
     if ($section -eq 0) { [void]$sb.AppendLine("未提取到可展示的提交记录。") }
     [void]$sb.AppendLine("")
-    [void]$sb.AppendLine("---")
-    [void]$sb.AppendLine("")
-    [void]$sb.AppendLine("## 📋 升级与验证说明")
-    [void]$sb.AppendLine("")
-    [void]$sb.AppendLine("- **更新渠道**：便携版只匹配当前发行类型、运行时与架构；Microsoft Store 版继续由商店更新。自动检查默认关闭。")
-    [void]$sb.AppendLine("- **变更来源**：以上内容由本版提交记录自动汇总。功能效果、性能数据及已验证/未验证场景应以本版人工维护的发布说明和测试记录为准。")
-    [void]$sb.AppendLine("")
-    [void]$sb.AppendLine("---")
-    [void]$sb.AppendLine("")
-    [void]$sb.AppendLine("## 🚀 资产下载矩阵")
-    [void]$sb.AppendLine("")
-    [void]$sb.AppendLine("| 版型 | 功能 | 下载链接 | 运行要求 |")
-    [void]$sb.AppendLine("|---|---|---|---|")
     $matrix = @(Get-ReleaseMatrix $Version)
     $includesLegacy = $matrix.Edition -ccontains 'Legacy'
-    foreach ($variant in $matrix) {
-        $architecture = if ($variant.Architecture -eq 'arm64') { 'ARM64' } else { 'x64' }
-        $feature = if ($variant.Edition -eq 'Full') { '电脑音频、Android 与 AirPlay' } else { '电脑音频' }
-        $label = '单文件 EXE'
-        $requirement = if ($includesLegacy) { "匹配架构的 $architecture .NET 10 Desktop Runtime" } else { '匹配架构的 Windows，内置 .NET 10 Native AOT 运行时' }
-        if ($variant.Edition -eq 'Legacy') {
-            $label = '完整 ZIP'
-            $requirement = '.NET Framework 4.8，完整解压后运行'
-        }
-        [void]$sb.AppendLine("| **$($variant.Edition) $architecture** | $feature | [$label](https://github.com/$TargetRepo/releases/download/v$Version/$($variant.Asset)) | $requirement |")
-    }
+    $supportsAndroidPairing = $targetVersion.Major -ge 2
+    $downloadUrl = "$repositoryUrl/releases/download/v$Version"
+    [void]$sb.AppendLine("<details>")
+    [void]$sb.AppendLine("<summary>English release notes</summary>")
     [void]$sb.AppendLine("")
-    [void]$sb.AppendLine("> [!NOTE]")
-    [void]$sb.AppendLine("> - 支持 Windows 10 2004+ / Windows 11。ARM64 便携包为实验版。")
-    if (!$includesLegacy) {
-        [void]$sb.AppendLine("> - Full 与 Lite 的便携包均内置运行时。捕获应用进程的声音并转发至附加输出需要 Windows Build 20348 或更高版本。")
-    }
-    [void]$sb.AppendLine("> - Microsoft Store 版由商店单独提供和更新，在架版本见商店页面。")
-    [void]$sb.AppendLine("> - 发布附件提供 ``SHA256SUMS.txt`` 和 ``SonicRoute-update.json``（Protocol 2）。SHA-256 用于完整性校验，不是独立发布者数字签名。")
+    [void]$sb.AppendLine("## Changes in v$Version")
     [void]$sb.AppendLine("")
-    [void]$sb.AppendLine("---")
+    [void]$sb.AppendLine("See the [source changes]($sourceUrl) for the commits behind this version. The sections above group those commits by subject. See the [user guide]($guideUrl) for usage.")
     [void]$sb.AppendLine("")
-    [void]$sb.AppendLine("## 🔄 升级与数据保留指引")
-    [void]$sb.AppendLine("")
-    [void]$sb.AppendLine("- **便携版更新**：打开「设置 → 检查更新」，下载并完成校验后，确认重启更新。")
-    [void]$sb.AppendLine("- **手动更新**：先在托盘菜单选择「退出」，再用匹配当前版型与架构的单个 EXE 替换旧版程序。")
     if ($includesLegacy) {
-        [void]$sb.AppendLine("- **Legacy 手动更新**：下载并完整解压对应 ZIP。")
+        [void]$sb.AppendLine("Portable Full and Lite executables require the matching .NET 10 Desktop Runtime. Legacy x64 requires .NET Framework 4.8.")
+    } else {
+        [void]$sb.AppendLine("Portable Full and Lite executables include the .NET 10 Native AOT runtime. Choose x64 or experimental ARM64 to match your Windows system.")
     }
-    [void]$sb.AppendLine("- **用户数据**：设置、快捷键、自动化规则及自定义图标继续使用 ``%LocalAppData%\SonicRoute\``；更新器不替换这些数据，建议手动更新前备份。")
+    [void]$sb.AppendLine("")
+    [void]$sb.AppendLine("</details>")
     [void]$sb.AppendLine("")
     [void]$sb.AppendLine("---")
     [void]$sb.AppendLine("")
-    [void]$sb.AppendLine("## 📚 相关链接")
+    [void]$sb.AppendLine("## 📦 资产下载与校验")
     [void]$sb.AppendLine("")
-    [void]$sb.AppendLine("- [Wiki 使用指南](https://github.com/$TargetRepo/wiki/01-%E4%BD%BF%E7%94%A8%E6%8C%87%E5%8D%97) · [自动化规则](https://github.com/$TargetRepo/wiki/04-%E8%87%AA%E5%8A%A8%E5%8C%96%E8%A7%84%E5%88%99) · [常见问题](https://github.com/$TargetRepo/wiki/06-%E5%B8%B8%E8%A7%81%E9%97%AE%E9%A2%98)")
-    [void]$sb.AppendLine("- [完整版本历史](https://github.com/$TargetRepo/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2) · [问题反馈](https://github.com/$TargetRepo/issues/new/choose)")
+    [void]$sb.AppendLine("| 版本 | 下载 | 说明 |")
+    [void]$sb.AppendLine("| --- | --- | --- |")
+    $runtimeRequirement = if ($includesLegacy) { '需匹配架构的 [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0)' } else { '内置 .NET 10 Native AOT 运行时' }
+    foreach ($edition in @('Full','Lite')) {
+        $feature = if ($edition -eq 'Full') { 'Windows 本机音频、Android 互联与 AirPlay' } else { 'Windows 本机音频' }
+        $links = foreach ($variant in ($matrix | Where-Object { $_.Edition -ceq $edition })) {
+            $architecture = if ($variant.Architecture -eq 'arm64') { 'ARM64（实验）' } else { $variant.Architecture }
+            "[$architecture]($downloadUrl/$($variant.Asset))"
+        }
+        [void]$sb.AppendLine("| **$edition** | $($links -join ' / ') | $feature。单文件 EXE，$runtimeRequirement。 |")
+    }
+    if ($includesLegacy) {
+        $legacy = $matrix | Where-Object { $_.Edition -ceq 'Legacy' }
+        [void]$sb.AppendLine("| **Legacy x64** | [完整 ZIP]($downloadUrl/$($legacy.Asset)) | Windows 本机音频，需 .NET Framework 4.8，完整解压后运行。 |")
+    }
+    $storeLinks = '[Full](https://apps.microsoft.com/detail/9NQZGRTPM1NT)'
+    if ($includesLegacy) { $storeLinks += ' / [Lite](https://apps.microsoft.com/detail/9N37LQ8SMLF6)' }
+    [void]$sb.AppendLine("| **Microsoft Store** | $storeLinks | 由商店单独分发和更新。在架版本见商店页面。 |")
+    [void]$sb.AppendLine("| **更新清单** | [``SonicRoute-update.json``]($downloadUrl/SonicRoute-update.json) | 便携更新按版型、运行时和架构选包。 |")
+    [void]$sb.AppendLine("| **校验散列** | [``SHA256SUMS.txt``]($downloadUrl/SHA256SUMS.txt) | 便携包与更新清单的 SHA-256 校验值。 |")
+    if ($supportsAndroidPairing) {
+        [void]$sb.AppendLine("| **SonicRoute Android App** | [Android 发行页](https://github.com/kunkunkunQoQ/SonicRoute-App/releases) / [获取与安装](https://github.com/kunkunkunQoQ/SonicRoute-App/blob/main/README.md#install) | 手机端单独分发。当前获取方式见 Android 项目的安装说明。 |")
+    }
+    [void]$sb.AppendLine("")
+    [void]$sb.AppendLine("桌面版需要 Windows 10 2004（内部版本 19041）或更高版本，含 Windows 11。SHA-256 用于完整性校验，不是独立发布者数字签名。")
+    if (!$includesLegacy) {
+        [void]$sb.AppendLine("捕获应用进程的声音并转发至其他本机输出需要 Windows Build 20348 或更高版本。")
+    }
+    [void]$sb.AppendLine("")
+    $legacyUpgradeZh = if ($includesLegacy) { ' Legacy 请完整解压新版 ZIP。' } else { '' }
+    $legacyUpgradeEn = if ($includesLegacy) { ' For Legacy, extract the entire new ZIP.' } else { '' }
+    [void]$sb.AppendLine("手动升级便携版时，先从托盘退出对应版型，再替换匹配的 EXE。$legacyUpgradeZh 设置与规则保留在用户数据目录。切换版型、运行时或架构时请手动选包。商店版通过 Microsoft Store 更新。")
+    [void]$sb.AppendLine("")
+    [void]$sb.AppendLine("To upgrade a portable edition, exit it from the system tray and replace its matching executable.$legacyUpgradeEn Settings and rules remain in the user data directory. Choose a package manually when switching editions, runtimes or architectures. Microsoft Store updates are handled separately.")
+    [void]$sb.AppendLine("")
+    [void]$sb.AppendLine("---")
+    [void]$sb.AppendLine("")
+    [void]$sb.AppendLine("## 📜 许可证说明（GPL-3.0-only）")
+    [void]$sb.AppendLine("")
+    [void]$sb.AppendLine("本版采用 GPL-3.0-only。第三方组件沿用各自的许可证。[许可证全文]($repositoryUrl/blob/v$Version/LICENSE) · [第三方声明]($repositoryUrl/blob/v$Version/packaging/AndroidLab/THIRD-PARTY-NOTICES.md) · [源代码变更]($sourceUrl)")
 
     $generatedNotes = $sb.ToString()
     if ($ChangelogTarget) {

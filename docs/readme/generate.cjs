@@ -12,6 +12,8 @@ const keys = Object.keys(reference).sort();
 const placeholders = text => [...text.matchAll(/\{([a-zA-Z][a-zA-Z0-9]*)\}/g)].map(match => match[1]).sort();
 const wiki = name => shared.repository + '/wiki/' + encodeURIComponent(name);
 const pages = shared.wikiPages;
+const androidReleases = shared.androidRepository + '/releases';
+const androidInstall = shared.androidRepository + '/blob/main/README.md#install';
 const link = (label, url) => `[${label}](${url})`;
 const attr = text => text.replaceAll('&', '&amp;').replaceAll('"', '&quot;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
 const tableCell = text => text.replaceAll('|', '\\|');
@@ -140,6 +142,7 @@ function render(language, text, releaseSummary = text.releaseSummary, previousRe
     '| ' + [text.edition, text.downloadColumn, text.requirements].join(' | ') + ' |', '|---|---|---|',
     ...rows.map(row => '| ' + row.map(tableCell).join(' | ') + ' |'), '',
     text.editionStore + ' · ' + link('Full', shared.store) + ' / ' + link('Lite', shared.storeLite) + ' — ' + text.storeRequirement, '',
+    '📱 ' + link(text.androidReleases, androidReleases) + ' · ' + link(text.androidInstall, androidInstall), '',
     '<details>',
     '<summary><sub>📦 ' + attr(text.retiredNet8Title) + '</sub></summary>',
     '',
@@ -225,7 +228,9 @@ function renderAI(shared) {
     `  source_version: "v${sourceVersion} (${sourceNumeric})"`,
     '  wpf_baseline_tag: "v1.36 (3d9f9e1083b228f666e30d97e3c8edfce5e6654a)"',
     '  repository: "https://github.com/kunkunkunQoQ/SonicRoute"',
-    '  android_repository: "https://github.com/kunkunkunQoQ/SonicRoute-App"',
+    `  android_repository: "${shared.androidRepository}"`,
+    `  android_releases: "${androidReleases}"`,
+    `  android_installation: "${androidInstall}"`,
     '  license: "GNU General Public License v3.0 only (SPDX: GPL-3.0-only; commercial use, sale, and paid distribution permitted subject to GPL Section 6 source obligations; see LICENSE and docs/LICENSING.md)"',
     '  license_transition: "From 2026-11-17, the covered project in this revision (including prior authored code) is offered under GPL-3.0-only to the extent licensed by the copyright holder. Prior MIT and custom-license grants remain valid; old tags/binaries are not relabeled. Third-party notices remain under their original licenses."',
     '  third_party_notices: ["packaging/AndroidLab/THIRD-PARTY-NOTICES.md", "SonicRoute.AndroidAudio/AirPlay/AacEld.NOTICE.md", "SonicRoute.AndroidAudio/AirPlay/Compatibility/LICENSE-MIT.txt"]',
@@ -458,6 +463,7 @@ function renderAI(shared) {
     '      - "Tray wheel (defaults: TrayWheelEverywhere=false, PanelChangeSystemDefault=true): normal wheel -> current app volume; Shift+wheel -> system default output volume; Alt+wheel -> cycle current app output; Alt+Shift+wheel -> cycle system default output. Hotkeys queue non-blocking device switches with 45ms fast-complete / 500ms min-pending OSD thresholds."',
     '      - "QuickPanel height: 350..850 DIP (constrained by work area). Deferred OutputVolumesPopupWindow (QuickPanelShowAllOutputVolumes=false default; PanelOutputVolumesRetainedOnly=false filters with HiddenOutputDevices) subscribes only while expanded; quick-panel endpoint volume/mute avoids redundant OSD."',
     '      - "Peak meter runs at 50ms only while visible and ShowAppPeakMeter=true."',
+    '      - "Expand a local app in the quick panel and Ctrl-click a second playback device to capture and forward that app’s audio while keeping its primary output. With ExperimentalMic and MicInPanel enabled, the same row also lets the user choose a recording device (Flow.Capture)."',
     '      - "Custom PNG/JPEG/ICO drop import stores managed PNGs in %LocalAppData%\\\\SonicRoute\\\\Icons\\\\ via NativeAppIconService."',
     '',
     '  CLI_AND_CONTROL_IPC:',
@@ -489,7 +495,7 @@ function renderAI(shared) {
     `    source: ["${versionNotes}", "docs/release-v1.36.md"]`,
     `    symbols: ["${version}"]`,
     '    facts:',
-    '      - "v2.00: .NET 10 Native AOT + Win32/Direct2D/DirectWrite UI, redesigned Apps routing canvas + per-forward Q15 gain, adaptive UiDockRail, unified Devices tab, Windows DNS-SD Android background browse, --control isolated IPC."',
+    '      - "v2.00 — 全新开始 (A New Beginning). .NET 10 Native AOT + Win32/Direct2D/DirectWrite UI, redesigned Apps routing canvas + per-forward Q15 gain, adaptive UiDockRail, unified Devices tab, Windows DNS-SD Android background browse, --control isolated IPC."',
     '      - "v2.00 Full and the Android 1.0 companion support nearby pairing, two-way audio, screen viewing and a shared ADB/app device profile. See ANDROID_APP_SRAP for the device evidence and transport-specific tools."',
     '      - "v1.36 (published 2026-11-24): Shared Apps/QuickPanel multi-output selections (Ctrl/Shift/Ctrl+Shift), persistent sidebar collapse, AudioDeviceNotificationHub, AirPlay multi-output, Android 11+ Opus/PCM + 3 latency modes, AdaptiveBitrateController, Store AUMID & AirPlay firewall rules."',
     '      - "v1.34-v1.35: Multi-PC playback selection & restart restore, shared WH_MOUSE_LL hook, optimistic QuickPanel/external switching, 45ms/500ms OSD thresholds, Android file browser/transfer, clipboard cancellation on phone disable."',
