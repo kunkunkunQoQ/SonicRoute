@@ -50,7 +50,12 @@ try {
     & "$PSScriptRoot/New-UpdateManifest.ps1" -AssetsDirectory $assets -Version $version
     $after=Get-ReleaseSourceState $root
     if($before.Commit -ne $after.Commit -or $before.Tree -ne $after.Tree -or ($before.Clean -and !$after.Clean)){throw 'Source changed during the build; do not publish these artifacts.'}
+    $assetNames=@($matrix.Asset)+@('SonicRoute-update.json','SHA256SUMS.txt')
+    $receiptAssets=foreach($name in $assetNames){
+        $item=Get-Item -LiteralPath (Join-Path $assets $name)
+        @{name=$item.Name;size=$item.Length;sha256=(Get-FileHash -LiteralPath $item.FullName -Algorithm SHA256).Hash.ToLowerInvariant()}
+    }
     $receipt=[ordered]@{schemaVersion=1;version=$version;commit=$before.Commit;tree=$before.Tree;clean=$before.Clean;solutionBuildVerified=$true;
-        sdk=(& $dotnet --version|Out-String).Trim();assets=@(Get-ChildItem -LiteralPath $assets -File|ForEach-Object{@{name=$_.Name;size=$_.Length;sha256=(Get-FileHash -LiteralPath $_.FullName).Hash.ToLowerInvariant()}})}
+        sdk=(& $dotnet --version|Out-String).Trim();assets=@($receiptAssets)}
     [IO.File]::WriteAllText((Join-Path $output 'build-receipt.json'),($receipt|ConvertTo-Json -Depth 6),[Text.UTF8Encoding]::new($false))
 } finally {$env:DOTNET_ROOT=$priorDotnetRoot;Pop-Location}

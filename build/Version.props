@@ -1,5 +1,5 @@
 <Project>
-  <!-- The only development version to edit. Two or three numeric components. -->
+  <!-- Shared application and release version. Two or three numeric components. -->
   <PropertyGroup>
     <SonicRouteVersion>2.00</SonicRouteVersion>
     <SonicRouteNumericVersion>$([System.Text.RegularExpressions.Regex]::Replace('$(SonicRouteVersion)', '^(\d+)\.(\d+)$', '$1.$2.0.0'))</SonicRouteNumericVersion>

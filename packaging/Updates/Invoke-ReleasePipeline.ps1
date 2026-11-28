@@ -178,9 +178,11 @@ function Assert-RemoteDraft($Release,[string]$Tag,[string]$CommitSha,$LocalAsset
 }
 
 function Assert-RemoteAssetMetadata($Release,$LocalAssets) {
-    if(@($Release.assets).Count -ne $LocalAssets.Count){throw 'Remote asset count does not match the validated seven-file set.'}
+    if(@($Release.assets).Count -ne $LocalAssets.Count){throw "Remote asset count does not match the validated $($LocalAssets.Count)-file set."}
+    $seen=[Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
     foreach($asset in $Release.assets){
-        if(@($LocalAssets.Keys) -cnotcontains $asset.name -or $asset.size -ne $LocalAssets[$asset.name].Size -or
+        if(!$asset -or !$seen.Add($asset.name) -or @($LocalAssets.Keys) -cnotcontains $asset.name -or
+           $asset.size -ne $LocalAssets[$asset.name].Size -or
            $asset.state -cne 'uploaded' -or $asset.digest -cne ('sha256:'+$LocalAssets[$asset.name].Hash)){throw 'Remote asset identity/size/digest changed before publication.'}
     }
 }
@@ -259,7 +261,7 @@ function Assert-LocalArtifacts {
     $matrix=@(Get-ReleaseMatrix $Version)
     $expectedFiles=@($matrix.Asset)+@('SonicRoute-update.json','SHA256SUMS.txt')
     $items=@(Get-ChildItem -LiteralPath $AssetsDir -Force -ErrorAction Stop)
-    if($items.Count -ne $expectedFiles.Count -or @($items|Where-Object{$_.PSIsContainer -or $expectedFiles -cnotcontains $_.Name}).Count -ne 0){throw 'Release asset directory must contain exactly the seven expected files.'}
+    if($items.Count -ne $expectedFiles.Count -or @($items|Where-Object{$_.PSIsContainer -or $expectedFiles -cnotcontains $_.Name}).Count -ne 0){throw "Release asset directory must contain exactly the $($expectedFiles.Count) expected files."}
     $assetDetails=[ordered]@{}
     foreach($file in $expectedFiles){
         $path=Join-Path $AssetsDir $file;$item=Get-Item -LiteralPath $path
@@ -295,7 +297,7 @@ function Assert-LocalArtifacts {
             if(($file.size -isnot [int] -and $file.size -isnot [long]) -or $actual.Count -ne 1 -or !$seenFiles.Add($file.path) -or $actual[0].size -ne $file.size -or $file.sha256 -cnotmatch '^[a-fA-F0-9]{64}$' -or $actual[0].sha256 -ne $file.sha256){throw 'Manifest per-file path/size/hash differs from the actual package.'}
         }
     }
-    Write-Host "==> [VerifyLocal] All seven release assets validated." -ForegroundColor Green
+    Write-Host "==> [VerifyLocal] All $($expectedFiles.Count) release assets validated." -ForegroundColor Green
     return $assetDetails
 }
 function Get-OrGenerateChangelog {
@@ -443,27 +445,39 @@ function Get-OrGenerateChangelog {
     [void]$sb.AppendLine("")
     [void]$sb.AppendLine("## 🚀 资产下载矩阵")
     [void]$sb.AppendLine("")
-    [void]$sb.AppendLine("| 发行形态 | 推荐目标人群 | 下载链接 | 运行环境要求 |")
+    [void]$sb.AppendLine("| 版型 | 功能 | 下载链接 | 运行要求 |")
     [void]$sb.AppendLine("|---|---|---|---|")
-    [void]$sb.AppendLine("| ⭐ **Lite x64**（.NET 10 推荐主力） | 主流 64 位 PC 绿色单文件 | [单个 EXE](https://github.com/$TargetRepo/releases/download/v$Version/SonicRoute-v$Version-Lite-x64.exe) | 需匹配的 x64 [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0) |")
-    [void]$sb.AppendLine("| ⚡ **Lite ARM64**（.NET 10 实验） | Surface Pro / 骁龙 PC 原生高效 | [单个 EXE](https://github.com/$TargetRepo/releases/download/v$Version/SonicRoute-v$Version-Lite-arm64.exe) | 需匹配的 ARM64 [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0) |")
-    [void]$sb.AppendLine("| **SonicRoute x64** | 手机音频面板、独立虚拟屏及完整电脑音频功能 | [单文件 EXE](https://github.com/$TargetRepo/releases/download/v$Version/SonicRoute-v$Version-x64.exe) | x64 .NET 10 Desktop Runtime |")
-    [void]$sb.AppendLine("| **SonicRoute ARM64**（实验） | 含手机功能；外部视频与ADB工具仍为独立x64进程 | [单文件 EXE](https://github.com/$TargetRepo/releases/download/v$Version/SonicRoute-v$Version-arm64.exe) | ARM64 .NET 10 Desktop Runtime |")
-    [void]$sb.AppendLine("| 🛡️ **Legacy x64**（免装运行库） | 公司办公电脑 / 受限机型 | [完整 ZIP](https://github.com/$TargetRepo/releases/download/v$Version/SonicRoute-v$Version-Legacy-x64.zip) | 系统自带 .NET Framework 4.8（解压即用） |")
-    [void]$sb.AppendLine("| 🔄 **Microsoft Store** | 由商店提供更新，在架版本以商店页面为准 | [Full](https://apps.microsoft.com/detail/9NQZGRTPM1NT) / [Lite](https://apps.microsoft.com/detail/9N37LQ8SMLF6) | x64 .NET 10 Desktop Runtime；MSIX 不内置运行时 |")
+    $matrix = @(Get-ReleaseMatrix $Version)
+    $includesLegacy = $matrix.Edition -ccontains 'Legacy'
+    foreach ($variant in $matrix) {
+        $architecture = if ($variant.Architecture -eq 'arm64') { 'ARM64' } else { 'x64' }
+        $feature = if ($variant.Edition -eq 'Full') { '电脑音频、Android 与 AirPlay' } else { '电脑音频' }
+        $label = '单文件 EXE'
+        $requirement = if ($includesLegacy) { "匹配架构的 $architecture .NET 10 Desktop Runtime" } else { '匹配架构的 Windows，内置 .NET 10 Native AOT 运行时' }
+        if ($variant.Edition -eq 'Legacy') {
+            $label = '完整 ZIP'
+            $requirement = '.NET Framework 4.8，完整解压后运行'
+        }
+        [void]$sb.AppendLine("| **$($variant.Edition) $architecture** | $feature | [$label](https://github.com/$TargetRepo/releases/download/v$Version/$($variant.Asset)) | $requirement |")
+    }
     [void]$sb.AppendLine("")
     [void]$sb.AppendLine("> [!NOTE]")
-    [void]$sb.AppendLine("> - 支持 Windows 10 2004+ / Windows 11 系统。")
-    [void]$sb.AppendLine("> - SonicRoute 完整版不带版本名称后缀，包含手机功能；Lite 仅保留电脑音频功能，均需对应架构的 .NET 10 Desktop Runtime。停止生成NET8产物；更新仅匹配当前版本类型与架构，不在完整/Lite/Legacy间自动切换。")
-    [void]$sb.AppendLine("> - Lite 与 Store 为框架依赖部署，不假定商店会自动安装 .NET 10 Desktop Runtime。")
+    [void]$sb.AppendLine("> - 支持 Windows 10 2004+ / Windows 11。ARM64 便携包为实验版。")
+    if (!$includesLegacy) {
+        [void]$sb.AppendLine("> - Full 与 Lite 的便携包均内置运行时。捕获应用进程的声音并转发至附加输出需要 Windows Build 20348 或更高版本。")
+    }
+    [void]$sb.AppendLine("> - Microsoft Store 版由商店单独提供和更新，在架版本见商店页面。")
     [void]$sb.AppendLine("> - 发布附件提供 ``SHA256SUMS.txt`` 和 ``SonicRoute-update.json``（Protocol 2）。SHA-256 用于完整性校验，不是独立发布者数字签名。")
     [void]$sb.AppendLine("")
     [void]$sb.AppendLine("---")
     [void]$sb.AppendLine("")
     [void]$sb.AppendLine("## 🔄 升级与数据保留指引")
     [void]$sb.AppendLine("")
-    [void]$sb.AppendLine("- **v1.25 及后续便携版**：打开「设置 → 软件更新」，检查、下载并完成校验后，确认重启更新。")
-    [void]$sb.AppendLine("- **v1.24 及更早版本或手动更新**：先在托盘菜单选择「退出」，再替换完整版或 Lite 的单个 EXE；Legacy 请完整解压对应 ZIP。")
+    [void]$sb.AppendLine("- **便携版更新**：打开「设置 → 检查更新」，下载并完成校验后，确认重启更新。")
+    [void]$sb.AppendLine("- **手动更新**：先在托盘菜单选择「退出」，再用匹配当前版型与架构的单个 EXE 替换旧版程序。")
+    if ($includesLegacy) {
+        [void]$sb.AppendLine("- **Legacy 手动更新**：下载并完整解压对应 ZIP。")
+    }
     [void]$sb.AppendLine("- **用户数据**：设置、快捷键、自动化规则及自定义图标继续使用 ``%LocalAppData%\SonicRoute\``；更新器不替换这些数据，建议手动更新前备份。")
     [void]$sb.AppendLine("")
     [void]$sb.AppendLine("---")
@@ -535,8 +549,10 @@ function Write-StepSummary {
     [void]$sb.AppendLine("- $(&$mark ($Checklist.PreflightVerified)) Source/ref and authoritative release history checked under the selected publish/DryRun policy")
     if($Checklist.ReadOnlyRevalidation){[void]$sb.AppendLine('- [x] Read-only revalidation of an existing release; this candidate is not authorized to overwrite that release')}
     [void]$sb.AppendLine("- $(&$mark ($Checklist.SolutionBuildVerified)) Full solution Release build verified")
-    [void]$sb.AppendLine("- $(&$mark ($Checklist.ArtifactsCompiled)) Five packages (SonicRoute x64/ARM64, Lite x64/ARM64, Legacy x64) compiled")
-    [void]$sb.AppendLine("- $(&$mark ($Checklist.LocalArtifactsVerified)) PE machine architecture (0x8664/0xaa64), Full/Lite single-EXE identities and Legacy ZIP 13-file whitelist verified")
+    $matrix = @(Get-ReleaseMatrix $Version)
+    [void]$sb.AppendLine("- $(&$mark ($Checklist.ArtifactsCompiled)) $($matrix.Count) release packages built")
+    $verifiedPackages = if ($matrix.Edition -ccontains 'Legacy') { 'Full/Lite single-EXE identities and the Legacy ZIP file list' } else { 'Full/Lite Native AOT single-EXE identities' }
+    [void]$sb.AppendLine("- $(&$mark ($Checklist.LocalArtifactsVerified)) PE machine architecture (0x8664/0xaa64) and $verifiedPackages verified")
     [void]$sb.AppendLine("- $(&$mark ($Checklist.ManifestVerified)) SHA256SUMS.txt & SonicRoute-update.json 1-to-1 matrix bijection verified")
     [void]$sb.AppendLine("- $(&$mark ($Checklist.ChangelogGenerated)) Changelog curated/generated with conventional commit categorization")
     [void]$sb.AppendLine("- $(&$mark ($Checklist.RemoteAssetsVerified)) Remote asset size, count ($($LocalAssets.Count)/$($LocalAssets.Count)) & downloaded SHA-256 verified byte-for-byte")
@@ -897,7 +913,7 @@ if ($Stage -in @('Preflight', 'Publish', 'FullPipeline')) {
 # Stage: Build
 if ($Stage -in @('Build', 'FullPipeline')) {
     if (!$SkipBuild) {
-        Write-Host "==> [Build] Invoking Build-PortableRelease.ps1 for all editions..." -ForegroundColor Cyan
+        Write-Host "==> [Build] Invoking Build-PortableRelease.ps1 for the v$version release matrix..." -ForegroundColor Cyan
         $buildScript = Join-Path $PSScriptRoot 'Build-PortableRelease.ps1'
         & $buildScript -OutputDirectory $OutputDirectory
         if ($LASTEXITCODE -ne 0) {

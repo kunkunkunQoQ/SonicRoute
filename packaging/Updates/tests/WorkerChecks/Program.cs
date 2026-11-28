@@ -194,8 +194,6 @@ internal static class Program
         foreach(var bad in new[]{"../config.json","config.json","Automation\\rule.json","evil.ps1","SonicRoute.exe:stream"})
         { var p=Package(Product); p.Files[0].Path=bad; Throws(()=>UpdateProtocol.ValidatePackage(p,"Lite","x64")); }
         Check("manifest rejects traversal ADS scripts configuration and arbitrary files",()=>{});
-        // Legacy archive parsing is tested with actual Legacy packages in the release harness.
-        // A NET8 worker would reject the runtime before opening a ZIP, so it cannot prove ZIP safety.
         string junction=Path.Combine(Root,"junction");
         var mk=Process.Start(new ProcessStartInfo("cmd.exe","/c mklink /J \""+junction+"\" \""+Path.GetDirectoryName(target)+"\""){UseShellExecute=false,CreateNoWindow=true,RedirectStandardOutput=true});mk!.WaitForExit();
         Throws(()=>UpdateProtocol.RejectReparsePoints(Path.Combine(junction,"Renamed application.exe")));

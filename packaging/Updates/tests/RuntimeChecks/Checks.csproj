@@ -6,4 +6,7 @@
     <Compile Include="../../../../SonicRoute/Updates/UpdateInstaller.cs" Link="UpdateInstaller.cs" />
   </ItemGroup>
   <ItemGroup Condition="'$(TargetFramework)'=='net48'"><PackageReference Include="System.Text.Json" Version="8.0.5" /><Reference Include="System.Net.Http" /><Reference Include="System.IO.Compression" /><Reference Include="System.IO.Compression.FileSystem" /></ItemGroup>
+  <ItemGroup Condition="'$(TargetFramework)'=='net10.0-windows' and '$(SonicRouteEdition)'=='Full'">
+    <EmbeddedResource Include="../../../../build/FullRelease.files.json" LogicalName="SonicRoute.FullRelease.files.json" />
+  </ItemGroup>
 </Project>

@@ -11,7 +11,7 @@ Full 和 Lite 共用本项目。Full 包含 Android 和 AirPlay，Lite 提供电
 & ./Native/Build-Product.ps1 -Edition Lite -Architecture x64
 $exe = (Resolve-Path '../outputs/native-product/candidate/Full-x64/SonicRoute.exe').Path
 $env:SONICROUTE_CANDIDATE_ROOT = (Resolve-Path '../outputs/native-product').Path
-$env:SONICROUTE_CANDIDATE_ID = 'native-137-dev'
+$env:SONICROUTE_CANDIDATE_ID = 'native-200-local'
 $env:SONICROUTE_DISABLE_DEFAULT_HOTKEYS = '1'
 Start-Process -FilePath $exe -WindowStyle Hidden
 & $exe --control status | Out-String
@@ -22,9 +22,9 @@ Start-Process -FilePath $exe -WindowStyle Hidden
 
 VS Code 提供 Full 与 Lite 的 x64 构建任务，默认任务是 Full。需要带版本名的便携单文件时使用 `packaging/Build-Edition.ps1`，默认输出到 `../outputs/native-product/editions`。该脚本也支持已有的本地程序绑定，日常候选构建可直接使用上面的 Native 脚本。
 
-完整便携候选用 `packaging/Updates/Build-PortableRelease.ps1 -OutputDirectory <新目录>` 构建。Full/Lite 使用本项目，Legacy 使用既有 net48 工程，版本文件名和更新清单共用现有发布工具。商店候选见 [Store 构建说明](../../packaging/Store/README.md)。
+完整便携候选用 `packaging/Updates/Build-PortableRelease.ps1 -OutputDirectory <新目录>` 构建。Full 和 Lite 的 x64、ARM64 EXE 内置 .NET 10 Native AOT 运行时。四个 EXE 与更新清单 `SonicRoute-update.json`、校验文件 `SHA256SUMS.txt` 共六项资产。普通推送只验证候选，正式发布使用显式手动流程。Full x64 的未签名商店候选单独打包。[发布操作清单](../../packaging/Updates/RELEASE-CHECKLIST.md) · [Store 构建说明](../../packaging/Store/README.md)。
 
-默认数据在本用户的 SonicRoute.NativeCandidate 子目录。候选把 profile、版型、渠道和绝对根路径映射为互斥量、管道及激活窗口的隔离名称。在全新开发配置中，内置全局键和托盘滚轮初始关闭，避免与并行安装争抢输入。已有配置按实际绑定加载。命令测试使用单独的开发根，此外部接口和原有的规则管道独立。候选更新只接受位于本 profile 的 install 目录的目标。
+按上述方式设置候选环境变量后，隔离数据写入候选根目录的 `SonicRoute.NativeCandidate` 子目录。普通便携版继续使用 `%LOCALAPPDATA%\SonicRoute`。候选把 profile、版型、渠道和绝对根路径映射为互斥量、管道及激活窗口的隔离名称。在全新开发配置中，内置全局键和托盘滚轮初始关闭，避免与并行安装争抢输入。已有配置按实际绑定加载。命令测试使用单独的开发根，此外部接口和原有的规则管道独立。候选更新只接受位于本 profile 的 install 目录的目标。
 
 ## 服务调用
 

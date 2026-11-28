@@ -22,13 +22,13 @@
 
 产物是 **unsigned MSIX**，另附资产、资源索引、索引转储与打包日志。脚本不签名、不安装、不提交商店。正式分发时应沿用既有商店发布流程；已安装用户需收到更新后才会使用新资产。浅色背景保留原色、深色背景使用相同轮廓的白色版本，两个版本均保留透明度。
 
-GitHub Actions 的 **Build and Release** 复用便携候选的 Full x64 Native AOT EXE 生成未签名 MSIX，并以独立 Actions 产物保留。
+GitHub Actions 的 **Build and Release** 复用便携候选的 Full x64 Native AOT EXE 生成未签名 MSIX，并以独立 Actions 产物保留。2.00 的 GitHub 便携发布资产是四个 EXE、更新清单及校验文件。
 
 默认输入为 `../outputs/native-product/candidate/<版型>-x64`，默认包输出为 `../outputs/native-product/store/v<版本>`，Lite 目录加 `-Lite`。已有经验证的发布目录可直接传给 `-PublishDirectory`。Native AOT 运行时随 EXE 构建，手机工具内嵌在 Full EXE 中。Store 包按包身份使用商店更新和自启任务。
 
 打包成功、身份匹配和未签名包被本机拒绝安装，都不等于商店安装/升级验收通过。签名包安装/升级、包身份下的音频/自启/Store更新及手机工具启动需单独验收；未验证的场景记 NOT TESTED。GitHub 便携发布资产不包含 MSIX，改默认构建不代表已提交商店。
 
-更换应用图标时，在仓库根目录运行以下命令，再重新发布并打包。生成的应用 PNG 为 256×256，ICO 包含 16–256 像素的九种尺寸；Lite、Legacy、窗口和托盘共用这组资源。转换保持原图比例与透明背景。
+更换应用图标时，在仓库根目录运行以下命令，再重新发布并打包。生成的应用 PNG 为 256×256，ICO 包含 16–256 像素的九种尺寸；Full 和 Lite 的窗口和托盘共用这组资源。转换保持原图比例与透明背景。
 
 ```powershell
 & ./packaging/Generate-App-Icon.ps1 -SourceImage '新图标.png'

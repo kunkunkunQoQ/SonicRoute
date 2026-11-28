@@ -1,34 +1,34 @@
 # SonicRoute 构建版本
 
-普通构建默认为完整 SonicRoute；Lite 和 Legacy 不包含手机功能。本分支仅维护 .NET 10 和 .NET Framework 4.8，不再构建 NET8。
+SonicRoute 2.00 的便携发行矩阵包括 Full 和 Lite。两者使用内置 .NET 10 Native AOT 运行时的单文件 EXE，并按 x64 或 ARM64 架构构建。
 
-| 属性 / 工程 | 发行文件 | 手机功能 |
+| 版型 | 发行文件 | 功能范围 |
 | --- | --- | --- |
-| `SonicRouteEdition=Full`（默认） | `SonicRoute-v<版本>-x64.exe` / `-arm64.exe` | 手机面板、配对、音频、主屏镜像和应用虚拟屏 |
-| `SonicRouteEdition=Lite` | `SonicRoute-v<版本>-Lite-x64.exe` / `-Lite-arm64.exe` | 编译、资源、依赖和发行文件均排除 |
-| `SonicRoute.Legacy` / .NET Framework 4.8 | `SonicRoute-v<版本>-Legacy-x64.zip` | 编译和资源均排除，保留原多文件兼容布局 |
+| `SonicRouteEdition=Full`（默认） | `SonicRoute-v<版本>-x64.exe`、`SonicRoute-v<版本>-arm64.exe` | Windows 本机音频、Android App 与 ADB 互联、AirPlay 接收 |
+| `SonicRouteEdition=Lite` | `SonicRoute-v<版本>-Lite-x64.exe`、`SonicRoute-v<版本>-Lite-arm64.exe` | Windows 本机音频。编译时排除 AndroidAudio、手机资源与相关依赖 |
 
-三版均支持在快捷面板中用 Ctrl 增减本机播放设备，用 Shift 连续选择。多选成功后会保存应用与输出组合，重启后在该应用的音频会话出现时恢复，切回单输出会移除组合。Full 的「手机当前输出」跟随所选手机的媒体路由，支持 Windows 应用、Android 来源和 AirPlay。Lite 与 Legacy 仅在多选时采集一次应用声音，同一采集线程直接把 48 kHz 立体声 PCM16 送入各个 WASAPI 输出。设备暂时写不下时，才为该输出分配最多 250 ms 的队列，等设备通知后补写。托盘启动时，窗口样式和触控处理在首次打开界面时加载。Legacy 将本机播放所需的 NAudio 程序集内嵌到 EXE，沿用原有 ZIP 更新格式。
+Full 和 Lite 的「应用」画布用实线显示 Windows 原生输出，可以添加转发并单独调整各路音量和静音。快捷面板仍可通过 Ctrl 增减播放设备、通过 Shift 追加连续范围。应用再次播放或设备重新连接时会尝试恢复已保存的多输出组合。ARM64 构建为实验版，交叉编译和 PE 检查与原生 ARM64 实机运行分别记录。
 
-Full 和 Lite 都是单个 EXE，依赖匹配架构的 .NET 10 Desktop Runtime。完整版本不增加 Full、Android、Phone 或 Lite 后缀。没有启用程序压缩或 WPF 裁剪；Release 保留 ReadyToRun，并统一关闭调试符号发布。
+## 日常构建与正式候选
 
-上表列出构建能力，不表示每个版本都发布了全部目标。v1.31 实际提供 Full/Lite/Legacy x64，ARM64 最近的实验下载为 v1.30；以对应 Release 的实际附件为准。
+日常开发可用 [Native 产品构建入口](../Native/Product/README.md) 生成候选程序。需要带版本名的本地便携文件时，按版型和架构调用：
 
 ```powershell
-./packaging/Build-Edition.ps1 -Edition Full
-./packaging/Build-Edition.ps1 -Edition Lite
-# ARM64 仍是实验支持；ADB / 视频工具作为独立 x64 进程运行。
+./packaging/Build-Edition.ps1 -Edition Full -Architecture x64
+./packaging/Build-Edition.ps1 -Edition Lite -Architecture x64
 ./packaging/Build-Edition.ps1 -Edition Full -Architecture arm64
 ```
 
-发布目录沿用 `outputs/editions/Full-x64`、`Lite-x64` 等固定路径；中间文件和发布目录按版本类型隔离，不逐版本另建产品目录。已有 Full 目录的旧文件保留，发行文件和更新清单只选择 EXE，不把它们打进去；Lite 拒绝混入旧手机目录。运行中的程序和链接目录不能覆盖。直接 publish 使用 win-x64 / win-arm64 profile 也得到内嵌组件的单文件程序，无需再复制 AndroidRuntime。
+默认输出在检出目录相邻的 `outputs/native-product/editions`。版型和架构分开存放。已建立本地安装绑定时，脚本会先校验产物，再处理目标文件替换。未绑定的运行中程序和链接目录不能覆盖。
 
-Full 的原生组件以未压缩资源内嵌于 AndroidAudio 程序集。`AndroidRuntimeBundle` 统一管理准备、校验和缓存：只有首次请求 ADB、音频/目录或视频功能时，才在工作线程准备对应组件；构造服务不读取完整组件，不释放文件。缓存以工具内容寻址，托管代码变化复用原缓存；新进程首次使用校验缓存，当前进程不重复扫描或写入，不增加闲时轮询。原生 EXE/DLL/JAR 需要实体文件才能执行，因此首次使用会生成应用私有缓存，这些缓存不属于分发文件。
+正式候选由 `packaging/Updates/Build-PortableRelease.ps1` 在新目录中生成四个 EXE、`SonicRoute-update.json` 和 `SHA256SUMS.txt`，共六项便携发布资产。Full x64 的未签名商店候选使用 [Store 打包脚本](Store/README.md) 单独生成。普通推送只验证，发布按[操作清单](Updates/RELEASE-CHECKLIST.md)显式执行。
 
-缓存默认位于 `%LocalAppData%/SonicRoute/PhoneRuntime/<工具标识>/`；显式 SONICROUTE_DATA_DIRECTORY 隔离运行时，缓存也位于该数据目录下。运行中的旧工具与新工具不相互覆盖。音频服务仍单独校验固定 UID 隔离服务器，视频服务器不能替代它。修改原生工具后须同步仓库内二进制、VirtualDisplayRuntime.files.json 与 AndroidRuntime.files.json，再进行对应组件检查。
+## Full 内嵌组件与更新边界
 
-自 2026-11-17 GPL 转换起，Full、Lite 与 Legacy 均内嵌完整项目 `LICENSE`，设置页“GPL-3.0”入口按需离线显示全文，不启动 ADB、不联网、不写许可文件或增加后台工作。第三方组件保留各自许可；[第三方许可索引](AndroidLab/THIRD-PARTY-NOTICES.md)中的旧外置手机运行时清单仅描述相应历史版本。Lite 与 Legacy 不引用 AndroidAudio、QRCoder、Concentus，也不包含手机页面的 BAML 或内嵌手机工具；电脑音频共享实现继续保留。Legacy ZIP 和 Store MSIX 另附 `LICENSE`，不能把单EXE分发规则套用到Legacy。System.Management 同时用于电脑进程事件，不能当作手机依赖删除。
+Full 在 EXE 中嵌入手机工具及资源。功能首次请求时，`AndroidRuntimeBundle` 按内容标识准备并校验需要的工具。缓存默认在 `%LOCALAPPDATA%\SonicRoute\PhoneRuntime\<工具标识>\`，可通过独立数据目录隔离。缓存文件在运行时按需生成，便携包只有 EXE。
 
-Full / Lite / Legacy 的单实例、激活、命令和更新身份各自独立；普通配置位置不改变。仅显式 --android-lab 使用独立 LabData/实例。Full 更新清单仅允许 SonicRoute.exe 一个文件，按完整 EXE 校验、暂存和回滚；Lite 仍走单 EXE，Legacy 仍走其原 ZIP 白名单。Store 固定使用 Full x64 单 EXE，验证时拒绝 Lite，不自动发布。
+Full 和 Lite 的单实例、激活、命令及更新身份各自独立，普通用户配置位置保持一致。更新清单按版型、运行时与架构选择资产，两个版型都校验、暂存及回滚单个 `SonicRoute.exe`。程序内嵌 `LICENSE`，设置页可离线查看。第三方组件保留各自许可。[授权范围](../docs/LICENSING.md) · [第三方许可索引](AndroidLab/THIRD-PARTY-NOTICES.md)
 
-验证按当次修改记录，编译和离线资源检查不能当作真机、ARM64 或 Store 验收。当前开发交付范围见[开发交接](DEVELOPMENT-HANDOFF.md)；本地父容器的AI_CONTEXT.md与对应收据记录具体输出路径，不使用旧Lab固定快照代表当前交付。
+## 历史版与独立维护工具
+
+Legacy x64 的 .NET Framework 4.8 ZIP 和曾发布的 NET8 兼容包见相应 [历史发行页](https://github.com/kunkunkunQoQ/SonicRoute/releases)。已有 Legacy 客户端只匹配同版型、运行时和架构的历史 ZIP。需复现旧版时可按对应标签构建。也可以单独运行 `dotnet build SonicRoute.Legacy/SonicRoute.Legacy.csproj -c Release` 做本地兼容性检查，正式候选只收录上表四个 EXE。

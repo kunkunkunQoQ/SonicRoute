@@ -1,77 +1,45 @@
 # Update checks: local reproduction
 
-Run these checks on Windows with the SDKs/runtimes required by the target frameworks. Use a real release `assets` directory and fresh, separate output directories for every run. These checks exercise update validation and isolated temporary files/processes; they do not change system audio settings.
+Run these checks on Windows from the repository root. Use a verified candidate's `assets` directory and fresh output directories. The tests use isolated temporary files and processes.
 
-Run the commands below from the repository root and replace the example release/output paths with your own.
+## Client runtime isolation and package staging
 
-## RuntimeChecks
-
-`RuntimeChecks` currently contains 23 check groups for each target: `net10.0-windows`, `net8.0-windows`, and `net48`. It reads the real manifest and package assets, stages the package for its own runtime, and rejects packages for the other runtimes. ARM64 assets are staging-validated only; the test executables and launched scenarios are x64 and do not run ARM64 binaries.
+A 2.00 candidate contains four `net10` Full/Lite EXEs. The .NET 10 client checks verify staging for both editions and rejection of packages that do not match each client's edition or runtime. The historical `net48` check uses the same candidate to verify refusal of incompatible packages. Protocol fixtures cover the older matching behavior.
 
 ```powershell
-$repo = (Get-Location).Path
-$assets = 'E:\releases\SonicRoute-v1.26\assets' # real release assets
-$runRoot = 'E:\release-checks\runtime-v1.26-run-01' # new, unused path
-$project = Join-Path $repo 'packaging\Updates\tests\RuntimeChecks\Checks.csproj'
+$assets = 'E:\releases\SonicRoute-v2.00-candidate\assets'
+$runRoot = 'E:\release-checks\runtime-v2.00-run-01'
+$project = 'packaging/Updates/tests/RuntimeChecks/Checks.csproj'
 
-dotnet build $project -c Release
-if ($LASTEXITCODE -ne 0) { throw 'RuntimeChecks build failed.' }
-
-$checks = Join-Path $repo 'packaging\Updates\tests\RuntimeChecks\bin\Release'
-foreach ($tfm in @('net10.0-windows', 'net8.0-windows', 'net48')) {
-    $out = Join-Path $runRoot $tfm
+$clients = @(
+    @{ Framework = 'net10.0-windows'; Edition = 'Full'; Name = 'Full' }
+    @{ Framework = 'net10.0-windows'; Edition = 'Lite'; Name = 'Lite' }
+    @{ Framework = 'net48'; Edition = 'Lite'; Name = 'Legacy-client' }
+)
+foreach ($client in $clients) {
+    $out = Join-Path $runRoot $client.Name
     if (Test-Path -LiteralPath $out) { throw "Choose a new output directory: $out" }
-    & (Join-Path $checks "$tfm\Checks.exe") $assets $out
-    if ($LASTEXITCODE -ne 0) { throw "RuntimeChecks failed for $tfm." }
+    dotnet run --project $project -c Release -f $client.Framework "-p:SonicRouteEdition=$($client.Edition)" "-p:ArtifactsPath=$runRoot/build/$($client.Name)" -- $assets $out
+    if ($LASTEXITCODE -ne 0) { throw "RuntimeChecks failed for $($client.Name)." }
 }
 ```
 
-Each target writes `result.json` on success or `failure.txt` on failure under its own output directory. The framework-dependent executables require the corresponding runtime to be installed.
+Each run writes `result.json` on success or `failure.txt` on failure. The test executables require their corresponding runtimes. A positive Legacy ZIP staging or file-transaction check needs matching historical release assets. For actual NET8 release fixtures, use the matching historical checkout and assets. [v1.26 test instructions](https://github.com/kunkunkunQoQ/SonicRoute/blob/v1.26/packaging/Updates/tests/README.md)
+
+Append `--subset` after the output directory when testing a partial candidate assembled for local staging checks. To also exercise actual Legacy ZIP parsing, installation and rollback under net48, supply historical release assets and an older baseline ZIP:
+
+```powershell
+dotnet run --project $project -c Release -f net48 -p:SonicRouteEdition=Lite -- $assets "$runRoot/Legacy-transaction" --legacy-transaction 'E:/releases/v1.36/assets' 'E:/releases/v1.35/assets/SonicRoute-v1.35-Legacy-x64.zip'
+```
 
 ## WorkerChecks
 
-CI 和本地可共用入口，自动按当前版本构建 NET10/NET8 的旧、新单文件测试替身并运行既有进程/回滚用例：
+The shared CI and local entry point publishes two .NET 10 x64 single-file test fixtures and uses the corresponding Lite x64 candidate as the replacement payload.
 
 ```powershell
-.\packaging\Updates\tests\Run-WorkerChecks.ps1 -AssetsDirectory E:\releases\SonicRoute-v1.26\assets -OutputDirectory E:\release-checks\worker-new-run
+./packaging/Updates/tests/Run-WorkerChecks.ps1 -AssetsDirectory E:/releases/SonicRoute-v2.00-candidate/assets -OutputDirectory E:/release-checks/worker-v2.00-run-01
 ```
 
-输出目录必须尚不存在，可用 `-DotnetPath` 指定稳定 .NET 10 SDK。旧替身版本为 1.24、新替身版本取自 `Version.props`；它们均不是历史正式客户端。下方命令用于逐运行时手动复现。
+Use a fresh output directory. To select the stable .NET 10 SDK, pass `-DotnetPath`. The fixture builds use version 1.24 and the current version from `build/Version.props` to model an upgrade. They are test executables. The driver checks real child processes, update handoff and recovery in temporary directories, and makes a read-only check of GitHub's latest release. It writes `results.json` under the runtime's results directory. The workflow also runs `Native/ProductChecks/Test-ProductUpdate.ps1` against the actual Full and Lite x64 Native AOT candidates.
 
-WorkerChecks has 33 scenario groups using real temporary files and child processes plus HTTP fault injection. Publish the same fixture source twice as framework-dependent single-file executables: an old 1.24 fixture and a new 1.26 fixture. Both must have the `SonicRoute Lite NET8` assembly title. The 1.24 fixture is a test fixture; it is not an official historical client. The harness runs the new fixture as its driver and uses the real NET8 x64 candidate EXE as the replacement payload. It makes one real GitHub latest-release metadata request; the injected HTTP failure cases use the in-memory test handler.
-
-```powershell
-$repo = (Get-Location).Path
-$project = Join-Path $repo 'packaging\Updates\tests\WorkerChecks\Checks.csproj'
-$fixtures = 'E:\release-checks\worker-fixtures-v1.24-v1.26' # new, unused path
-$oldDir = Join-Path $fixtures 'old-1.24'
-$newDir = Join-Path $fixtures 'new-1.26'
-$result = 'E:\release-checks\worker-v1.26-run-01' # new, unused path
-$candidate = 'E:\releases\SonicRoute-v1.26\assets\SonicRoute-v1.26-Lite-NET8-x64.exe'
-
-foreach ($path in @($fixtures, $result)) {
-    if (Test-Path -LiteralPath $path) { throw "Choose a new path: $path" }
-}
-
-dotnet publish $project -c Release -f net8.0-windows -p:Version=1.24 -p:AssemblyTitle='SonicRoute Lite NET8' `
-    -r win-x64 -p:PublishSingleFile=true -p:SelfContained=false -p:UseAppHost=true -o $oldDir
-if ($LASTEXITCODE -ne 0) { throw 'Publishing the old fixture failed.' }
-
-dotnet publish $project -c Release -f net8.0-windows -p:Version=1.26 -p:AssemblyTitle='SonicRoute Lite NET8' `
-    -r win-x64 -p:PublishSingleFile=true -p:SelfContained=false -p:UseAppHost=true -o $newDir
-if ($LASTEXITCODE -ne 0) { throw 'Publishing the new fixture failed.' }
-
-& (Join-Path $newDir 'SonicRoute.exe') $result $candidate `
-    (Join-Path $oldDir 'SonicRoute.exe') (Join-Path $newDir 'SonicRoute.exe')
-if ($LASTEXITCODE -ne 0) { throw 'WorkerChecks failed.' }
-```
-
-The driver writes `results.json` into the result directory. It uses isolated test data and child processes; it does not install or launch the candidate as a normal application or alter system audio settings.
-
-Repeat the worker check for NET10 by supplying `-f net10.0-windows -p:AssemblyTitle='SonicRoute Lite'` to both publishes, choosing different fixture/result directories and using the real NET10 x64 candidate. The linked implementation selects `CurrentRuntime` at compile time; HTTP faults exercise Protocol 2. Original Protocol 1 compatibility is covered separately by RuntimeChecks. Fixture version numbers model an upgrade and do not represent historical .NET 10 releases.
-
-## What these checks do not establish
-
-- They do not validate behavior on a NET8-only operating system or on a machine with the Store edition installed.
-- ARM64 is not executed on native ARM64 hardware; RuntimeChecks only stages and inspects the ARM64 package.
-- A passing local check is not evidence that Store packaging or Store installation was tested.
+These checks stage ARM64 packages without running them on ARM64 hardware. Microsoft Store signing, installation, updating and packaged behavior have [separate checks](../../Store/README.md).

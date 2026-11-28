@@ -85,7 +85,7 @@ jobs:
       - name: Verify README consistency
         run: node docs/readme/generate.cjs --check
 
-      - name: Build Native AOT Full and Lite for x64 and ARM64, plus Legacy x64
+      - name: Build Native AOT Full and Lite for x64 and ARM64
         run: |
           $ErrorActionPreference = 'Stop'
           .\packaging\Updates\Build-PortableRelease.ps1 -OutputDirectory $env:CANDIDATE_DIRECTORY
@@ -100,9 +100,14 @@ jobs:
 
       - name: Verify client runtime isolation and actual package staging
         run: |
-          foreach ($tfm in @('net10.0-windows', 'net48')) {
-            dotnet run --project packaging/Updates/tests/RuntimeChecks/Checks.csproj -c Release -f $tfm -p:SonicRouteEdition=Lite -- "$env:CANDIDATE_DIRECTORY/assets" "$env:RUNNER_TEMP/client-validation/$tfm"
-            if ($LASTEXITCODE -ne 0) { throw "Client validation failed: $tfm" }
+          $clients = @(
+            @{ Framework = 'net10.0-windows'; Edition = 'Full'; Name = 'Full' }
+            @{ Framework = 'net10.0-windows'; Edition = 'Lite'; Name = 'Lite' }
+            @{ Framework = 'net48'; Edition = 'Lite'; Name = 'Legacy-client' }
+          )
+          foreach ($client in $clients) {
+            dotnet run --project packaging/Updates/tests/RuntimeChecks/Checks.csproj -c Release -f $client.Framework "-p:SonicRouteEdition=$($client.Edition)" "-p:ArtifactsPath=$env:RUNNER_TEMP/client-validation-build/$($client.Name)" -- "$env:CANDIDATE_DIRECTORY/assets" "$env:RUNNER_TEMP/client-validation/$($client.Name)"
+            if ($LASTEXITCODE -ne 0) { throw "Client validation failed: $($client.Name)" }
           }
 
       - name: Verify actual worker processes and rollback

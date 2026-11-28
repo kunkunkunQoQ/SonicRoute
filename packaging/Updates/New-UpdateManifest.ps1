@@ -11,7 +11,7 @@ foreach($name in @('SonicRoute-update.json','SHA256SUMS.txt')){
     if(Test-Path -LiteralPath (Join-Path $assets $name)){throw "Refusing to overwrite existing $name; use a fresh assets directory."}
 }
 $actual=@(Get-ChildItem -LiteralPath $assets -Force)
-if($actual.Count -ne $matrix.Count -or @($actual|Where-Object{$_.PSIsContainer -or $matrix.Asset -cnotcontains $_.Name}).Count -ne 0){throw 'Expected exactly the five named release packages before creating update metadata.'}
+if($actual.Count -ne $matrix.Count -or @($actual|Where-Object{$_.PSIsContainer -or $matrix.Asset -cnotcontains $_.Name}).Count -ne 0){throw "Expected exactly the $($matrix.Count) named release packages before creating update metadata."}
 $packages=foreach($variant in $matrix){
     $files=@(Get-ReleasePackageFiles $variant $assets $Version)
     $path=Join-Path $assets $variant.Asset
@@ -24,4 +24,4 @@ $manifest=[ordered]@{schemaVersion=1;protocolVersion=2;version=$Version;packages
 $names=@($matrix.Asset)+@('SonicRoute-update.json')
 $lines=foreach($name in ($names|Sort-Object)){(Get-FileHash -LiteralPath (Join-Path $assets $name) -Algorithm SHA256).Hash.ToLowerInvariant()+'  '+$name}
 [IO.File]::WriteAllText((Join-Path $assets 'SHA256SUMS.txt'),($lines-join "`n")+"`n",$utf8)
-Write-Host "Created validated five-package update manifest and SHA256SUMS in $assets"
+Write-Host "Created validated $($matrix.Count)-package update manifest and SHA256SUMS in $assets"

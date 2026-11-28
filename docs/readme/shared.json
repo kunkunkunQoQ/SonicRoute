@@ -5,6 +5,7 @@
   "runtime": "https://dotnet.microsoft.com/download/dotnet/10.0",
   "runtime8": "https://dotnet.microsoft.com/download/dotnet/8.0",
   "minimumWindows": "Windows 10 2004+ / Windows 11",
+  "documentationVersion": "v2.00",
   "release": "v1.36",
   "releaseDate": "2026-11-24",
   "releaseNotes": "docs/release-v1.36.md",
@@ -69,7 +70,7 @@
       "automationMascot": "mascot-automation-ru.png"
     }
   ],
-  "nextRelease": "v1.36",
+  "nextRelease": "v2.00",
   "arm64LastRelease": "v1.36",
   "net8LastRelease": "v1.29",
   "triggerCount": 6,
@@ -77,6 +78,7 @@
   "wikiPages": {
     "guide": "01-使用指南",
     "featuresGuide": "02-功能特性",
+    "deviceGuide": "10-设备互联",
     "hotkeysGuide": "03-快捷键",
     "automationGuide": "04-自动化规则",
     "commandGuide": "05-命令行执行规则",

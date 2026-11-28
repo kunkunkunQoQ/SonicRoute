@@ -10,6 +10,8 @@ if(!$AssetsDirectory){& "$PSScriptRoot/Build-PortableRelease.ps1" -OutputDirecto
 $AssetsDirectory=[IO.Path]::GetFullPath($AssetsDirectory)
 $version=(Get-SonicRouteVersion).Version
 $golden=Assert-LocalArtifacts $AssetsDirectory $version
+$expectedAssetCount=6
+$legacyAsset="SonicRoute-v$version-Legacy-x64.zip"
 $results=[Collections.Generic.List[object]]::new()
 $savedEnv=@{};foreach($name in @('GITHUB_REF','GITHUB_SHA','GITHUB_REPOSITORY','GITHUB_ACTIONS','GITHUB_STEP_SUMMARY')){
     $savedEnv[$name]=[Environment]::GetEnvironmentVariable($name);[Environment]::SetEnvironmentVariable($name,$null)
@@ -189,10 +191,10 @@ try {
             Require ($index -gt $last) "Missing or misordered section: $heading";$last=$index
         }
         Require ($notes.Contains('### 1. 新增功能与特性') -and $notes.Contains('### 4. 其他变更') -and $notes.Contains('docs: usage clarification')) 'Detailed groups dropped non-feature commits'
-        foreach($asset in @('x64.exe','arm64.exe','Lite-x64.exe','Lite-arm64.exe','Legacy-x64.zip')){
+        foreach($asset in @('x64.exe','arm64.exe','Lite-x64.exe','Lite-arm64.exe')){
             Require ($notes.Contains("https://github.com/example/SonicRoute/releases/download/v2.34/SonicRoute-v2.34-$asset")) 'Download link has a stale version/repository'
         }
-        Require (!$notes.Contains('v1.27') -and $notes.Contains('MSIX 不内置运行时') -and $notes.Contains('不是独立发布者数字签名') -and !$notes.Contains('无损继承')) 'Copied old version facts or overstated upgrade guarantees'
+        Require (!$notes.Contains('v1.27') -and !$notes.Contains('Legacy-x64.zip') -and !$notes.Contains('.NET 10 Desktop Runtime') -and $notes.Contains('Native AOT') -and $notes.Contains('不是独立发布者数字签名') -and !$notes.Contains('无损继承')) 'Copied old version facts or overstated upgrade guarantees'
         Require ([IO.File]::ReadAllText($target,[Text.UTF8Encoding]::new($false,$true)) -ceq $notes) 'Saved generated UTF8 differs'
         Require ($mock.Mutations -eq 0) 'Generating notes mutated GitHub'
     }
@@ -249,10 +251,31 @@ try {
     Case 'CI DryRun cannot hide remote preflight failure' {$mock.ApiFailure=$true;$env:GITHUB_ACTIONS='true';try{Reject {Assert-Preflight 'kunkunkunQoQ/SonicRoute' $version "v$version" -IsDryRun} 'authoritative release history'}finally{$env:GITHUB_ACTIONS=$null}}
     Case 'remote tag must match complete SHA' {$mock.RemoteTag='b'*40;Reject {Preflight} 'full commit SHA'}
     Case 'draft abbreviated target refused' {$mock.History+=@{tag_name="v$version";draft=$true;prerelease=$false;target_commitish=$mock.Head.Substring(0,7);assets=@()};Reject {Preflight} 'full commit SHA'}
-    Case 'all actual golden packages accepted' {Require ($golden.Count -eq 7) 'Wrong count'}
-    foreach($name in @($golden.Keys)){Case "missing asset $name" {$dir=Fixture;Remove-Item -LiteralPath (Join-Path $dir $name);Reject {Assert-LocalArtifacts $dir $version} 'exactly the seven'}}
-    Case 'unexpected asset rejected' {$dir=Fixture;Set-Content "$dir/extra.ps1" 'untrusted';Reject {Assert-LocalArtifacts $dir $version} 'exactly the seven'}
-    Case 'extra directory rejected' {$dir=Fixture;New-Item -ItemType Directory "$dir/nested"|Out-Null;Reject {Assert-LocalArtifacts $dir $version} 'exactly the seven'}
+    Case 'four Native AOT executables and both metadata files accepted' {
+        $expected=@(
+            "SonicRoute-v$version-x64.exe"
+            "SonicRoute-v$version-arm64.exe"
+            "SonicRoute-v$version-Lite-x64.exe"
+            "SonicRoute-v$version-Lite-arm64.exe"
+            'SonicRoute-update.json'
+            'SHA256SUMS.txt'
+        )
+        Require ($golden.Count -eq $expectedAssetCount -and @($expected|Where-Object{!$golden.Contains($_)}).Count -eq 0) 'Wrong release asset set'
+        Require (@(Get-Content -LiteralPath "$AssetsDirectory/SHA256SUMS.txt"|Where-Object{$_}).Count -eq 5) 'Checksums must cover four executables and the update manifest'
+    }
+    Case 'historical matrix retains Legacy without including it in 2.00' {
+        $historic=@(Get-ReleaseMatrix '1.36')
+        Require ($historic.Count -eq 5 -and ($historic|Where-Object Edition -eq 'Legacy').Asset -ceq 'SonicRoute-v1.36-Legacy-x64.zip') 'Historical layout changed'
+        Require (@(Get-ReleaseMatrix '2.00'|Where-Object Edition -eq 'Legacy').Count -eq 0) '2.00 unexpectedly includes Legacy'
+    }
+    foreach($name in @($golden.Keys)){Case "missing asset $name" {$dir=Fixture;Remove-Item -LiteralPath (Join-Path $dir $name);Reject {Assert-LocalArtifacts $dir $version} "exactly the $expectedAssetCount expected files"}}
+    Case 'unexpected asset rejected' {$dir=Fixture;Set-Content "$dir/extra.ps1" 'untrusted';Reject {Assert-LocalArtifacts $dir $version} "exactly the $expectedAssetCount expected files"}
+    Case 'extra directory rejected' {$dir=Fixture;New-Item -ItemType Directory "$dir/nested"|Out-Null;Reject {Assert-LocalArtifacts $dir $version} "exactly the $expectedAssetCount expected files"}
+    Case 'Legacy-named asset rejected even when the total asset count is correct' {
+        $dir=Fixture
+        Move-Item -LiteralPath "$dir/SonicRoute-v$version-Lite-x64.exe" -Destination (Join-Path $dir $legacyAsset)
+        Reject {Assert-LocalArtifacts $dir $version} "exactly the $expectedAssetCount expected files"
+    }
     Case 'changed bytes without updated checksums' {$dir=Fixture;[IO.File]::AppendAllText("$dir/SonicRoute-v$version-Lite-x64.exe",'tampered');Reject {Assert-LocalArtifacts $dir $version} 'Hash mismatch'}
     Case 'hash-consistent non-PE rejected' {$dir=Fixture;$m=Get-Content "$dir/SonicRoute-update.json" -Raw|ConvertFrom-Json;$asset="SonicRoute-v$version-Lite-x64.exe";[IO.File]::WriteAllText((Join-Path $dir $asset),'not an executable');Refresh-Package $dir $m $asset;Reject {Assert-LocalArtifacts $dir $version} 'version/edition|PE'}
     Case 'real ARM64 cannot masquerade as x64' {$dir=Fixture;$m=Get-Content "$dir/SonicRoute-update.json" -Raw|ConvertFrom-Json;$asset="SonicRoute-v$version-Lite-x64.exe";Copy-Item "$dir/SonicRoute-v$version-Lite-arm64.exe" (Join-Path $dir $asset) -Force;Refresh-Package $dir $m $asset;Reject {Assert-LocalArtifacts $dir $version} 'PE architecture'}
@@ -265,8 +288,8 @@ try {
     Case 'string Protocol refused like client' {$dir=Fixture;$m=Get-Content "$dir/SonicRoute-update.json" -Raw|ConvertFrom-Json;$m.protocolVersion='2';Save-Manifest $dir $m;Reject {Assert-LocalArtifacts $dir $version} 'schema/protocol'}
     Case 'duplicate package refused' {$dir=Fixture;$m=Get-Content "$dir/SonicRoute-update.json" -Raw|ConvertFrom-Json;$m.packages[1]=$m.packages[0];Save-Manifest $dir $m;Reject {Assert-LocalArtifacts $dir $version} 'Duplicate package'}
     Case 'missing runtime refused' {$dir=Fixture;$m=Get-Content "$dir/SonicRoute-update.json" -Raw|ConvertFrom-Json;$m.packages[0].runtime='';Save-Manifest $dir $m;Reject {Assert-LocalArtifacts $dir $version} 'unexpected edition'}
-    Case 'unsafe Legacy per-file path refused' {$dir=Fixture;$m=Get-Content "$dir/SonicRoute-update.json" -Raw|ConvertFrom-Json;$m.packages[4].files[0].path='../config.json';Save-Manifest $dir $m;Reject {Assert-LocalArtifacts $dir $version} 'per-file path'}
-    Case 'incorrect individual file hash refused' {$dir=Fixture;$m=Get-Content "$dir/SonicRoute-update.json" -Raw|ConvertFrom-Json;$m.packages[4].files[0].sha256='0'*64;Save-Manifest $dir $m;Reject {Assert-LocalArtifacts $dir $version} 'per-file path'}
+    Case 'unsafe executable per-file path refused' {$dir=Fixture;$m=Get-Content "$dir/SonicRoute-update.json" -Raw|ConvertFrom-Json;$m.packages[0].files[0].path='../config.json';Save-Manifest $dir $m;Reject {Assert-LocalArtifacts $dir $version} 'per-file path'}
+    Case 'incorrect individual file hash refused' {$dir=Fixture;$m=Get-Content "$dir/SonicRoute-update.json" -Raw|ConvertFrom-Json;$m.packages[0].files[0].sha256='0'*64;Save-Manifest $dir $m;Reject {Assert-LocalArtifacts $dir $version} 'per-file path'}
     Case 'duplicate checksum line refused' {$dir=Fixture;Add-Content "$dir/SHA256SUMS.txt" (Get-Content "$dir/SHA256SUMS.txt"|Select-Object -First 1);Reject {Assert-LocalArtifacts $dir $version} 'duplicate SHA256SUMS'}
     Case 'native runtime export is required even when package hashes agree' {
         $dir=Fixture;$asset="SonicRoute-v$version-Lite-x64.exe";$path=Join-Path $dir $asset
@@ -278,11 +301,17 @@ try {
         $m=Get-Content "$dir/SonicRoute-update.json" -Raw|ConvertFrom-Json;Refresh-Package $dir $m $asset
         Reject {Assert-LocalArtifacts $dir $version} 'Invalid Native AOT export or CLR directory'
     }
-    Case 'unsafe ZIP rejected even with consistent outer hash' {
-        $dir=Fixture;$asset="SonicRoute-v$version-Legacy-x64.zip";$path=Join-Path $dir $asset
-        $zip=[IO.Compression.ZipFile]::Open($path,[IO.Compression.ZipArchiveMode]::Update)
-        try{$e=$zip.CreateEntry('../config.json');$writer=[IO.StreamWriter]::new($e.Open());try{$writer.Write('unsafe')}finally{$writer.Dispose()}}finally{$zip.Dispose()}
-        $m=Get-Content "$dir/SonicRoute-update.json" -Raw|ConvertFrom-Json;Refresh-Package $dir $m $asset;Reject {Assert-LocalArtifacts $dir $version} 'Unsafe or unknown ZIP entry'
+    Case 'Legacy metadata rejected even when all six asset hashes agree' {
+        $dir=Fixture
+        $m=Get-Content "$dir/SonicRoute-update.json" -Raw|ConvertFrom-Json
+        $legacy=@{edition='Legacy';runtime='net48';architecture='x64';asset=$legacyAsset;size=1;sha256=('0'*64);files=@()}
+        $m.packages+= $legacy
+        Save-Manifest $dir $m
+        Reject {Assert-LocalArtifacts $dir $version} 'Invalid manifest package count'
+        $m.packages[0]=$legacy
+        $m.packages=@($m.packages|Select-Object -First ($expectedAssetCount-2))
+        Save-Manifest $dir $m
+        Reject {Assert-LocalArtifacts $dir $version} 'unexpected edition'
     }
     Case 'receipt binds actual assets and source tree' {
         $receiptDir=Join-Path $harnessRoot 'receipt';New-Item -ItemType Directory $receiptDir|Out-Null
@@ -292,6 +321,13 @@ try {
         $mock.Tree='d'*40;Reject {Assert-BuildReceipt $receiptDir $version $mock.Head $golden} 'clean, solution-verified'
         $mock.Tree=$r.tree;$mock.Dirty=$true;Reject {Assert-BuildReceipt $receiptDir $version $mock.Head $golden} 'clean, solution-verified'
     }
+    Case 'remote metadata requires six distinct candidate assets' {
+        $remote=@($golden.Values|ForEach-Object{@{name=$_.Name;size=$_.Size;state='uploaded';digest=('sha256:'+$_.Hash)}})
+        Assert-RemoteAssetMetadata @{assets=$remote} $golden
+        Reject {Assert-RemoteAssetMetadata @{assets=@($remote|Select-Object -Skip 1)} $golden} 'validated 6-file set'
+        $remote[0]=$remote[1]
+        Reject {Assert-RemoteAssetMetadata @{assets=$remote} $golden} 'Remote asset identity/size/digest'
+    }
     Case 'DryRun causes no remote mutations' {Publish -DryRun;Require ($mock.Mutations -eq 0) 'DryRun mutated remote'}
     Case 'missing notes stop before any remote mutation' {Reject {Publish -NotesPath "$harnessRoot/missing-notes.md"} 'Missing';Require ($mock.Mutations -eq 0) 'Remote mutation preceded notes validation'}
     Case 'mismatched UTF8 notes stop before any remote mutation' {
@@ -300,18 +336,18 @@ try {
         $bad=Join-Path $root 'bad.md';[IO.File]::WriteAllText($bad,'Different generated notes')
         Reject {Publish -NotesPath $bad} 'reviewed UTF-8 source';Require ($mock.Mutations -eq 0) 'Remote mutation preceded source text comparison'
     }
-    Case 'complete real publisher success' {Publish;Require (!$mock.Draft -and $mock.Uploads -eq 7 -and $checks.LatestPointerVerified) 'Incomplete publisher path'}
+    Case 'complete real publisher success' {Publish;Require (!$mock.Draft -and $mock.Uploads -eq $expectedAssetCount -and $checks.LatestPointerVerified) 'Incomplete publisher path'}
     Case 'lost create and promotion response recovery' {$mock.CreateLost=$true;$mock.PublishLost=$true;Publish;Require ($checks.DraftPromoted -and $checks.LatestPointerVerified) 'Recovery failed'}
     Case 'draft without a Git tag can publish safely' {$mock.TagApiUnavailable=$true;Publish;Require ($checks.LatestPointerVerified -and !@($mock.Calls|Where-Object{$_ -match '/releases/tags/'}).Count) 'Draft lookup still depends on a Git tag'}
-    Case 'new draft absent from history still publishes by returned ID' {$mock.HiddenDraftHistory=$true;Publish;Require ($checks.LatestPointerVerified -and $mock.Uploads -eq 7) 'New draft still requires list visibility'}
+    Case 'new draft absent from history still publishes by returned ID' {$mock.HiddenDraftHistory=$true;Publish;Require ($checks.LatestPointerVerified -and $mock.Uploads -eq $expectedAssetCount) 'New draft still requires list visibility'}
     Case 'transient release ID lookup failure recovers' {$mock.ReadIdFailures=2;Publish;Require ($checks.LatestPointerVerified) 'Bounded ID recovery failed'}
     Case 'different returned release ID blocks upload' {$mock.WrongId=$true;Reject {Publish} 'different release ID';Require ($mock.Uploads -eq 0 -and $mock.Draft) 'Wrong release accepted'}
     Case 'lost create response waits for history without duplicate POST' {$mock.CreateLost=$true;$mock.HistoryLag=2;Publish;Require ($checks.LatestPointerVerified -and @($mock.Calls|Where-Object{$_ -match 'api --method POST /repos/[^ ]+/releases -f '}).Count -eq 1) 'Draft POST retried or recovery failed'}
     Case 'unrecoverable create response leaves one draft and stops' {$mock.CreateLost=$true;$mock.HiddenDraftHistory=$true;Reject {Publish} 'not found';Require ($mock.Exists -and $mock.Draft -and $mock.Uploads -eq 0 -and @($mock.Calls|Where-Object{$_ -match 'api --method POST /repos/[^ ]+/releases -f '}).Count -eq 1) 'Unsafe duplicate create or upload'}
-    Case 'lost upload response reuses verified metadata without duplicate POST' {$mock.UploadLost=$true;Publish;Require ($checks.LatestPointerVerified -and $mock.Uploads -eq 7) 'Upload POST duplicated'}
+    Case 'lost upload response reuses verified metadata without duplicate POST' {$mock.UploadLost=$true;Publish;Require ($checks.LatestPointerVerified -and $mock.Uploads -eq $expectedAssetCount) 'Upload POST duplicated'}
     Case 'duplicate draft lookup is refused' {$mock.Exists=$true;$mock.History+=Remote-Object;Reject {Read-RemoteRelease 'kunkunkunQoQ/SonicRoute' "v$version"} 'Duplicate release tag'}
     Case 'draft lookup includes later release pages' {$mock.History=@(1..100|ForEach-Object{@{tag_name="old-$_";draft=$false;prerelease=$false}})+@(Remote-Object);$found=Read-RemoteRelease 'kunkunkunQoQ/SonicRoute' "v$version";Require ($found.tag_name -ceq "v$version" -and $found.draft) 'Draft on later page missed'}
-    Case 'upload transient failure recovers' {$mock.UploadFailures=1;Publish;Require ($mock.Uploads -eq 8 -and $checks.LatestPointerVerified) 'Upload retry failed'}
+    Case 'upload transient failure recovers' {$mock.UploadFailures=1;Publish;Require ($mock.Uploads -eq ($expectedAssetCount+1) -and $checks.LatestPointerVerified) 'Upload retry failed'}
     Case 'permanent upload failure leaves draft' {$mock.UploadFailures=10;Reject {Publish} 'Failed to upload';Require ($mock.Draft -and !$checks.DraftPromoted) 'Unsafe promotion'}
     Case 'identical existing assets avoid upload' {$mock.Exists=$true;foreach($a in $golden.Values){$copy=$a.Clone();$mock.NextAssetId++;$copy.Id=$mock.NextAssetId;$mock.Assets[$a.Name]=$copy};Publish -Existing $true;Require ($mock.Uploads -eq 0 -and $checks.LatestPointerVerified) 'Idempotent run uploaded again'}
     Case 'changed known draft asset replaced using its ID' {$mock.Exists=$true;$copy=$golden['SHA256SUMS.txt'].Clone();$copy.Id=100;$copy.Size=1;$copy.Hash='0'*64;$mock.Assets[$copy.Name]=$copy;Publish -Existing $true;Require ($checks.LatestPointerVerified -and @($mock.Calls|Where-Object{$_ -match 'api --method DELETE /repos/[^ ]+/releases/assets/100$'}).Count -eq 1) 'Known replacement missed exact asset ID'}

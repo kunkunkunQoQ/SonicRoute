@@ -31,8 +31,10 @@ function Get-ReleaseMatrix([string]$Version) {
         [pscustomobject]@{ Edition='Full'; Runtime='net10'; Framework='net10.0-windows'; Architecture='arm64'; Asset="SonicRoute-v$Version-arm64.exe" }
         [pscustomobject]@{ Edition='Lite'; Runtime='net10'; Framework='net10.0-windows'; Architecture='x64'; Asset="SonicRoute-v$Version-Lite-x64.exe" }
         [pscustomobject]@{ Edition='Lite'; Runtime='net10'; Framework='net10.0-windows'; Architecture='arm64'; Asset="SonicRoute-v$Version-Lite-arm64.exe" }
-        [pscustomobject]@{ Edition='Legacy'; Runtime='net48'; Framework='net48'; Architecture='x64'; Asset="SonicRoute-v$Version-Legacy-x64.zip" }
     )
+    if ([version]$Version -lt [version]'2.0') {
+        [pscustomobject]@{ Edition='Legacy'; Runtime='net48'; Framework='net48'; Architecture='x64'; Asset="SonicRoute-v$Version-Legacy-x64.zip" }
+    }
 }
 
 function Get-LegacyReleaseFiles {
@@ -137,9 +139,11 @@ function Assert-ReleaseExecutable([string]$Path, [string]$Architecture, [string]
         $reader.BaseStream.Position=$offset;$machine=if($Architecture -eq 'arm64'){0xaa64}else{0x8664}
         if($reader.ReadUInt32() -ne 0x4550 -or $reader.ReadUInt16() -ne $machine){throw "Wrong PE architecture: $Path"}
         if($Runtime -eq 'net10'){
-            if($info.Comments -cne 'SonicRoute .NET 10 Native AOT'){throw "Expected a Native AOT product: $Path"}
-            Assert-NativeAotImage $reader $offset
-            return
+            if($info.Comments -ceq 'SonicRoute .NET 10 Native AOT'){
+                Assert-NativeAotImage $reader $offset
+                return
+            }
+            if($numeric.Major -ge 2){throw "Expected a Native AOT product: $Path"}
         }
     } finally {$reader.Dispose()}
     if($Runtime -eq 'net48') {
@@ -149,7 +153,11 @@ function Assert-ReleaseExecutable([string]$Path, [string]$Architecture, [string]
         if($LASTEXITCODE -ne 0 -or $target -cne '.NETFramework,Version=v4.8'){throw "Wrong Legacy target framework: $Path"}
     } else {
         $config=Read-ReleaseRuntimeConfig $Path
-        $expected=if($Runtime -eq 'net8'){'8.0'}else{throw "Unsupported runtime $Runtime"}
+        $expected=switch($Runtime){
+            'net8' {'8.0'}
+            'net10' {'10.0'}
+            default {throw "Unsupported runtime $Runtime"}
+        }
         $options=$config.runtimeOptions
         if($options.tfm -cne "net$expected" -or $options.rollForward -in @('Major','LatestMajor')){throw "Wrong embedded target framework or roll-forward policy: $Path"}
         $frameworks=@($options.frameworks)
@@ -168,6 +176,9 @@ function Get-ReleasePackageFiles($Variant,[string]$AssetsDirectory,[string]$Vers
     if($Variant.Edition -in @('Lite','Full')) {
         Assert-ReleaseExecutable $path $Variant.Architecture $Variant.Edition $Variant.Runtime $Version
         return @([ordered]@{path='SonicRoute.exe';size=$item.Length;sha256=(Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant()})
+    }
+    if($Variant.Edition -cne 'Legacy' -or $Variant.Runtime -cne 'net48' -or [version]$Version -ge [version]'2.0'){
+        throw "Package edition/runtime is outside the release matrix for $Version."
     }
     Add-Type -AssemblyName System.IO.Compression.FileSystem
     $allowed=@(Get-LegacyReleaseFiles)
