@@ -1,4 +1,5 @@
-﻿<# Exercises real release functions and real packages. Only git/gh, binary download and retry delays are substituted.
+﻿<# Exercises real release functions, real packages and a local Git checkout for dirty-source checks.
+   Other Git and GitHub commands, binary downloads and retry delays use fixtures.
    Never writes to the network. Retains fixtures and a machine-readable report. #>
 [CmdletBinding()]
 param([string]$AssetsDirectory,[string]$ReportPath)
@@ -6,6 +7,13 @@ $ErrorActionPreference='Stop'
 . "$PSScriptRoot/Invoke-ReleasePipeline.ps1"
 $harnessRoot=Join-Path $root ('build-artifacts/release-harness-'+[guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $harnessRoot -Force|Out-Null
+$localGit=(Get-Command git -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source
+$dirtySource=Join-Path $harnessRoot 'git-source'
+& $localGit clone --quiet --local --shared --sparse -- $root $dirtySource
+if($LASTEXITCODE){throw 'Could not create the local Git source fixture.'}
+$fixtureCommit,$fixtureTree=& $localGit -C $dirtySource rev-parse HEAD 'HEAD^{tree}'
+if($LASTEXITCODE -or !$fixtureTree){throw 'Could not identify the fixture source.'}
+[IO.File]::WriteAllText((Join-Path $dirtySource 'release-harness-untracked.txt'),'release source fingerprint')
 if(!$AssetsDirectory){& "$PSScriptRoot/Build-PortableRelease.ps1" -OutputDirectory "$harnessRoot/candidate";$AssetsDirectory="$harnessRoot/candidate/assets"}
 $AssetsDirectory=[IO.Path]::GetFullPath($AssetsDirectory)
 $version=(Get-SonicRouteVersion).Version
@@ -18,7 +26,7 @@ $savedEnv=@{};foreach($name in @('GITHUB_REF','GITHUB_SHA','GITHUB_REPOSITORY','
 }
 $env:GITHUB_STEP_SUMMARY=Join-Path $harnessRoot 'summaries.md'
 function Reset-Mock {
-    $script:mock=@{Head=('a'*40);Tree=('c'*40);Branch='master';Dirty=$false;RemoteTag=$null;History=@(@{tag_name='v1.24';draft=$false;prerelease=$false});
+    $script:mock=@{Head=('a'*40);Tree=('c'*40);Branch='master';RemoteTag=$null;History=@(@{tag_name='v1.24';draft=$false;prerelease=$false});
         Draft=$true;Exists=$false;Target=('a'*40);Assets=@{};Calls=[Collections.Generic.List[string]]::new();Mutations=0;Uploads=0;
         ApiFailure=$false;CreateLost=$false;UploadFailures=0;DownloadCorrupt=$false;NoDigest=$false;PublishLost=$false;LatestWrong=$false;LatestFailure=$false;PromoteEarly=$false;TagApiUnavailable=$false;
         HiddenDraftHistory=$false;HistoryLag=0;ReadIdFailures=0;WrongId=$false;UploadLost=$false;NextAssetId=100;Body='';CorruptNotes=$false;LatestWrongId=$false;Commits=@();
@@ -28,10 +36,18 @@ function Reset-Mock {
 function git {
     $line=$args -join ' ';$global:LASTEXITCODE=0
     $mock.GitCalls.Add($line)
+    if($args[0] -ceq '-C' -and $args[1] -ceq $dirtySource){
+        $commandIndex=2
+        while($args[$commandIndex] -ceq '-c'){$commandIndex+=2}
+        if($args[$commandIndex] -cnotin @('rev-parse','status','diff','ls-files')){throw "Unexpected fixture Git command: $line"}
+        & $localGit @args
+        $global:LASTEXITCODE=$LASTEXITCODE
+        return
+    }
     if($line -match 'rev-parse --abbrev-ref HEAD$'){return $mock.Branch}
     if($line -match 'rev-parse HEAD\^\{tree\}$'){return $mock.Tree}
     if($line -match 'rev-parse HEAD$'){return $mock.Head}
-    if($line -match 'status --porcelain --untracked-files=all$'){if($mock.Dirty){return '?? untracked.cs'};return}
+    if($line -match 'status --porcelain --untracked-files=all$'){return}
     if($line -match 'ls-remote --tags '){if($mock.RemoteTag){return "$($mock.RemoteTag)`trefs/tags/v$version"};return}
     if($line -match 'tag -l '){return 'v1.24'}
     if($line -match ' log '){if($mock.LogFailure){$global:LASTEXITCODE=128;return};return $mock.Commits}
@@ -251,7 +267,13 @@ try {
     }
     Case 'real preflight accepts exact clean source' {$r=Preflight;Require ($r.RemoteVerified -and $r.CommitSha -ceq $mock.Head) 'Unverified result'}
     Case 'preflight rejects unrelated source branch' {$mock.Branch='feature/test';Reject {Preflight} 'non-master'}
-    Case 'preflight includes untracked files' {$mock.Dirty=$true;Reject {Preflight} 'clean source'}
+    Case 'preflight includes untracked files' {
+        $root=$dirtySource
+        $state=Get-ReleaseSourceState $root
+        Require ($state.Status.Count -eq 1 -and $state.Status[0] -ceq '?? release-harness-untracked.txt' -and
+                 $state.WorkingSetHash -cmatch '^[0-9a-f]{64}$') 'Untracked file fingerprint missing'
+        Reject {Preflight} 'clean source'
+    }
     Case 'CI commit mismatch' {$env:GITHUB_REF='refs/heads/master';$env:GITHUB_REPOSITORY='kunkunkunQoQ/SonicRoute';$env:GITHUB_SHA='b'*40;try{Reject {Preflight} 'CI ref'}finally{$env:GITHUB_REF=$null;$env:GITHUB_SHA=$null;$env:GITHUB_REPOSITORY=$null}}
     Case 'published current version immutable' {$mock.History+=@{tag_name="v$version";draft=$false;prerelease=$false};Reject {Preflight} 'immutable'}
     Case 'DryRun revalidates published version from later clean commit without mutation' {$mock.History+=@{tag_name="v$version";draft=$false;prerelease=$false};$mock.RemoteTag='b'*40;$r=Assert-Preflight 'kunkunkunQoQ/SonicRoute' $version "v$version" -IsDryRun;Require ($r.ReadOnlyRevalidation -and !$r.HasExistingDraft -and $r.RemoteVerified -and $mock.Mutations -eq 0) 'Published DryRun was rejected or changed publication eligibility'}
@@ -325,12 +347,14 @@ try {
         Reject {Assert-LocalArtifacts $dir $version} 'unexpected edition'
     }
     Case 'receipt binds actual assets and source tree' {
+        $mock.Head=$fixtureCommit;$mock.Tree=$fixtureTree
         $receiptDir=Join-Path $harnessRoot 'receipt';New-Item -ItemType Directory $receiptDir|Out-Null
         $r=@{schemaVersion=1;version=$version;commit=$mock.Head;tree=$mock.Tree;clean=$true;solutionBuildVerified=$true;assets=@($golden.Values|ForEach-Object{@{name=$_.Name;size=$_.Size;sha256=$_.Hash}})}
         $r|ConvertTo-Json -Depth 8|Set-Content "$receiptDir/build-receipt.json"
         Assert-BuildReceipt $receiptDir $version $mock.Head $golden|Out-Null
         $mock.Tree='d'*40;Reject {Assert-BuildReceipt $receiptDir $version $mock.Head $golden} 'clean, solution-verified'
-        $mock.Tree=$r.tree;$mock.Dirty=$true;Reject {Assert-BuildReceipt $receiptDir $version $mock.Head $golden} 'clean, solution-verified'
+        $mock.Tree=$r.tree;$root=$dirtySource
+        Reject {Assert-BuildReceipt $receiptDir $version $mock.Head $golden} 'clean, solution-verified'
     }
     Case 'remote metadata requires six distinct candidate assets' {
         $remote=@($golden.Values|ForEach-Object{@{name=$_.Name;size=$_.Size;state='uploaded';digest=('sha256:'+$_.Hash)}})
