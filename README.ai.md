@@ -99,7 +99,6 @@ MICROSOFT_STORE:
   - { edition: StoreLite, runtime: net10_native_aot, architecture: x64, manifest: "packaging/Store/AppxManifest.Lite.xml", package_id: "8B44F47E.SonicRouteLite", deployment: MSIX_LITE_NATIVE_EXE, features: "PC Audio + StartupTask + AUMID", updates: MICROSOFT_STORE }
 HISTORICAL_PORTABLE_EDITIONS:
   - { edition: Legacy, runtime: net48, architecture: x64, last_release: "v1.36", format: ZIP }
-  - { edition: Lite, runtime: net8, architecture: "x64 / arm64", last_release: "v1.29", status: DISCONTINUED }
 ```
 
 ### 3.3 Native AOT Host & UI Architecture (`Native/Product`)

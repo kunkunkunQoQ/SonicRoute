@@ -50,15 +50,6 @@ Microsoft Store · [Full](https://apps.microsoft.com/detail/9NQZGRTPM1NT) / [Lit
 
 📱 [Releases der Android-App](https://github.com/kunkunkunQoQ/SonicRoute-App/releases) · [Installationsanleitung](https://github.com/kunkunkunQoQ/SonicRoute-App/blob/main/README.md#install)
 
-<details>
-<summary><sub>📦 Ältere Ausgaben für .NET 8 (eingestellt)</sub></summary>
-
-| Ausgabe | Portable Pakete | Voraussetzungen |
-|---|---|---|
-| Lite NET8 (eingestellt) | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-NET8-x64.exe) / [ARM64 (experimentell)](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-NET8-arm64.exe) | Historisches Paket für .NET 8. Es erhält keine weiteren Updates. |
-
-</details>
-
 > [!NOTE]
 > Die allgemeine Systemanforderung ist Windows 10 ab Version 2004 oder Windows 11. Wenn SonicRoute den Ton eines einzelnen Prozesses erfasst und an zusätzliche Ausgänge weiterleitet, ist Windows-Build 20348 oder neuer erforderlich.
 

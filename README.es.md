@@ -50,15 +50,6 @@ Microsoft Store · [Full](https://apps.microsoft.com/detail/9NQZGRTPM1NT) / [Lit
 
 📱 [Versiones de la aplicación Android](https://github.com/kunkunkunQoQ/SonicRoute-App/releases) · [Instrucciones de instalación](https://github.com/kunkunkunQoQ/SonicRoute-App/blob/main/README.md#install)
 
-<details>
-<summary><sub>📦 Ediciones anteriores para .NET 8 (sin mantenimiento)</sub></summary>
-
-| Edición | Paquetes portátiles | Requisitos |
-|---|---|---|
-| Lite NET8 (sin mantenimiento) | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-NET8-x64.exe) / [ARM64 (experimental)](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-NET8-arm64.exe) | Paquete histórico para .NET 8. Ya no recibe actualizaciones. |
-
-</details>
-
 > [!NOTE]
 > La aplicación funciona a partir de Windows 10 versión 2004 y en Windows 11. Capturar el audio de un proceso para enviarlo a salidas adicionales requiere la compilación 20348 de Windows o posterior.
 

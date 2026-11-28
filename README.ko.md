@@ -50,15 +50,6 @@ Microsoft Store · [Full](https://apps.microsoft.com/detail/9NQZGRTPM1NT) / [Lit
 
 📱 [Android 앱 릴리스](https://github.com/kunkunkunQoQ/SonicRoute-App/releases) · [설치 안내](https://github.com/kunkunkunQoQ/SonicRoute-App/blob/main/README.md#install)
 
-<details>
-<summary><sub>📦 이전 NET8 호환 버전 다운로드(지원 종료)</sub></summary>
-
-| 에디션 | 포터블 패키지 | 요구 사항 |
-|---|---|---|
-| Lite NET8(지원 종료) | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-NET8-x64.exe) / [ARM64 (실험 버전)](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-NET8-arm64.exe) | .NET 8 호환 버전은 업데이트가 종료되었으며 보관용으로 제공됩니다. |
-
-</details>
-
 > [!NOTE]
 > 기본 지원 범위는 Windows 10 버전 2004 이상입니다. 앱의 소리를 프로세스 단위로 캡처해 추가 출력 장치로 보내려면 Windows 빌드 20348 이상이 필요합니다.
 

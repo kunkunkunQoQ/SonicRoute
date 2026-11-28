@@ -125,7 +125,7 @@
     ],
     "faqAnswers": [
         "Windows keeps each app’s primary PC playback device, recording device and the volume of existing audio sessions. Playback on additional outputs stops when you exit SonicRoute. Keep SonicRoute running to use hotkeys, tray controls, automation, phone audio, screen mirroring or clipboard sync.",
-        "The Full and Lite portable executables include the .NET 10 Native AOT runtime. The Microsoft Store handles installation and updates separately. Archived .NET 8 builds are still available and no longer receive updates.",
+        "The Full and Lite portable executables include the .NET 10 Native AOT runtime. The Microsoft Store handles installation and updates separately.",
         "SonicRoute relies on Windows notifications and checks process state once a second when needed. It releases data it no longer uses. CPU use and battery impact depend on your system and what you’re doing.",
         "In Full, connect the phone over ADB and open its audio settings. The default latency mode is Balanced. Try Ultra-low latency for a shorter delay or Stable if you hear dropouts. Opus is the default. Choose Raw PCM for uncompressed audio. Settings are saved per phone and apply the next time you start an audio stream."
     ],
@@ -134,12 +134,9 @@
     "quickStartTitle": "Quick start",
     "cliTitle": "Run an automation rule from the command line",
     "releaseHighlightsTitle": "What’s new in {release}",
-    "retiredNet8Title": "Archived .NET 8 downloads (no longer maintained)",
     "fullRequirement": "Single EXE with the .NET 10 Native AOT runtime built in. No separate .NET installation required.",
     "editionFull": "Full (PC, Android and AirPlay)",
     "editionLite": "Lite (PC audio)",
-    "editionLiteNet8": "Lite for .NET 8 (discontinued)",
-    "net8Requirement": "Archived download. For updates, switch to Full or Lite.",
     "platformLabel": "Platform",
     "architectureLabel": "Architecture",
     "downloadCountLabel": "Downloads",

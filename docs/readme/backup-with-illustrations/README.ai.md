@@ -35,8 +35,6 @@ RELEASE_EDITIONS:
   - { edition: Legacy, runtime: net48, architecture: x64, asset: "SonicRoute-v1.30-Legacy-x64.zip", deployment: MULTIFILE_ZIP }
   - { edition: Lite, runtime: net10, architecture: arm64, asset: "SonicRoute-v1.30-Lite-arm64.exe", deployment: FRAMEWORK_DEPENDENT_SINGLE_EXE, status: EXPERIMENTAL }
   - { edition: Store, runtime: net10, architecture: x64, deployment: MSIX_WITH_FRAMEWORK_DEPENDENT_FULL_EXE, features: ANDROID_PHONE_AUDIO_AND_VIRTUAL_DISPLAY, updates: MICROSOFT_STORE }
-  - { edition: Lite, runtime: net8, architecture: x64, asset: "SonicRoute-v1.29-Lite-NET8-x64.exe", deployment: FRAMEWORK_DEPENDENT_SINGLE_EXE, status: DISCONTINUED }
-  - { edition: Lite, runtime: net8, architecture: arm64, asset: "SonicRoute-v1.29-Lite-NET8-arm64.exe", deployment: FRAMEWORK_DEPENDENT_SINGLE_EXE, status: DISCONTINUED }
 
 CLI_AND_SHORT_COMMAND_SPEC:
   command_invocation: "sr <RuleName|RuleId> (invokes %LocalAppData%\\SonicRoute\\Command\\sr.cmd wrapping sr-client.ps1) OR SonicRoute.exe --run-rule <selector>"

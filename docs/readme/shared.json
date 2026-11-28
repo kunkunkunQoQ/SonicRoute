@@ -4,7 +4,6 @@
   "store": "https://apps.microsoft.com/detail/9NQZGRTPM1NT",
   "storeLite": "https://apps.microsoft.com/detail/9N37LQ8SMLF6",
   "runtime": "https://dotnet.microsoft.com/download/dotnet/10.0",
-  "runtime8": "https://dotnet.microsoft.com/download/dotnet/8.0",
   "minimumWindows": "Windows 10 2004+ / Windows 11",
   "documentationVersion": "v2.00",
   "release": "v1.36",
@@ -73,7 +72,6 @@
   ],
   "nextRelease": "v2.00",
   "arm64LastRelease": "v1.36",
-  "net8LastRelease": "v1.29",
   "triggerCount": 6,
   "actionCount": 39,
   "wikiPages": {

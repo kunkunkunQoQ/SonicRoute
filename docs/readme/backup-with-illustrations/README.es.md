@@ -65,16 +65,8 @@ Elija **Full x64** para audio Android y pantallas virtuales, **Lite x64** para f
 | 🛡️ Legacy x64 (solo audio de PC, .NET Framework 4.8) | [ZIP completo](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.30/SonicRoute-v1.30-Legacy-x64.zip) | Sin dependencias adicionales; utiliza .NET Framework 4.8 integrado, descomprimir y ejecutar. |
 | 🔄 Microsoft Store (basado en Full) | [Instalar desde Store](https://apps.microsoft.com/detail/9NQZGRTPM1NT) | Construido a partir de Full; requiere x64 .NET 10 Desktop Runtime; la versión vigente depende de la tienda. |
 
-<details>
-<summary><sub>📦 Ediciones anteriores compatibles con NET8 (descatalogadas, clic para desplegar)</sub></summary>
-
-| Edición | Descargar | Requisitos |
-|---|---|---|
-| Lite NET8 (Descatalogado) | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-NET8-x64.exe) / [ARM64 (experimental)](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-NET8-arm64.exe) | Descatalogado y sin mantenimiento; se recomienda migrar a .NET 10 o Legacy. |
-</details>
-
 > [!NOTE]
-> Full y Lite requieren [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0); Legacy utiliza el .NET Framework 4.8 integrado sin instalaciones adicionales (versiones históricas [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0) descatalogadas).
+> Full y Lite requieren [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0); Legacy utiliza el .NET Framework 4.8 integrado sin instalaciones adicionales.
 
 ### 🏁 Inicio rápido en 3 pasos
 

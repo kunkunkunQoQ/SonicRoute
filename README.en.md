@@ -50,15 +50,6 @@ Microsoft Store · [Full](https://apps.microsoft.com/detail/9NQZGRTPM1NT) / [Lit
 
 📱 [Android app releases](https://github.com/kunkunkunQoQ/SonicRoute-App/releases) · [Installation instructions](https://github.com/kunkunkunQoQ/SonicRoute-App/blob/main/README.md#install)
 
-<details>
-<summary><sub>📦 Archived .NET 8 downloads (no longer maintained)</sub></summary>
-
-| Edition | Portable package | Requirements |
-|---|---|---|
-| Lite for .NET 8 (discontinued) | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-NET8-x64.exe) / [ARM64 (experimental)](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-NET8-arm64.exe) | Archived download. For updates, switch to Full or Lite. |
-
-</details>
-
 > [!NOTE]
 > The desktop app runs on Windows 10 version 2004 (build 19041) or later, including Windows 11. Capturing a single app’s audio to forward it to additional outputs requires Windows build 20348 or later.
 
@@ -107,7 +98,7 @@ Windows keeps each app’s primary PC playback device, recording device and the 
 
 **Which runtime do I need?**
 
-The Full and Lite portable executables include the .NET 10 Native AOT runtime. The Microsoft Store handles installation and updates separately. Archived .NET 8 builds are still available and no longer receive updates.
+The Full and Lite portable executables include the .NET 10 Native AOT runtime. The Microsoft Store handles installation and updates separately.
 
 **How much CPU or battery does SonicRoute use in the background?**
 

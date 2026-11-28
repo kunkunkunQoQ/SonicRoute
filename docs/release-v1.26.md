@@ -48,14 +48,12 @@ Windows 底层将音频设备划分为数据流向（播放 Render / 录音 Capt
 |---|---|---|---|
 | ⭐ **Lite x64**（.NET 10 推荐主力） | 主流 64 位 PC 绿色单文件 | [单个 EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.26/SonicRoute-v1.26-Lite-x64.exe) | 需匹配的 x64 [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0) |
 | ⚡ **Lite ARM64**（.NET 10 实验版） | Surface Pro / 骁龙 PC 原生高效 | [单个 EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.26/SonicRoute-v1.26-Lite-arm64.exe) | 需匹配的 ARM64 [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0) |
-| ☕ **Lite NET8 x64**（.NET 8 兼容版） | 现有仅安装了 .NET 8 的机型 | [单个 EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.26/SonicRoute-v1.26-Lite-NET8-x64.exe) | 需匹配的 x64 [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0) |
-| ☕ **Lite NET8 ARM64**（.NET 8 兼容版） | 现有仅安装了 .NET 8 的 ARM64 机型 | [单个 EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.26/SonicRoute-v1.26-Lite-NET8-arm64.exe) | 需匹配的 ARM64 [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0) |
 | 🛡️ **Legacy x64**（免装运行库） | 公司办公电脑 / 受限机型 | [完整 ZIP](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.26/SonicRoute-v1.26-Legacy-x64.zip) | 系统自带 .NET Framework 4.8（解压即用） |
 | 🔄 **Microsoft Store** | 商店静默后台自动更新 | [商店安装](https://apps.microsoft.com/detail/9NQZGRTPM1NT) | 适用于 64 位 Windows 10 2004+ / Windows 11 |
 
 > [!NOTE]
 > - 支持 Windows 10 2004+ (Build 19041+) 及 Windows 11 系统。
-> - .NET 10 默认文件名无附加后缀，.NET 8 兼容版带有 `-NET8` 后缀。依照规划，**2026 年 11 月之后将停止提供 .NET 8 新构建**，建议广大用户优先迁移至 .NET 10 或选用无需运行库的 Legacy 版本。
+> - .NET 10 默认文件名无附加后缀，.NET 8 兼容版带有 `-NET8` 后缀，本版曾发布 x64 和 ARM64 两种兼容包。依照规划，**2026 年 11 月之后将停止提供 .NET 8 新构建**，建议广大用户优先迁移至 .NET 10 或选用无需运行库的 Legacy 版本。
 > - 所有便携版发行附件均附带 `SHA256SUMS.txt` 校验清单与升级清单 `SonicRoute-update.json`（协议版本 2）。
 
 ---

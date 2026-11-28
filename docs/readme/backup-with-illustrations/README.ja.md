@@ -65,16 +65,8 @@ Androidスマートフォンの音声・仮想ディスプレイ機能を使う�
 | 🛡️ Legacy x64 (PC 音声のみ、.NET Framework 4.8) | [完全版 ZIP](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.30/SonicRoute-v1.30-Legacy-x64.zip) | 追加ランタイム不要。制限された環境向け。標準の .NET Framework 4.8 で解凍後すぐ利用可能。 |
 | 🔄 Microsoft Store (Full ベース) | [Store からインストール](https://apps.microsoft.com/detail/9NQZGRTPM1NT) | Full をベースにビルド。x64 .NET 10 Desktop Runtime が必要。提供バージョンは Store ページに準拠。 |
 
-<details>
-<summary><sub>📦 過去の NET8 互換版（提供終了・クリックで展開）</sub></summary>
-
-| エディション | ダウンロード | 要件 |
-|---|---|---|
-| Lite NET8 (提供終了) | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-NET8-x64.exe) / [ARM64（実験的）](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-NET8-arm64.exe) | 提供・更新を終了しました。.NET 10 または Legacy への移行を推奨します。 |
-</details>
-
 > [!NOTE]
-> FullとLiteには [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0) が必要です。LegacyはWindows標準の.NET Framework 4.8で動作し、追加導入は不要です（旧 [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0) 互換版は提供終了）。
+> FullとLiteには [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0) が必要です。LegacyはWindows標準の.NET Framework 4.8で動作し、追加導入は不要です。
 
 ### 🏁 3ステップで今すぐ始める
 

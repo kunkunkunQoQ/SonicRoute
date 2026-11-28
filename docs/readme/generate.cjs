@@ -22,7 +22,6 @@ const version = shared.documentationVersion;
 if (!/^v\d+\.\d+(?:\.\d+)?$/.test(version)) throw new Error('Invalid README documentation version');
 const versionNotes = 'docs/release-' + version + '.md';
 if (!fs.existsSync(path.join(root, versionNotes))) throw new Error('Missing README version notes: ' + versionNotes);
-if (!/^v\d+\.\d+(?:\.\d+)?$/.test(shared.net8LastRelease)) throw new Error('Invalid last NET8 release metadata');
 if (!/^v\d+\.\d+(?:\.\d+)?$/.test(shared.arm64LastRelease)) throw new Error('Invalid last ARM64 release metadata');
 if (!/^v\d+\.\d+(?:\.\d+)?$/.test(shared.nextRelease) || !Number.isInteger(shared.triggerCount) || !Number.isInteger(shared.actionCount) || shared.triggerCount < 1 || shared.actionCount < 1) throw new Error('Invalid shared roadmap or feature counts');
 const interfaceLocales = fs.readdirSync(path.join(root, 'SonicRoute/Resources/Lang')).filter(name => name.endsWith('.json')).map(name => name.slice(0, -5)).sort();
@@ -67,7 +66,6 @@ function render(language, text, releaseSummary = text.releaseSummary, previousRe
   const experimentalSuffix = cjk ? '（' + text.experimental + '）' : ' (' + text.experimental + ')';
   const releaseUrl = shared.repository + '/releases';
   const downloadAsset = (suffix, release) => releaseUrl + '/download/' + release + '/SonicRoute-' + release + '-' + suffix;
-  const historicalNet8Asset = suffix => downloadAsset(suffix, shared.net8LastRelease);
   const published = version === shared.release;
   const portableFile = (edition, arch) => {
     const suffix = (edition === 'Lite' ? 'Lite-' : '') + arch + '.exe';
@@ -80,7 +78,7 @@ function render(language, text, releaseSummary = text.releaseSummary, previousRe
     aiDoc: link('README.ai.md', 'README.ai.md'),
     licenseLink: link('LICENSE', 'LICENSE'),
     noticesLink: link(text.thirdPartyNotices, 'packaging/AndroidLab/THIRD-PARTY-NOTICES.md'),
-    runtime: link('.NET 10 Desktop Runtime', shared.runtime), runtime8: link('.NET 8 Desktop Runtime', shared.runtime8) };
+    runtime: link('.NET 10 Desktop Runtime', shared.runtime) };
   const fill = value => value.replace(/\{([a-zA-Z][a-zA-Z0-9]*)\}/g, (_, key) => {
     if (!(key in variables)) throw new Error('Unknown shared placeholder: ' + key);
     return variables[key];
@@ -90,9 +88,6 @@ function render(language, text, releaseSummary = text.releaseSummary, previousRe
   const rows = [
     ['⭐ ' + text.editionFull, portableFile('Full', 'x64') + '<br>' + portableFile('Full', 'arm64'), text.fullRequirement],
     ['⚡ ' + text.editionLite, portableFile('Lite', 'x64') + '<br>' + portableFile('Lite', 'arm64'), text.liteRequirement]
-  ];
-  const retiredRows = [
-    [text.editionLiteNet8, `${link('x64', historicalNet8Asset('Lite-NET8-x64.exe'))} / ${link('ARM64' + experimentalSuffix, historicalNet8Asset('Lite-NET8-arm64.exe'))}`, text.net8Requirement]
   ];
   const navigation = shared.languages.map(item => item.locale === language.locale ? `**${item.name}**` : link(item.name, item.file)).join(' | ') + ' | ' + link('🤖 AI', 'README.ai.md');
   const badge = (alt, imageUrl, target) => link(`![${alt}](${imageUrl})`, target);
@@ -143,12 +138,6 @@ function render(language, text, releaseSummary = text.releaseSummary, previousRe
     ...rows.map(row => '| ' + row.map(tableCell).join(' | ') + ' |'), '',
     text.editionStore + ' · ' + link('Full', shared.store) + ' / ' + link('Lite', shared.storeLite) + ' — ' + text.storeRequirement, '',
     '📱 ' + link(text.androidReleases, androidReleases) + ' · ' + link(text.androidInstall, androidInstall), '',
-    '<details>',
-    '<summary><sub>📦 ' + attr(text.retiredNet8Title) + '</sub></summary>',
-    '',
-    '| ' + [text.edition, text.downloadColumn, text.requirements].join(' | ') + ' |', '|---|---|---|',
-    ...retiredRows.map(row => '| ' + row.map(tableCell).join(' | ') + ' |'), '',
-    '</details>', '',
     '> [!NOTE]',
     '> ' + fill(text.runtimeNote), '',
     '<a name="quick-start"></a>', '',
@@ -302,7 +291,6 @@ function renderAI(shared) {
     '  - { edition: StoreLite, runtime: net10_native_aot, architecture: x64, manifest: "packaging/Store/AppxManifest.Lite.xml", package_id: "8B44F47E.SonicRouteLite", deployment: MSIX_LITE_NATIVE_EXE, features: "PC Audio + StartupTask + AUMID", updates: MICROSOFT_STORE }',
     'HISTORICAL_PORTABLE_EDITIONS:',
     '  - { edition: Legacy, runtime: net48, architecture: x64, last_release: "v1.36", format: ZIP }',
-    `  - { edition: Lite, runtime: net8, architecture: "x64 / arm64", last_release: "${shared.net8LastRelease}", status: DISCONTINUED }`,
     '```', '',
     '### 3.3 Native AOT Host & UI Architecture (`Native/Product`)', '',
     '```yaml',

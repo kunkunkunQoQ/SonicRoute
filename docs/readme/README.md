@@ -14,7 +14,7 @@
 
 `documentationVersion` 选择 README 展示的版本、`docs/release-<documentationVersion>.md` 版本说明，以及 `releases/<documentationVersion>.json` 的九语摘要。上一版摘要由较早的版本记录提供，v1.33 摘要仍保存在各语言的 `releaseSummary`。功能文案、示例和常见问题同步到手册讲解的版本。
 
-`release`、`releaseDate` 和 `releaseNotes` 记录已发布的版本、实际发布日期及该版说明。只有核实发行页和对应附件后才更新这些字段。`arm64LastRelease` 记录确实附带 ARM64 便携包的最近版本，`net8LastRelease` 指向历史 .NET 8 下载。手册版本的对应资产未发布时，表中显示文件名，下载入口统一指向 [GitHub 发行页](https://github.com/kunkunkunQoQ/SonicRoute/releases)。ARM64 资产链接也必须与实际已发布的架构版本一致。Microsoft Store 通过各自商店页面展示在架版本。
+`release`、`releaseDate` 和 `releaseNotes` 记录已发布的版本、实际发布日期及该版说明。只有核实发行页和对应附件后才更新这些字段。`arm64LastRelease` 记录确实附带 ARM64 便携包的最近版本。手册版本的对应资产未发布时，表中显示文件名，下载入口统一指向 [GitHub 发行页](https://github.com/kunkunkunQoQ/SonicRoute/releases)。ARM64 资产链接也必须与实际已发布的架构版本一致。Microsoft Store 通过各自商店页面展示在架版本。
 
 2.00 README 的首图取自 Wiki。替代文字使用各语言的 `canvasAlt`，图注使用 `preview`，入口指向使用指南的 `routing-canvas` 锚点。折叠区保留并标明 v1.36 界面示例。[2.00 画布截图](https://raw.githubusercontent.com/wiki/kunkunkunQoQ/SonicRoute/images/routing-canvas-v2.00.png) · [画布操作](https://github.com/kunkunkunQoQ/SonicRoute/wiki/01-%E4%BD%BF%E7%94%A8%E6%8C%87%E5%8D%97#routing-canvas)
 
@@ -37,7 +37,7 @@ The nine language READMEs share a static Markdown layout. Edit [shared.json](sha
 
 `documentationVersion` selects the version shown in the READMEs, the notes at `docs/release-<documentationVersion>.md`, and the localized summaries in `releases/<documentationVersion>.json`. The previous summary comes from the preceding version record. The v1.33 summary remains in each locale’s `releaseSummary`.
 
-`release`, `releaseDate` and `releaseNotes` record the published version, its actual publication date and its notes. Set `arm64LastRelease` to the most recent version that actually shipped the ARM64 portable assets. `net8LastRelease` tracks the archived .NET 8 assets. Update published records after verifying the release and its attachments. When an asset for the documentation version is unavailable, display its filename and direct readers to [GitHub Releases](https://github.com/kunkunkunQoQ/SonicRoute/releases). Microsoft Store listings show their available versions separately.
+`release`, `releaseDate` and `releaseNotes` record the published version, its actual publication date and its notes. Set `arm64LastRelease` to the most recent version that actually shipped the ARM64 portable assets. Update published records after verifying the release and its attachments. When an asset for the documentation version is unavailable, display its filename and direct readers to [GitHub Releases](https://github.com/kunkunkunQoQ/SonicRoute/releases). Microsoft Store listings show their available versions separately.
 
 The main 2.00 screenshot comes from the Wiki. Supply localized `canvasAlt` and `preview` strings and link to the `routing-canvas` section of the user guide. The collapsible section contains labeled 1.36 examples. [Routing canvas image](https://raw.githubusercontent.com/wiki/kunkunkunQoQ/SonicRoute/images/routing-canvas-v2.00.png) · [Routing canvas guide](https://github.com/kunkunkunQoQ/SonicRoute/wiki/01-%E4%BD%BF%E7%94%A8%E6%8C%87%E5%8D%97#routing-canvas)
 

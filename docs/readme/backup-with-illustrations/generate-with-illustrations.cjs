@@ -17,7 +17,6 @@ const link = (label, url) => `[${label}](${url})`;
 const attr = text => text.replaceAll('&', '&amp;').replaceAll('"', '&quot;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
 const tableCell = text => text.replaceAll('|', '\\|');
 if (!/^v\d+\.\d+(?:\.\d+)?$/.test(shared.release) || !/^\d{4}-\d{2}-\d{2}$/.test(shared.releaseDate)) throw new Error('Invalid shared release metadata');
-if (!/^v\d+\.\d+(?:\.\d+)?$/.test(shared.net8LastRelease)) throw new Error('Invalid last NET8 release metadata');
 if (!/^v\d+\.\d+(?:\.\d+)?$/.test(shared.nextRelease) || !Number.isInteger(shared.triggerCount) || !Number.isInteger(shared.actionCount) || shared.triggerCount < 1 || shared.actionCount < 1) throw new Error('Invalid shared roadmap or feature counts');
 const interfaceLocales = fs.readdirSync(path.join(root, 'SonicRoute/Resources/Lang')).filter(name => name.endsWith('.json')).map(name => name.slice(0, -5)).sort();
 if (JSON.stringify(interfaceLocales) !== JSON.stringify(shared.languages.map(language => language.locale).sort())) throw new Error('README languages differ from built-in interface languages');
@@ -41,12 +40,11 @@ function render(language, text) {
   const experimentalSuffix = cjk ? '（' + text.experimental + '）' : ' (' + text.experimental + ')';
   const releaseUrl = shared.repository + '/releases';
   const downloadAsset = suffix => releaseUrl + '/download/' + shared.release + '/SonicRoute-' + shared.release + '-' + suffix;
-  const historicalNet8Asset = suffix => releaseUrl + '/download/' + shared.net8LastRelease + '/SonicRoute-' + shared.net8LastRelease + '-' + suffix;
   const variables = { release: shared.release, version: shared.release.slice(1), nextRelease: shared.nextRelease,
     triggerCount: shared.triggerCount, actionCount: shared.actionCount, ruleCommand: 'sr "' + text.ruleExample + '"',
     faq: link(text.faq, wiki(pages.faq)), history: link(text.history, wiki(pages.history)),
     aiDoc: link('README.ai.md', 'README.ai.md'),
-    runtime: link('.NET 10 Desktop Runtime', shared.runtime), runtime8: link('.NET 8 Desktop Runtime', shared.runtime8) };
+    runtime: link('.NET 10 Desktop Runtime', shared.runtime) };
   const fill = value => value.replace(/\{([a-zA-Z][a-zA-Z0-9]*)\}/g, (_, key) => {
     if (!(key in variables)) throw new Error('Unknown shared placeholder: ' + key);
     return variables[key];
@@ -58,9 +56,6 @@ function render(language, text) {
     [editionIcons[0] + text.editionLite, `${link('x64', downloadAsset('Lite-x64.exe'))} / ${link('ARM64' + experimentalSuffix, downloadAsset('Lite-arm64.exe'))}`, text.liteRequirement],
     [editionIcons[2] + text.editionLegacyX64, link(text.fullZip, downloadAsset('Legacy-x64.zip')), text.legacyRequirement],
     [editionIcons[3] + text.editionStore, link(text.storeInstall, shared.store), text.storeRequirement]
-  ];
-  const retiredRows = [
-    [text.editionLiteNet8, `${link('x64', historicalNet8Asset('Lite-NET8-x64.exe'))} / ${link('ARM64' + experimentalSuffix, historicalNet8Asset('Lite-NET8-arm64.exe'))}`, text.net8Requirement]
   ];
   const navigation = shared.languages.map(item => item.locale === language.locale ? `**${item.name}**` : link(item.name, item.file)).join(' | ') + ' | ' + link('🤖 AI', 'README.ai.md');
   const sponsorBadge = language.locale === 'zh-CN' ? '赞助-爱发电' : 'Support-Afdian';
@@ -97,12 +92,6 @@ function render(language, text) {
     fill(text.downloadIntro), '',
     '| ' + [text.edition, text.downloadColumn, text.requirements].join(' | ') + ' |', '|---|---|---|',
     ...rows.map(row => '| ' + row.map(tableCell).join(' | ') + ' |'), '',
-    '<details>',
-    '<summary><sub>📦 ' + attr(text.retiredNet8Title) + '</sub></summary>',
-    '',
-    '| ' + [text.edition, text.downloadColumn, text.requirements].join(' | ') + ' |', '|---|---|---|',
-    ...retiredRows.map(row => '| ' + row.map(tableCell).join(' | ') + ' |'),
-    '</details>', '',
     '> [!NOTE]',
     '> ' + fill(text.runtimeNote), '',
     '### 🏁 ' + text.quickStartTitle, '',
@@ -181,8 +170,6 @@ function renderAI(shared) {
     `  - { edition: Legacy, runtime: net48, architecture: x64, asset: "SonicRoute-${shared.release}-Legacy-x64.zip", deployment: MULTIFILE_ZIP }`,
     `  - { edition: Lite, runtime: net10, architecture: arm64, asset: "SonicRoute-${shared.release}-Lite-arm64.exe", deployment: FRAMEWORK_DEPENDENT_SINGLE_EXE, status: EXPERIMENTAL }`,
     "  - { edition: Store, runtime: net10, architecture: x64, deployment: MSIX_WITH_FRAMEWORK_DEPENDENT_FULL_EXE, features: ANDROID_PHONE_AUDIO_AND_VIRTUAL_DISPLAY, updates: MICROSOFT_STORE }",
-    `  - { edition: Lite, runtime: net8, architecture: x64, asset: "SonicRoute-${shared.net8LastRelease}-Lite-NET8-x64.exe", deployment: FRAMEWORK_DEPENDENT_SINGLE_EXE, status: DISCONTINUED }`,
-    `  - { edition: Lite, runtime: net8, architecture: arm64, asset: "SonicRoute-${shared.net8LastRelease}-Lite-NET8-arm64.exe", deployment: FRAMEWORK_DEPENDENT_SINGLE_EXE, status: DISCONTINUED }`,
     "",
     "CLI_AND_SHORT_COMMAND_SPEC:",
     "  command_invocation: \"sr <RuleName|RuleId> (invokes %LocalAppData%\\\\SonicRoute\\\\Command\\\\sr.cmd wrapping sr-client.ps1) OR SonicRoute.exe --run-rule <selector>\"",

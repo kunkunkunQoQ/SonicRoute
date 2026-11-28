@@ -50,15 +50,6 @@ Microsoft Store · [Full](https://apps.microsoft.com/detail/9NQZGRTPM1NT) / [Lit
 
 📱 [Android アプリのリリース](https://github.com/kunkunkunQoQ/SonicRoute-App/releases) · [インストール手順](https://github.com/kunkunkunQoQ/SonicRoute-App/blob/main/README.md#install)
 
-<details>
-<summary><sub>📦 旧 .NET 8 版のダウンロード（更新終了）</sub></summary>
-
-| エディション | ポータブル版 | 動作要件 |
-|---|---|---|
-| Lite NET8（更新終了） | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-NET8-x64.exe) / [ARM64（試験提供）](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-NET8-arm64.exe) | .NET 8 版は更新を終了したアーカイブです。 |
-
-</details>
-
 > [!NOTE]
 > 対応 OS は Windows 10 バージョン 2004 以降です。Windows アプリの音声をプロセス単位で取り込み、追加の出力先に送るには Windows ビルド 20348 以降が必要です。
 

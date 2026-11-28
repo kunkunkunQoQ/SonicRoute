@@ -125,7 +125,7 @@
     ],
     "faqAnswers": [
         "Windows 會保留應用程式的主要播放裝置、錄音裝置及現有音訊工作階段的音量。多裝置同時播放、快速鍵、系統匣操作、自動化、手機音訊、螢幕鏡像與剪貼簿同步都需要 SonicRoute 持續執行。",
-        "Full 和 Lite 可攜版已內含 .NET 10 Native AOT 執行階段，無須另行安裝。Microsoft Store 版由商店獨立提供安裝和更新。舊版 .NET 8 已停止維護，仍可下載。",
+        "Full 和 Lite 可攜版已內含 .NET 10 Native AOT 執行階段，無須另行安裝。Microsoft Store 版由商店獨立提供安裝和更新。",
         "程式主要依 Windows 通知偵測變更，必要時才會每秒確認一次狀態，並適時清理不再使用的資料。實際的 CPU 使用量和耗電量視系統與使用情況而定。",
         "在 Full 版透過 ADB 連線後，開啟該手機的音訊設定。音訊延遲預設為「平衡」。想縮短延遲可試「超低延遲」，若音訊斷斷續續可切換為「穩定」。預設以 Opus 傳輸音訊，需要未壓縮音訊時可選 Raw PCM。設定會按手機儲存，並在下次開始傳輸時生效。"
     ],
@@ -134,12 +134,9 @@
     "quickStartTitle": "三步驟開始使用",
     "cliTitle": "從命令列執行自動化規則",
     "releaseHighlightsTitle": "{release} 更新重點",
-    "retiredNet8Title": "下載舊版 NET8 相容版本（已停止維護）",
     "fullRequirement": "單一執行檔，內含 .NET 10 Native AOT 執行階段，無須另外安裝 .NET 執行階段。",
     "editionFull": "Full（電腦音訊、Android 與 AirPlay）",
     "editionLite": "Lite（僅電腦音訊）",
-    "editionLiteNet8": "Lite NET8（已停止維護）",
-    "net8Requirement": "僅保留歷史版本供下載。如需繼續取得更新，可改用 Full 或 Lite。",
     "platformLabel": "作業系統",
     "architectureLabel": "架構",
     "downloadCountLabel": "下載次數",

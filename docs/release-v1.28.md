@@ -61,15 +61,13 @@
 |---|---|---|
 | ⭐ **Lite x64**（默认主版本） | [单个 EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.28/SonicRoute-v1.28-Lite-x64.exe) | x64 [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0) |
 | ⚡ **Lite ARM64**（实验性） | [单个 EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.28/SonicRoute-v1.28-Lite-arm64.exe) | ARM64 [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0) |
-| ☕ **Lite NET8 x64**（兼容版） | [单个 EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.28/SonicRoute-v1.28-Lite-NET8-x64.exe) | x64 [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0) |
-| ☕ **Lite NET8 ARM64**（兼容版） | [单个 EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.28/SonicRoute-v1.28-Lite-NET8-arm64.exe) | ARM64 [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0) |
 | 🛡️ **Legacy x64** | [完整 ZIP](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.28/SonicRoute-v1.28-Legacy-x64.zip) | 系统 .NET Framework 4.8；完整解压后运行 |
 | 🔄 **Microsoft Store** | [商店安装](https://apps.microsoft.com/detail/9NQZGRTPM1NT) | x64 .NET 10 Desktop Runtime；在架版本以商店页面为准 |
 
 > [!NOTE]
 > - 支持 Windows 10 2004+（Build 19041+）与 Windows 11。
 > - Lite 单文件和 Store MSIX 均为框架依赖部署，不内置 .NET Desktop Runtime；Microsoft Store 安装不代表系统一定已具备运行时。
-> - 2026 年 11 月之后停止提供和维护 NET8 版。x64 用户可手动选择 NET10 或 Legacy，ARM64 用户请选择 NET10。
+> - 本版曾发布 x64 和 ARM64 的 Lite NET8 兼容包。2026 年 11 月之后停止提供和维护 NET8 版。x64 用户可手动选择 NET10 或 Legacy，ARM64 用户请选择 NET10。
 > - 七项 Release 附件还包含 [SHA256SUMS.txt](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.28/SHA256SUMS.txt) 与 [SonicRoute-update.json](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.28/SonicRoute-update.json)（Protocol 2）。SHA-256 验证完整性，不等同于独立发布者签名。
 
 ---

@@ -65,16 +65,8 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64（實驗性） · 支援九種介�
 | 🛡️ Legacy x64（僅電腦功能，.NET Framework 4.8） | [完整 ZIP](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.30/SonicRoute-v1.30-Legacy-x64.zip) | 免裝額外執行庫，適合受限辦公機；依賴系統自帶 .NET Framework 4.8，解壓即用。 |
 | 🔄 Microsoft Store（基於 Full） | [從 Store 安裝](https://apps.microsoft.com/detail/9NQZGRTPM1NT) | 以 Full 為建置來源；需要 x64 .NET 10 Desktop Runtime，在架版本以 Store 頁面為準。 |
 
-<details>
-<summary><sub>📦 歷史 NET8 相容版（已下架停更，點擊展開）</sub></summary>
-
-| 版本 | 下載 | 需求 |
-|---|---|---|
-| Lite NET8（已下架） | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-NET8-x64.exe) / [ARM64（實驗性）](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-NET8-arm64.exe) | 已下架停更（後續版本不再提供）；建議遷移至 .NET 10 或 Legacy。 |
-</details>
-
 > [!NOTE]
-> 執行階段說明：Full 與 Lite 都需要安裝 [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0)；Legacy 依賴系統自帶 .NET Framework 4.8，無需額外安裝執行階段（歷史 [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0) 相容版已下架停更）。
+> 執行階段說明：Full 與 Lite 都需要安裝 [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0)；Legacy 依賴系統自帶 .NET Framework 4.8，無需額外安裝執行階段。
 
 ### 🏁 快速上手三步驟
 

@@ -50,15 +50,6 @@ Microsoft Store · [Full](https://apps.microsoft.com/detail/9NQZGRTPM1NT) / [Lit
 
 📱 [Выпуски приложения для Android](https://github.com/kunkunkunQoQ/SonicRoute-App/releases) · [Инструкция по установке](https://github.com/kunkunkunQoQ/SonicRoute-App/blob/main/README.md#install)
 
-<details>
-<summary><sub>📦 Архивные сборки на .NET 8 (поддержка прекращена)</sub></summary>
-
-| Редакция | Переносимая сборка | Требования |
-|---|---|---|
-| Lite для .NET 8 (поддержка прекращена) | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-NET8-x64.exe) / [ARM64 (экспериментальная сборка)](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-NET8-arm64.exe) | Сборка на .NET 8 доступна в архиве и больше не обновляется. |
-
-</details>
-
 > [!NOTE]
 > Поддерживается Windows 10 версии 2004 и новее. Для захвата звука отдельного процесса и передачи на дополнительные выходы нужна сборка Windows 20348 или новее.
 

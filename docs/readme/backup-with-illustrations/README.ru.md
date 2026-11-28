@@ -65,16 +65,8 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64 (экспериментально) 
 | 🛡️ Legacy x64 (только звук ПК, .NET Framework 4.8) | [Полный ZIP-архив](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.30/SonicRoute-v1.30-Legacy-x64.zip) | Не требует дополнительных сред; использует встроенный .NET Framework 4.8, распакуйте и запускайте. |
 | 🔄 Microsoft Store (на базе Full) | [Установить из Store](https://apps.microsoft.com/detail/9NQZGRTPM1NT) | Собрано на основе Full; требуется x64 .NET 10 Desktop Runtime; актуальная версия определяется страницей Store. |
 
-<details>
-<summary><sub>📦 Прежние сборки NET8 (сняты с поддержки, нажмите для просмотра)</sub></summary>
-
-| Вариант | Скачать | Требования |
-|---|---|---|
-| Lite NET8 (Снят с поддержки) | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-NET8-x64.exe) / [ARM64 (экспериментально)](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-NET8-arm64.exe) | Сборка снята с поддержки и обновлений; рекомендуется перейти на .NET 10 или Legacy. |
-</details>
-
 > [!NOTE]
-> Для Full и Lite требуется [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0); Legacy использует встроенный .NET Framework 4.8 и не требует установки среды (сборки [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0) сняты с поддержки).
+> Для Full и Lite требуется [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0); Legacy использует встроенный .NET Framework 4.8 и не требует установки среды.
 
 ### 🏁 Быстрый старт за 3 шага
 

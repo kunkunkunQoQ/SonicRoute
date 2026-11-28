@@ -50,15 +50,6 @@ Microsoft Store · [Full](https://apps.microsoft.com/detail/9NQZGRTPM1NT) / [Lit
 
 📱 [Android App 下载页](https://github.com/kunkunkunQoQ/SonicRoute-App/releases) · [安装说明](https://github.com/kunkunkunQoQ/SonicRoute-App/blob/main/README.md#install)
 
-<details>
-<summary><sub>📦 旧版 .NET 8 下载（已停止更新）</sub></summary>
-
-| 版本 | 便携包 | 运行要求 |
-|---|---|---|
-| Lite NET8（已停更） | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-NET8-x64.exe) / [ARM64（实验版）](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-NET8-arm64.exe) | 仅保留历史下载。如需继续获取更新，可改用 Full 或 Lite。 |
-
-</details>
-
 > [!NOTE]
 > 桌面版支持 Windows 10 2004（内部版本 19041）及更高版本和 Windows 11。使用逐进程音频捕获向额外设备转发时，需要 Windows 内部版本 20348 或更高。
 
@@ -107,7 +98,7 @@ Windows 会保留应用的主播放设备、录音设备以及现有音频会话
 
 **各版本需要安装哪种运行库？**
 
-Full 和 Lite 的便携包内置 .NET 10 Native AOT 运行时，无需额外安装 .NET 运行时。Microsoft Store 版通过商店独立安装和更新。旧版 .NET 8 仍可下载，现已停止维护。
+Full 和 Lite 的便携包内置 .NET 10 Native AOT 运行时，无需额外安装 .NET 运行时。Microsoft Store 版通过商店独立安装和更新。
 
 **SonicRoute 在后台运行时会持续占用 CPU 吗？**
 

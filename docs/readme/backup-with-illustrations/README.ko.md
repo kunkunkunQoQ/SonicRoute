@@ -65,16 +65,8 @@ Android 휴대폰 오디오 및 가상 디스플레이 기능이 필요하면 **
 | 🛡️ Legacy x64 (PC 오디오 전용, .NET Framework 4.8) | [전체 ZIP](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.30/SonicRoute-v1.30-Legacy-x64.zip) | 추가 런타임 불필요. 제한된 업무용 PC 적합. 시스템 내장 .NET Framework 4.8 기반으로 압축 해제 후 즉시 사용. |
 | 🔄 Microsoft Store (Full 기반) | [Store에서 설치](https://apps.microsoft.com/detail/9NQZGRTPM1NT) | Full 기반 빌드. x64 .NET 10 Desktop Runtime 필요. 스토어 제공 버전은 Store 페이지 기준. |
 
-<details>
-<summary><sub>📦 이전 NET8 호환 버전 (제공 종료, 펼쳐서 보기)</sub></summary>
-
-| 에디션 | 다운로드 | 요구 사항 |
-|---|---|---|
-| Lite NET8 (지원 종료) | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-NET8-x64.exe) / [ARM64 (실험적)](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-NET8-arm64.exe) | 제공 및 업데이트가 종료되었습니다. .NET 10 또는 Legacy 버전으로 이전을 권장합니다. |
-</details>
-
 > [!NOTE]
-> Full과 Lite는 [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0) 설치가 필요하며, Legacy는 Windows 내장 .NET Framework 4.8을 사용하므로 추가 설치가 필요 없습니다 (기존 [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0) 호환 버전은 제공 종료).
+> Full과 Lite는 [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0) 설치가 필요하며, Legacy는 Windows 내장 .NET Framework 4.8을 사용하므로 추가 설치가 필요 없습니다.
 
 ### 🏁 3단계 빠른 시작
 
