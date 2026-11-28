@@ -80,6 +80,13 @@ internal sealed class ExternalAudioBridge : IDisposable
         AppDisplayName.ExternalNameResolver = ResolveExternalDisplayName;
     }
 
+    private static bool UsesAdbAppList(PhonePreview phone, AndroidPhoneProfile profile)
+    {
+        if (profile.LastDevice is not { IsApp: false } saved) return false;
+        var online = phone.Connections.Get(saved).Device;
+        return online == null ? !profile.PreferAppTransport : !online.IsApp;
+    }
+
     private string? ResolveExternalDisplayName(string identifier)
     {
         if (string.IsNullOrWhiteSpace(identifier)) return null;
@@ -98,6 +105,7 @@ internal sealed class ExternalAudioBridge : IDisposable
                 return display.App.IsDeviceAudio ? phone.Store.GetDisplayName(display.Device) : display.App.Name;
             foreach (var p in phone.Store.Profiles)
             {
+                if (!UsesAdbAppList(phone, p)) continue;
                 var found = p.RetainedApps.FirstOrDefault(a => string.Equals(a.Package, pkg, StringComparison.OrdinalIgnoreCase));
                 if (found != null) return found.IsDeviceAudio ? phone.Store.GetProfileDisplayName(p) : found.Name;
             }
@@ -126,7 +134,7 @@ internal sealed class ExternalAudioBridge : IDisposable
             if (choice.App is { } app)
             {
                 var profile = phone?.Store.Profiles.FirstOrDefault(p => AndroidDeviceIdentity.StableKey(p.LastDevice) == choice.DeviceKey);
-                if (profile == null || phone == null) continue;
+                if (profile == null || phone == null || !UsesAdbAppList(phone, profile)) continue;
                 var live = sources.FirstOrDefault(source => source.App.Package == app.Package &&
                     AndroidDeviceIdentity.MatchesSavedDevice(profile.LastDevice, source.Device));
                 string name = phone.Store.GetProfileDisplayName(profile);

@@ -9,10 +9,28 @@ internal sealed record AndroidManagedConnection(AndroidPhoneProfile? Profile, An
 /// remains available to pairing; a saved device is a library reference, not a lease.
 /// No periodic work is owned by this module.
 /// </summary>
-internal sealed class AndroidConnectionManager(AndroidPhoneStore store, Func<AndroidDeviceDiscovery> discovery,
-    Func<AndroidDevice, AndroidDevice, Action?>? migrate = null, SrapPhoneTransport? app = null,
-    AdbClient? adb = null, Func<AndroidDevice, AndroidDevice, bool, Action?>? migrateApp = null)
+internal sealed class AndroidConnectionManager
 {
+    private readonly AndroidPhoneStore store;
+    private readonly Func<AndroidDeviceDiscovery> discovery;
+    private readonly Func<AndroidDevice, AndroidDevice, Action?>? migrate;
+    private readonly SrapPhoneTransport? app;
+    private readonly AdbClient? adb;
+    private readonly Func<AndroidDevice, AndroidDevice, bool, Action?>? migrateApp;
+
+    internal AndroidConnectionManager(AndroidPhoneStore store, Func<AndroidDeviceDiscovery> discovery,
+        Func<AndroidDevice, AndroidDevice, Action?>? migrate = null, SrapPhoneTransport? app = null,
+        AdbClient? adb = null, Func<AndroidDevice, AndroidDevice, bool, Action?>? migrateApp = null)
+    {
+        this.store = store;
+        this.discovery = discovery;
+        this.migrate = migrate;
+        this.app = app;
+        this.adb = adb;
+        this.migrateApp = migrateApp;
+        if (app != null) store.SelectedTransport = Resolve;
+    }
+
     private readonly Dictionary<string, CancellationTokenSource> _operationLifetimes = new();
     private readonly Dictionary<string, int> _retiring = new(StringComparer.Ordinal);
     internal long Revision => store.ManagementRevision;
@@ -94,21 +112,22 @@ internal sealed class AndroidConnectionManager(AndroidPhoneStore store, Func<And
         !requested.IsApp && !resolved.IsApp && (requested.ConnectionTarget == null ||
             requested.ConnectionTarget == resolved.ConnectionTarget && AndroidDeviceIdentity.SameTransport(requested, resolved));
 
-    internal async Task<AndroidApp> ResolveRetainedDisplayAppAsync(AndroidDevice device, AndroidApp app,
+    internal async Task<AndroidApp> ResolveDisplayAppAsync(AndroidDevice device, AndroidApp app,
         Func<AndroidDevice, string, CancellationToken, Task<IReadOnlyList<AndroidApp>>> readPackage, CancellationToken token)
     {
         if (device.IsApp) throw new SrapException("unsupported");
         if (app.IsDeviceAudio || app.Uid != 0) return app;
         var profile = store.FindProfile(device);
-        if (device.ConnectionTarget == null || profile is not { AppPublicKeySha256: { } fingerprint, LastDevice.IsApp: false, AppTrustRevoked: false }
-            || !profile.RetainedApps.Any(a => a.Uid == 0 && a.Package == app.Package))
+        AdbClient.ValidatePackage(app.Package);
+        if (profile is not { LastDevice.IsApp: false } || device.ConnectionTarget == null &&
+            (profile.AppPublicKeySha256 != null || device.TransportId == null && AndroidDeviceIdentity.StableKey(device) == null))
             throw AndroidError.WithCode(new IOException("Refresh the ADB app catalog."), AndroidErrorCode.DisplayAppUidChanged);
         void CheckAttachment()
         {
             token.ThrowIfCancellationRequested();
-            if (!IsCurrent(device) || store.FindProfile(device) is not { AppTrustRevoked: false } current || current.Id != profile.Id
-                || current.AppPublicKeySha256 != fingerprint || !store.HasUniqueAppOwner(current.Id, fingerprint)
-                || !current.RetainedApps.Any(a => a.Uid == 0 && a.Package == app.Package))
+            if (!IsCurrent(device) || store.FindProfile(device) is not { } current || current.Id != profile.Id ||
+                current.AppPublicKeySha256 != profile.AppPublicKeySha256 || current.AppPublicKeySha256 is { } fingerprint &&
+                (current.AppTrustRevoked || !store.HasUniqueAppOwner(current.Id, fingerprint)))
                 throw new SrapException("stale_session");
         }
         CheckAttachment();

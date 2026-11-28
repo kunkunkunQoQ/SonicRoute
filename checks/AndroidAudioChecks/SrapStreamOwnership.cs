@@ -7,7 +7,7 @@ using SonicRoute.AndroidAudio;
 
 internal static partial class Program
 {
-    private static async Task SrapStreamOwnershipAsync(string directory, string kind)
+    private static async Task SrapScreenOwnershipAsync(string directory)
     {
         Directory.CreateDirectory(directory);
         using var identity = new SrapIdentity(directory);
@@ -19,8 +19,6 @@ internal static partial class Program
         var ct = deadline.Token;
         string parent = Guid.NewGuid().ToString("N"), pin = Convert.ToHexString(SHA256.HashData(signer.ExportSubjectPublicKeyInfo()));
         var accept = AcceptSrapFixtureAsync(listener, cert, identity.Fingerprint, parent, [
-            new JsonObject { ["id"] = "files.transfer", ["state"] = "available", ["scope"] = "saf_tree",
-                ["limits"] = new JsonObject { ["grant"] = "1", ["write"] = "false" } },
             new JsonObject { ["id"] = "display.mirror", ["state"] = "available", ["scope"] = "one_projection",
                 ["limits"] = new JsonObject { ["codec"] = "h264", ["grant"] = "9", ["maxUnit"] = "1048576" } },
             new JsonObject { ["id"] = "volume.device", ["state"] = "available" }], ct);
@@ -42,35 +40,6 @@ internal static partial class Program
             Check((await query).GetProperty("percent").GetInt32() == 27 && !session.Token.IsCancellationRequested,
                 "independent operations still work on the same authenticated connection");
         }
-        if (kind == "file")
-        {
-            var files = new SrapFilesClient(session);
-            string folder = SrapFilesClient.Root(session);
-            string destination = Path.Combine(directory, "receive-" + Guid.NewGuid().ToString("N"));
-            using var local = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            var download = files.ReceiveAsync(folder, "selected.bin", destination, local.Token);
-            var open = await Read("file.open");
-            uint id = SrapClient.Body(open).GetProperty("params").GetProperty("streamId").GetUInt32();
-            await Reply(open, new() { ["streamId"] = id, ["size"] = 4 });
-            var chunk = await Read("file.chunk");
-            await local.CancelAsync();
-            bool canceled = false;
-            try { await download; } catch (OperationCanceledException) { canceled = true; }
-            var cancelRequest = SrapClient.Body(await SrapClient.ReadAsync(remote, ct));
-            var cancelStream = SrapClient.Body(await SrapClient.ReadAsync(remote, ct));
-            Check(canceled && SrapClient.Text(cancelRequest, "requestId") == SrapClient.Text(chunk, "id")
-                && cancelStream.GetProperty("streamId").GetUInt32() == id && !Directory.EnumerateFileSystemEntries(destination).Any(),
-                "download cancellation removes its partial file and cancels only the requested transfer");
-            await remote.WriteAsync(SrapProtocol.Encode(new(SrapFrameType.Data, id, [1, 2, 3, 4])), ct);
-            await Reply(chunk, new() { ["offset"] = 0, ["count"] = 4 });
-            await AssertControlConnection();
-            bool denied = false;
-            try { await files.SendAsync(Path.Combine(destination, "not-read.bin"), folder, ct); }
-            catch (SrapException e) when (e.Code == "permission_lost") { denied = true; }
-            Check(denied, "a read-only SAF grant rejects uploads before reading a local file");
-        }
-        else if (kind == "screen")
-        {
             var delivered = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
             using var existing = session.ExpectData(2, p => delivered.TrySetResult(p.Length));
             var view = session.ViewScreenAsync("Unopened fixture window", ct);
@@ -96,8 +65,6 @@ internal static partial class Program
             Check(refused && SrapClient.Text(fallback, "type") == "cancel" && SrapClient.Body(fallback).GetProperty("streamId").GetUInt32() == 4,
                 "a different stream's stop receipt fails the close and cancels only the viewer's own ID");
             await AssertControlConnection();
-        }
-        else throw new ArgumentException("Choose file or screen.");
-        Console.WriteLine($"PASS {_checks} SRAP {kind} stream ownership checks");
+        Console.WriteLine($"PASS {_checks} SRAP screen ownership checks");
     }
 }

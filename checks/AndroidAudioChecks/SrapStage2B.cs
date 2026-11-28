@@ -42,13 +42,11 @@ internal static partial class Program
         store.RememberDevice(adb);
         string id = store.Profile.Id;
         store.Rename("Preserved ADB");
-        store.Retain(new("example.adb", "ADB", 12345, ""));
         var discovery = new AndroidDeviceDiscovery(_ => Task.FromResult<IReadOnlyList<AndroidDevice>>([adb]));
         discovery.Publish([adb]);
         await using var transport = new SrapPhoneTransport(store, directory);
         var manager = new AndroidConnectionManager(store, () => discovery, app: transport, adb: client);
         string appId = store.RegisterApp(pin, IPEndPoint.Parse("127.0.0.1:12345"), store.ManagementRevision).Id;
-        store.Retain(new("example.app", "App", 0, ""));
         using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(35));
         var ct = deadline.Token;
         using var mainListener = new TcpListener(IPAddress.Loopback, 0);
@@ -125,7 +123,7 @@ internal static partial class Program
                     scenario + " preserves both profiles and cancels only the original request");
             }
             else Check(error == null && store.Profiles.Count == 1 && store.Profile.Id == id && store.Profile.Name == "Preserved ADB"
-                && store.Profile.RetainedApps.Count == 2 && store.FindProfile(app)?.Id == id, "verified transaction merges pins while preserving ADB ID and name");
+                && store.FindProfile(app)?.Id == id, "verified transaction links the authenticated peer while preserving ADB ID and name");
             if (scenario == "accepted")
                 Check(shared.Commands.Count(c => c == "tcp:" + port) == 1
                     && shared.Requests.Contains("host:transport-id:" + adb.TransportId) && shared.Requests.Contains("host:track-devices-l")
@@ -146,15 +144,27 @@ internal static partial class Program
         using var server = await reconnect;
         var linked = transport.Admit(store.Profile, fresh);
         Check(manager.Resolve(adb) == adb, "both channels available uses ADB by default");
-        var unknownUid = store.Profile.RetainedApps.Single(a => a.Package == "example.app");
-        var verifiedApp = await manager.ResolveRetainedDisplayAppAsync(adb, unknownUid, (selected, package, _) =>
+        var operations = new SrapOperationAdapter(new AdbOperationAdapter(client), transport, manager.IsCurrent);
+        var pinned = new AndroidApp("example.saved", "Saved ADB app", 10080, "media");
+        const string folder = "/sdcard/Download/ADB";
+        store.Retain(pinned);
+        store.SetSmartVolume(pinned.Package, false);
+        store.SetReceiveFolder(id, folder);
+        var adbFiles = operations.OpenFiles(adb);
+        var adbClipboard = operations.OpenClipboard(adb);
+        Check(operations.CanWriteFiles(adb) && operations.CanSyncClipboard(adb) && operations.FileRoot(adb) == "/sdcard"
+            && store.Profile.QuickPanelApps.Single() == pinned && !store.IsSmartVolumeEnabled(adb, pinned.Package)
+            && store.Profile.ReceiveFolder == folder, "ADB owns file, clipboard, pin, smart-volume and folder settings");
+
+        var unknownUid = new AndroidApp("example.app", "App", 0, "");
+        var verifiedApp = await manager.ResolveDisplayAppAsync(adb, unknownUid, (selected, package, _) =>
             Task.FromResult<IReadOnlyList<AndroidApp>>(selected == adb && package == unknownUid.Package ? [unknownUid with { Uid = 10200 }] : []), ct);
         Check(verifiedApp.Package == unknownUid.Package && verifiedApp.Uid == 10200,
-            "an App-only retained package obtains its actual UID from the exact bound ADB attachment before interactive launch");
+            "a live App package obtains its actual UID from the exact bound ADB attachment before interactive launch");
         bool staleCatalog = false;
         try
         {
-            await manager.ResolveRetainedDisplayAppAsync(adb, unknownUid, (_, _, _) =>
+            await manager.ResolveDisplayAppAsync(adb, unknownUid, (_, _, _) =>
             {
                 discovery.Publish([]);
                 return Task.FromResult<IReadOnlyList<AndroidApp>>([unknownUid with { Uid = 10200 }]);
@@ -163,7 +173,31 @@ internal static partial class Program
         catch (SrapException ex) when (ex.Code == "stale_session") { staleCatalog = true; }
         discovery.Publish([adb]);
         Check(staleCatalog, "a UID read completing after ADB loss cannot open the package");
+        var adbLifetime = manager.OperationToken(adb);
         manager.SelectAppTransport(id, pin, true);
+        Check(adbLifetime.IsCancellationRequested && !operations.CanSyncClipboard(linked) && !operations.CanWriteFiles(linked)
+            && operations.FileRoot(linked) == null && !operations.CanSyncClipboard(adb) && !operations.CanWriteFiles(adb),
+            "switching one bound phone to App cancels old ADB work and hides files and clipboard on both handles");
+        async Task Rejected(Func<Task> action, string reason, string label)
+        {
+            try { await action(); }
+            catch (SrapException ex) when (ex.Code == reason) { Check(true, label); return; }
+            throw new InvalidOperationException(label);
+        }
+        await Rejected(() => operations.OpenFiles(linked).ListAsync(folder, ct), "unsupported", "App files cannot fall back to ADB");
+        await Rejected(() => operations.OpenClipboard(linked).SendAsync("fixture", 0, ct), "unsupported", "App clipboard cannot fall back to ADB");
+        await Rejected(() => operations.EncodersAsync(linked, ct), "unsupported", "ADB encoder choices stay on the ADB transport");
+        await Rejected(() => adbFiles.ListAsync(folder, ct), "stale_session", "an old ADB browser refuses work after a switch");
+        await Rejected(() => adbClipboard.SendAsync("fixture", 0, ct), "stale_session", "an old ADB clipboard refuses work after a switch");
+        store.Remove(pinned.Package);
+        store.Retain(pinned with { Package = "example.app.only" });
+        store.SetSmartVolume(pinned.Package, true);
+        store.SetReceiveFolder(id, "/sdcard/Download/Other");
+        await store.FlushAsync();
+        var preserved = new AndroidPhoneStore(statePath).Profile;
+        Check(preserved.RetainedApps.Single() == pinned && preserved.DisabledSmartVolumeApps.Contains(pinned.Package)
+            && preserved.ReceiveFolder == folder && !store.IsSmartVolumeEnabled(linked, pinned.Package),
+            "App preference changes cannot overwrite the bound phone's ADB pins, gain or receive folder");
         Check(manager.VerifiedAdbForDisplay(linked) == adb && manager.VerifiedAdbForDisplay(app) == null,
             "the interactive-window switch resolves only the live, cryptographically linked ADB profile");
         Check(manager.Resolve(adb) == linked && manager.OnlineDevices.Count == 1 && AndroidDeviceIdentity.Key(linked) == AndroidDeviceIdentity.Key(adb)
@@ -177,6 +211,10 @@ internal static partial class Program
         discovery.Publish([adb]);
         transport.RevokeTrust(id, pin);
         Check(manager.Resolve(adb) == adb && !manager.IsCurrent(linked) && !store.Profile.ManuallyDisconnected, "revoking App trust preserves independent ADB connectivity");
+        store.SetSmartVolume(pinned.Package, true);
+        Check(operations.CanWriteFiles(adb) && operations.CanSyncClipboard(adb) && store.IsSmartVolumeEnabled(adb, pinned.Package)
+            && store.Profile.QuickPanelApps.Single() == pinned && store.Profile.ReceiveFolder == folder,
+            "returning to ADB restores the saved ADB pane and editable smart volume");
         manager.SelectAppTransport(id, pin, null);
         Check(new AndroidPhoneStore(statePath).Profile is { AppPublicKeySha256: null, PreferAppTransport: false }
             && store.Profile.Id == id, "explicit unlink forgets the local binding and keeps the ADB profile");

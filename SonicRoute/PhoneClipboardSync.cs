@@ -97,7 +97,7 @@ public sealed class PhoneClipboardSync(string filePath, Dispatcher dispatcher, I
         }
         return false;
     }
-    public bool IsEnabled(AndroidDevice? device) => device != null && _enabled.Any(d => AndroidDeviceIdentity.MatchesSavedDevice(d, device));
+    public bool IsEnabled(AndroidDevice? device) => device is { IsApp: false } && _enabled.Any(d => AndroidDeviceIdentity.MatchesSavedDevice(d, device));
     public string Status(AndroidDevice? device) => _saveError ? L10n.T("Phone.ClipboardSaveError") : device == null || !IsEnabled(device) ? L10n.T("Phone.ClipboardDefaultHint")
         : _sessions.TryGetValue(AndroidDeviceIdentity.Key(device), out var session) ? SessionStatusText(session.State) : L10n.T("Phone.ClipboardWaitingPhone");
 
@@ -110,7 +110,7 @@ public sealed class PhoneClipboardSync(string filePath, Dispatcher dispatcher, I
                 if (!File.Exists(filePath) || new FileInfo(filePath).Length > 64 * 1024) return null;
                 var value = JsonSerializer.Deserialize<Saved>(File.ReadAllText(filePath));
                 if (value?.Version != 1 || value.EnabledDevices == null || value.EnabledDevices.Length > 32) return null;
-                static AndroidDevice[] ValidDevices(AndroidDevice[] devices) => devices.Where(d => d != null && !string.IsNullOrWhiteSpace(d.Serial)
+                static AndroidDevice[] ValidDevices(AndroidDevice[] devices) => devices.Where(d => d is { IsApp: false } && !string.IsNullOrWhiteSpace(d.Serial)
                     && d.Serial.Length <= 512 && (d.HardwareId?.Length ?? 0) <= 128).DistinctBy(AndroidDeviceIdentity.Key).ToArray();
                 return value with { EnabledDevices = ValidDevices(value.EnabledDevices), ArchivedDevices = ValidDevices(value.ArchivedDevices ?? []) };
             }
@@ -137,7 +137,7 @@ public sealed class PhoneClipboardSync(string filePath, Dispatcher dispatcher, I
     public void SetEnabled(AndroidDevice device, bool enabled)
     {
         dispatcher.VerifyAccess();
-        if (_disposed || enabled == IsEnabled(device) || enabled && AndroidAudioHost.IsPhoneCreated && AndroidAudioHost.Phone.IsRemoved(device)) return;
+        if (_disposed || device.IsApp || enabled == IsEnabled(device) || enabled && AndroidAudioHost.IsPhoneCreated && AndroidAudioHost.Phone.IsRemoved(device)) return;
         if (enabled)
         {
             if (_enabled.Count >= 32) throw AndroidError.WithCode(new InvalidOperationException("最多同步32台手机。"), AndroidErrorCode.MaxClipboardPhones);
@@ -202,7 +202,7 @@ public sealed class PhoneClipboardSync(string filePath, Dispatcher dispatcher, I
         if (current is { Finished: false } && !current.Stop.IsCancellationRequested
             && (PhoneAudioWindowCache.Manager.IsCurrent(current.Device) || PhoneAudioWindowCache.Manager.AwaitingDiscovery(current.Device)))
             return current.Device;
-        return PhoneAudioWindowCache.Manager.Get(saved, current?.Device).Device;
+        return PhoneAudioWindowCache.Manager.Get(saved, current?.Device).Device is { IsApp: false } live ? live : null;
     }
     private void Reconcile(bool retry, Session? recovering = null)
     {

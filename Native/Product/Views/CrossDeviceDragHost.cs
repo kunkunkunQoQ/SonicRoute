@@ -42,7 +42,10 @@ internal static class CrossDeviceDragHost
             if (returnToPhone)
                 await host.Phone.ReturnAndroidToPhoneAsync(device, app.Package).ConfigureAwait(false);
             else if (shared is { } keepPhoneAudio)
+            {
+                if (!device.IsApp) app = await host.Phone.ResolveAdbAppAsync(device, app).ConfigureAwait(false);
                 await host.Phone.Sources.AddAsync(device, app, keepPhoneAudio).ConfigureAwait(false);
+            }
             else if (!device.IsApp)
                 await host.Phone.OpenDisplayAsync(device, app, x, y).ConfigureAwait(false);
         }

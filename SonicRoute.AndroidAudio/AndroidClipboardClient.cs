@@ -19,6 +19,7 @@ public sealed class AndroidClipboardClient(AdbClient adb) : IAndroidClipboardCli
     private static readonly Encoding Utf8NoBom = new UTF8Encoding(false);
     private IAdbShellSession? _session;
     private StreamWriter? _writer;
+    internal Action? RequireCurrent { get; init; }
     private readonly SemaphoreSlim _sendGate = new(1, 1);
     private CancellationToken _writeLifetime = new(true);
     private long _revision;
@@ -30,6 +31,8 @@ public sealed class AndroidClipboardClient(AdbClient adb) : IAndroidClipboardCli
         && command.Split(' ', StringSplitOptions.RemoveEmptyEntries).Contains(id);
     public async Task WatchAsync(AndroidDevice device, Action ready, Action<string> changed, CancellationToken token)
     {
+        if (device.IsApp) throw new SrapException("unsupported");
+        RequireCurrent?.Invoke();
         using var sends = CancellationTokenSource.CreateLinkedTokenSource(token);
         await adb.PrepareRuntimeAsync("audio", token).ConfigureAwait(false);
         string id = Guid.NewGuid().ToString("N");
@@ -40,6 +43,7 @@ public sealed class AndroidClipboardClient(AdbClient adb) : IAndroidClipboardCli
         {
             string remote = await adb.EnsureCatalogJarAsync(device.CommandTarget, token).ConfigureAwait(false);
             token.ThrowIfCancellationRequested();
+            RequireCurrent?.Invoke();
             var session = await adb.OpenShellAsync(device.CommandTarget,
                 "echo SR_CLIPBOARD_PID:$$; CLASSPATH=" + remote + " exec app_process / org.sonicroute.android.ClipboardBridge " + id,
                 redirectInput: true, token).ConfigureAwait(false);
@@ -59,6 +63,7 @@ public sealed class AndroidClipboardClient(AdbClient adb) : IAndroidClipboardCli
             bool started = false;
             while (await stdout.ReadLineAsync(started ? token : startup.Token).ConfigureAwait(false) is { } line)
             {
+                RequireCurrent?.Invoke();
                 if (line.StartsWith("SR_CLIPBOARD_PID:", StringComparison.Ordinal))
                 { string value = line[17..].Trim(); if (Regex.IsMatch(value, @"\A[1-9]\d*\z")) pid = value; }
                 else if (line.StartsWith('{'))
@@ -121,6 +126,7 @@ public sealed class AndroidClipboardClient(AdbClient adb) : IAndroidClipboardCli
         await _sendGate.WaitAsync(token).ConfigureAwait(false);
         try
         {
+            RequireCurrent?.Invoke();
             var writer = _writer ?? throw AndroidError.WithCode(new IOException("剪贴板尚未连接。"), AndroidErrorCode.ClipboardNotConnected);
             using var sending = CancellationTokenSource.CreateLinkedTokenSource(token, _writeLifetime);
             // The coordinator supplies one bounded writer per phone, rather than queued writes per copy.

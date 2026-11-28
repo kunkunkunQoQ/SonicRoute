@@ -90,7 +90,7 @@ internal sealed partial class SrapSession : IDisposable
     {
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancel, token);
         if (op != "display.next")
-            deadline.CancelAfter(TimeSpan.FromSeconds(op == "file.offer" ? 65 : op == "file.finish" ? 605 : 6));
+            deadline.CancelAfter(TimeSpan.FromSeconds(6));
         if (!await requestSlots.WaitAsync(0, deadline.Token).ConfigureAwait(false)) throw new SrapException("busy");
         string id = RequestId();
         var channel = Channel.CreateBounded<JsonElement>(new BoundedChannelOptions(2) { SingleReader = true, SingleWriter = true });

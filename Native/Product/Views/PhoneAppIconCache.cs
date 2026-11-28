@@ -46,7 +46,7 @@ internal sealed class PhoneAppIconCache(ApplicationHost host, int capacity, Acti
 
     internal AndroidApp Resolve(AndroidDevice? device, AndroidApp app)
     {
-        if (app.IconPng is { Length: > 0 } || device is not { IsApp: true } || app.IsDeviceAudio) return app;
+        if (app.IconPng is { Length: > 0 } || device == null || app.IsDeviceAudio) return app;
         var key = (AndroidDeviceIdentity.Key(device), app.Package);
         if (_metadata.TryGetValue(key, out var found) && ReferenceEquals(found.Device, device) && !found.Attachment.IsCancellationRequested &&
             (found.RequestedName == app.Name || app.Package == app.Name || found.App.Name == app.Name)) return found.App;

@@ -108,7 +108,7 @@ internal sealed partial class PhonePreview
             string key = old.DeviceKey + "\n" + old.Package;
             if (Settings.FindExternalAudio(key) != null || Connections.ResolveKey(old.DeviceKey) is not { } online) continue;
             var app = old.Package == AndroidApp.DeviceAudioPackage ? AndroidApp.DeviceAudio
-                : Store.FindProfile(online)?.RetainedApps.FirstOrDefault(a => a.Package == old.Package)
+                : (!online.IsApp ? Store.FindProfile(online)?.RetainedApps.FirstOrDefault(item => item.Package == old.Package) : null)
                     ?? new AndroidApp(old.Package, old.Package, -1, "");
             await ResumeCaptureAsync(key, online, app, old.Outputs).ConfigureAwait(false);
         }
@@ -131,12 +131,7 @@ internal sealed partial class PhonePreview
                 && source.App.Package == key && source.Session.State.State != CaptureState.Failed)) continue;
             try
             {
-                using var operation = CancellationTokenSource.CreateLinkedTokenSource(token, Connections.OperationToken(device));
-                var app = permission.IsDeviceMedia ? AndroidApp.DeviceAudio :
-                    (await Operations.AppsAsync(device, operation.Token, [key]).ConfigureAwait(false))
-                        .FirstOrDefault(item => item.Package == key)
-                        ?? profile.RetainedApps.FirstOrDefault(item => item.Package == key)
-                        ?? new AndroidApp(key, key, 0, "");
+                var app = permission.IsDeviceMedia ? AndroidApp.DeviceAudio : new AndroidApp(key, key, 0, "");
                 if (Operations.AppCapture(device) != permission || !Connections.IsCurrent(device)) continue;
                 var preferences = Settings.FindExternalAudio(ExternalAudioPreference.AndroidKey(device, app.Package));
                 var selected = preferences?.Outputs ?? Settings.Get(device, app.Package).ResumeOutputs ?? [null];

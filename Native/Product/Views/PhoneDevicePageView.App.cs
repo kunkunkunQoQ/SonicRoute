@@ -159,7 +159,7 @@ internal sealed partial class PhoneDevicePageView
         bool icons = more.X - nameX - screenW - soundW < 140f;
         float right = more.X - 6f;
         if (sound) Draw("phone.app.sound", soundLabel, playing ? UiIcon.Pause : UiIcon.Headphones, soundW);
-        if (screen) Draw("phone.app.screen", screenLabel, UiIcon.Monitor, screenW);
+        if (screen) Draw("phone.app.screen", screenLabel, UiIcon.Phone, screenW);
         return right;
 
         void Draw(string action, string title, UiIcon icon, float buttonWidth)
@@ -178,15 +178,6 @@ internal sealed partial class PhoneDevicePageView
     private void AddAppDeviceTools(List<UiMenuItem> items, AndroidPhoneProfile profile, UiRect anchor)
     {
         var phone = _actions.Host.Phone;
-        if (profile.AppPublicKeySha256 is { } pin && phone.PcListening.IsAllowed(profile))
-        {
-            items.Add(new UiMenuItem { Text = L10n.T("Phone.AllowPcListening"), Checked = true, Click = () =>
-            {
-                if (!_active || IsConnectionPage || phone.Store.Profile.Id != profile.Id) return;
-                try { phone.PcListening.SetPermission(profile.Id, pin, false); }
-                catch (Exception ex) { SetStatus(PhonePreview.TranslateError(ex), true); }
-            } });
-        }
         if (_activeDevice is not { IsApp: true } device) return;
         bool current() => _active && !IsConnectionPage && !_busy && ReferenceEquals(_activeDevice, device) && phone.Store.Profile.Id == profile.Id;
         void Command(string id) { if (current()) HandleAppDeviceAction(id, anchor); }
@@ -229,44 +220,9 @@ internal sealed partial class PhoneDevicePageView
         items.Add(new UiMenuItem { Text = L10n.T("Phone.Disconnect"), Click = () => { if (current()) RunDeviceCommand("phone.disconnect"); } });
     }
 
-    private static string PromptAction(PcListeningPrompt prompt, bool allow) =>
-        $"phone.pcListen.{(allow ? "allow" : "deny")}:{prompt.Attachment}:{prompt.Request}";
-
-    private float PcListenPromptHeight(float w) => 52f + PhoneTextHeight(L10n.T("Phone.PcAudioAsk"), Math.Max(1f, w - 2 * DeviceCardPadding), 13f);
-
-    private void DrawPcListeningPrompt(D2dTarget g, UiThemePalette t, UiRect card, PcListeningPrompt prompt)
-    {
-        float left = card.X + DeviceCardPadding, inner = card.Width - 2 * DeviceCardPadding;
-        float top = card.Y + 64f;
-        g.DrawLine(left, top, card.Right - DeviceCardPadding, top, t.Border, 1f);
-        string title = L10n.T("Phone.PcAudioAsk");
-        var question = new UiRect(left, top + 5f, inner, PhoneTextHeight(title, inner, 13f));
-        g.DrawText(title, question, t.TextPrimary, 13f, 600, wrap: true);
-        _hit.DescribeText("phone.pcListen.prompt", question, title);
-        string allow = L10n.T("Phone.PcAudioAllow"), deny = L10n.T("Phone.PcAudioDecline");
-        float yesW = Math.Min(inner * .6f, PhoneTextWidth(allow, 12f, 600) + 24f);
-        var yes = new UiRect(left, question.Bottom + 6f, yesW, 29f);
-        UiPrimitives.DrawAccentButton(g, t, _hit, PromptAction(prompt, true), yes, allow, fontSize: 12f);
-        var no = new UiRect(yes.Right + 6f, yes.Y, Math.Min(inner - yesW - 6f, PhoneTextWidth(deny, 12f) + 24f), yes.Height);
-        UiPrimitives.DrawSecondaryButton(g, t, _hit, PromptAction(prompt, false), no, deny, fontSize: 12f);
-    }
-
     private bool HandleAppDeviceAction(string id, UiRect anchor)
     {
         var host = _actions.Host;
-        if (id.StartsWith("phone.pcListen.", StringComparison.Ordinal))
-        {
-            if (_active && !IsConnectionPage && host.Phone.PcListening.Pending(host.Phone.Store.Profile.Id) is { } prompt)
-            {
-                bool allow = id == PromptAction(prompt, true);
-                if (allow || id == PromptAction(prompt, false))
-                {
-                    try { host.Phone.PcListening.Answer(prompt, allow); _actions.Invalidate(); }
-                    catch (Exception ex) { SetStatus(PhonePreview.TranslateError(ex), true); }
-                }
-            }
-            return true;
-        }
         if (id == "phone.app.find")
         {
             SearchAppCandidates();
@@ -304,8 +260,7 @@ internal sealed partial class PhoneDevicePageView
                     RunBusy(ct => host.Phone.Sources.RemoveApplicationAsync(device, package).WaitAsync(ct));
                 else
                 {
-                    var app = capture.IsDeviceMedia ? AndroidApp.DeviceAudio :
-                        host.Phone.Store.FindProfile(device)?.RetainedApps.FirstOrDefault(a => a.Package == package) ?? new AndroidApp(package, package, 0, "");
+                    var app = capture.IsDeviceMedia ? AndroidApp.DeviceAudio : new AndroidApp(package, package, 0, "");
                     RunBusy(ct => host.Phone.Sources.AddAsync(device, app, keepPhoneAudio: true).WaitAsync(ct));
                 }
             }

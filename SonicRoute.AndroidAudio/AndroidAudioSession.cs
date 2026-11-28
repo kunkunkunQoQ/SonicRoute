@@ -147,7 +147,7 @@ public sealed class AndroidAudioSession : IAsyncDisposable, SonicRoute.AirPlay.I
             int generation = ++_generation;
             _renderFailure = null;
             runToken.ThrowIfCancellationRequested();
-            Update(s => s with { State = CaptureState.Starting, Device = device, App = app, Error = null, ErrorCode = null });
+            Update(s => s with { State = CaptureState.Starting, Device = device, App = app, SmartVolume = !device.IsApp && s.SmartVolume, Error = null, ErrorCode = null });
             if (device.IsApp)
             {
                 var session = AppSession?.Invoke(device) ?? throw new SrapException("unsupported");
@@ -311,7 +311,7 @@ public sealed class AndroidAudioSession : IAsyncDisposable, SonicRoute.AirPlay.I
     // Keep the capturing delegates out of the no-change fast path.
     private void ChangeVolume(int volume) => Update(s => s with { Volume = volume });
     private void ChangeMute(bool muted) => Update(s => s with { Muted = muted });
-    private void ChangeSmartVolume(bool enabled) => Update(s => s with { SmartVolume = enabled });
+    private void ChangeSmartVolume(bool enabled) => Update(s => s with { SmartVolume = enabled && s.Device?.IsApp != true });
     string?[] IMultiOutputAudioSession.GetOutputs() => [State.OutputId, .. Volatile.Read(ref _extraIds)];
     Task IMultiOutputAudioSession.SetOutputsAsync(IReadOnlyList<string?> outputs) => ApplyOutputsAsync(outputs.ToArray(), true);
     (int VolumePercent, bool Muted) IMultiOutputAudioSession.GetMirrorGain(string id) => _mirrors.GetGain(id);

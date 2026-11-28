@@ -11,7 +11,7 @@ internal sealed partial class SrapSession
         cap is { State: "available", Scope: "one_projection" } && cap.Limits?.GetValueOrDefault("codec") == "h264"
         ? cap.Limits.GetValueOrDefault("grant") : null;
 
-    internal async Task ViewScreenAsync(string title, CancellationToken cancel)
+    internal async Task ViewScreenAsync(string title, CancellationToken cancel, AndroidDevice? device = null)
     {
         cancel.ThrowIfCancellationRequested();
         SrapScreenViewer viewer;
@@ -22,7 +22,8 @@ internal sealed partial class SrapSession
             created = screen == null;
             if (created)
             {
-                screen = new SrapScreenViewer(this, title, grant);
+                string deviceKey = device == null ? "app:" + PeerFingerprint : AndroidDeviceIdentity.Key(device);
+                screen = new SrapScreenViewer(this, title, grant, deviceKey);
                 screen.Start(finished => { lock (screenLock) { if (ReferenceEquals(screen, finished)) screen = null; } });
             }
             viewer = screen!;
@@ -47,7 +48,7 @@ internal sealed partial class SrapSession
 }
 
 /// <summary>A view-only MediaProjection stream. The native window becomes visible on a decoded and presented frame.</summary>
-internal sealed class SrapScreenViewer(SrapSession session, string title, string grant)
+internal sealed class SrapScreenViewer(SrapSession session, string title, string grant, string deviceKey)
 {
     private readonly CancellationTokenSource stop = CancellationTokenSource.CreateLinkedTokenSource(session.Token);
     private readonly TaskCompletionSource firstFrame = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -104,8 +105,10 @@ internal sealed class SrapScreenViewer(SrapSession session, string title, string
             if (width is < 16 or > 1280 || height is < 16 or > 1280 || Math.Min(width, height) > 720 ||
                 (width | height) % 2 != 0 || SrapClient.Text(opened, "codec") != "h264") throw Invalid();
             var (w, h) = MirrorAspectMath.FitAspect((int)width, (int)height, 1120, 800);
-            var view = new NativeVideoWindow(title, isMirrorMode: true, preferText: false, iconPng: null,
-                x: 100, y: 80, w, h, acceptsGamepad: false, windowModes: true);
+            var view = new NativeVideoWindow(title, isMirrorMode: true, preferText: false,
+                iconPng: WicIconLoader.LoadDefaultPhoneIconPng(), x: 100, y: 80, w, h,
+                appUserModelId: InProcessVirtualDisplayClient.BuildWindowAppUserModelId(deviceKey, AndroidApp.DeviceAudioPackage),
+                acceptsGamepad: false, windowModes: true);
             Volatile.Write(ref window, view);
             view.UpdateContentSize((int)width, (int)height);
             view.CloseRequested += Cancel;

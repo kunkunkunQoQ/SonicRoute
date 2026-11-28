@@ -4,22 +4,6 @@ internal sealed partial class SrapSession
 {
     private readonly object incomingLock = new();
     private readonly Dictionary<uint, DataLease> incomingData = [];
-    // A canceled download may already have one solicited DATA packet in flight.
-    // IDs are never reused. Keep only its exact size, for the bounded request lifetime.
-    private readonly Dictionary<uint, (int Bytes, long Expires)> canceledFileChunks = [];
-
-    internal void DiscardPendingFileChunk(uint id, int bytes)
-    {
-        lock (incomingLock)
-        {
-            long now = Environment.TickCount64;
-            foreach (var pair in canceledFileChunks.ToArray())
-                if (pair.Value.Expires <= now) canceledFileChunks.Remove(pair.Key);
-            if (canceledFileChunks.Count == 16)
-                canceledFileChunks.Remove(canceledFileChunks.MinBy(p => p.Value.Expires).Key);
-            canceledFileChunks[id] = (bytes, now + 8000);
-        }
-    }
 
     internal IDisposable ExpectData(uint id, Action<ReadOnlyMemory<byte>> onData)
     {
@@ -39,11 +23,7 @@ internal sealed partial class SrapSession
         lock (incomingLock)
         {
             if (!incomingData.TryGetValue(frame.StreamId, out var target))
-            {
-                if (canceledFileChunks.Remove(frame.StreamId, out var pending) && pending.Expires >= Environment.TickCount64
-                    && frame.Payload.Length == pending.Bytes) return;
                 throw new SrapException("invalid_argument");
-            }
             lease = target;
         }
         lease.Receive(frame.Payload);

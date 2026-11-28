@@ -31,10 +31,11 @@ public partial class PhoneDevicePage
     private AndroidFileProgress? FileProgressState => TransferProfileId is { } id ? AndroidAudioHost.FileTransfers.Get(id) : null;
 
     private string? AndroidFileTarget() => !_disposed && !IsConnectionPage
-        && FileProgressState?.Phase != AndroidFilePhase.Running && _device != null && PhoneAudioWindowCache.Manager.IsCurrent(_device) ? _device.CommandTarget : null;
+        && FileProgressState?.Phase != AndroidFilePhase.Running && _device is { IsApp: false } && PhoneAudioWindowCache.Manager.IsCurrent(_device) ? _device.CommandTarget : null;
 
     private void UpdateAndroidFiles(bool connectionPage)
     {
+        connectionPage |= (_device ?? AndroidAudioHost.Phone.Profile.LastDevice)?.IsApp == true;
         string? serial = connectionPage ? null : _device?.CommandTarget;
         ResetAndroidFilePicker(serial);
         FileTransferCard.Visibility = connectionPage ? Visibility.Collapsed : Visibility.Visible;

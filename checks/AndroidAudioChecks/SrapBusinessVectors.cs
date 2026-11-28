@@ -15,6 +15,7 @@ internal static partial class Program
         foreach (string row in File.ReadLines(fixtures).Where(line => line.Length != 0 && !line.StartsWith('#')))
         {
             var fields = row.Split('|');
+            if (fields[0].StartsWith("file.", StringComparison.Ordinal)) continue;
             if (fields.Length != 5) throw new InvalidDataException("Invalid business fixture row.");
             using var metadata = JsonDocument.Parse(fields[2]);
             var meta = metadata.RootElement.Clone();
@@ -58,8 +59,6 @@ internal static partial class Program
         var ct = deadline.Token;
         string parent = Guid.NewGuid().ToString("N"), pin = Convert.ToHexString(SHA256.HashData(signer.ExportSubjectPublicKeyInfo()));
         var accepting = AcceptSrapFixtureAsync(listener, cert, identity.Fingerprint, parent, [
-            new JsonObject { ["id"] = "files.transfer", ["state"] = "available", ["scope"] = "saf_tree",
-                ["limits"] = new JsonObject { ["grant"] = "1", ["write"] = "false" } },
             new JsonObject { ["id"] = "volume.device", ["state"] = "available", ["scope"] = "system_media",
                 ["limits"] = new JsonObject { ["indexWrite"] = "1" } }], ct);
         using var session = await new SrapClient(identity).ConnectAsync((IPEndPoint)listener.LocalEndpoint, pin, ct);
@@ -72,37 +71,6 @@ internal static partial class Program
         }
         Task Reply(JsonElement message, JsonObject result) => SrapClient.WriteAsync(peer, "response",
             new() { ["status"] = "done", ["result"] = result }, ct, SrapClient.Text(message, "id"), parent);
-
-        var file = vectors["file.binary"];
-        var files = new SrapFilesClient(session);
-        string folder = SrapFilesClient.Root(session) + "/" + string.Join('/', file.Meta.GetProperty("parent").EnumerateArray().Select(p => p.GetString()));
-        string name = file.Meta.GetProperty("name").GetString()!, destination = Path.Combine(directory, "download");
-        string digest = file.Meta.GetProperty("sha256").GetString()!;
-        long size = file.Meta.GetProperty("size").GetInt64();
-        var invalid = vectors["file.unsafe_name"];
-        bool denied = false;
-        try { await files.ReceiveAsync(folder, invalid.Meta.GetProperty("params").GetProperty("name").GetString()!, destination, ct); }
-        catch (SrapException error) when (error.Code == "invalid_argument") { denied = true; }
-        Check(invalid.Expected == "reject" && denied, "the receiving file adapter rejects the shared reserved name before requesting a file");
-        var receive = files.ReceiveAsync(folder, name, destination, ct);
-        var open = await Read("file.open");
-        var param = SrapClient.Body(open).GetProperty("params");
-        Check(file.Expected == "data" && file.Frame.StreamId % 2 == 1 && param.GetProperty("streamId").GetUInt32() == file.Frame.StreamId
-            && SrapClient.Text(param, "name") == name && JsonElement.DeepEquals(param.GetProperty("parent"), file.Meta.GetProperty("parent")),
-            "the SAF adapter requests the shared logical location and its own odd stream");
-        await Reply(open, new() { ["streamId"] = file.Frame.StreamId, ["size"] = size });
-        var chunk = await Read("file.chunk");
-        param = SrapClient.Body(chunk).GetProperty("params");
-        int count = file.Meta.GetProperty("count").GetInt32();
-        long offset = file.Meta.GetProperty("offset").GetInt64();
-        Check(param.GetProperty("streamId").GetUInt32() == file.Frame.StreamId && param.GetProperty("count").GetInt32() == count
-            && param.GetProperty("offset").GetInt64() == offset, "file DATA is requested at the golden offset and byte count");
-        await peer.WriteAsync(file.Wire, ct);
-        await Reply(chunk, new() { ["offset"] = offset, ["count"] = count });
-        await Reply(await Read("file.finish"), new() { ["name"] = name, ["size"] = size, ["sha256"] = digest });
-        var saved = await File.ReadAllBytesAsync(await receive, ct);
-        Check(saved.SequenceEqual(file.Frame.Payload) && Convert.ToHexString(SHA256.HashData(saved)) == digest,
-            "an independently reopened Windows file matches the shared binary and SHA-256");
 
         var typed = vectors["volume.index"];
         var expectedParams = typed.Meta.GetProperty("params");

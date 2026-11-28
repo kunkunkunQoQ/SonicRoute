@@ -89,8 +89,12 @@ internal sealed class AdbOperationAdapter(AdbClient adb) : IPhoneOperationPort, 
     public bool CanWatchMedia(AndroidDevice device) => !device.IsApp;
     public IPhoneMediaSession OpenMediaSession(AndroidDevice device) => new AndroidMediaSessionClient(adb);
     public bool CanSyncClipboard(AndroidDevice device) => !device.IsApp;
-    public IAndroidClipboardClient OpenClipboard(AndroidDevice device) => new AndroidClipboardClient(adb);
-    public IPhoneFileOperations OpenFiles(AndroidDevice device) => new AndroidFileTransfer(adb, device.CommandTarget);
+    public IAndroidClipboardClient OpenClipboard(AndroidDevice device) => OpenClipboard(device, null);
+    internal IAndroidClipboardClient OpenClipboard(AndroidDevice device, Action? requireCurrent) => device.IsApp
+        ? throw new SrapException("unsupported") : new AndroidClipboardClient(adb) { RequireCurrent = requireCurrent };
+    public IPhoneFileOperations OpenFiles(AndroidDevice device) => OpenFiles(device, null);
+    internal IPhoneFileOperations OpenFiles(AndroidDevice device, Action? requireCurrent) => device.IsApp
+        ? throw new SrapException("unsupported") : new AndroidFileTransfer(adb, device.CommandTarget, requireCurrent);
     public string? FileRoot(AndroidDevice device) => device.IsApp ? null : AndroidFileTransfer.Storage;
     public bool CanWriteFiles(AndroidDevice device) => !device.IsApp;
     public AndroidAudioSession CreateCaptureSession(Func<AndroidDevice, AndroidStreamSettings> settings, Func<string, AndroidDevice?> resolvePhone) =>

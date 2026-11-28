@@ -32,7 +32,7 @@ internal static partial class Program
             catch (FormatException) { rejected = true; }
             Check(rejected, "reject malformed invite");
         }
-        Check(!AndroidClipboardClient.IsSupported(prefix + pin), "SRAP invitations excluded from phone clipboard sync");
+        Check(!AndroidClipboardClient.IsSupported(prefix + pin), "SRAP invitations excluded from ADB clipboard sync");
         Directory.CreateDirectory(directory);
         string path = Path.Combine(directory, "profiles-" + Guid.NewGuid().ToString("N") + ".json");
         var store = new AndroidPhoneStore(path);
@@ -43,11 +43,12 @@ internal static partial class Program
         Check(store.Profiles.Count == 2 && app.Id != adbId && app.LastDevice?.IsApp == true, "pair creates isolated app profile pending 2B");
         store.Rename("Test app");
         store.Retain(new("org.sonicroute.app", "SonicRoute", 0, ""));
+        Check(store.Profile.QuickPanelApps.Count == 0, "App-only profile rejects manual pins");
         store.RevokeAppTrust(app.Id, pin);
         await store.FlushAsync();
         var reloaded = new AndroidPhoneStore(path);
         Check(reloaded.Profile.Id == app.Id && reloaded.Profile.AppTrustRevoked && reloaded.Profile.LastAppAddress == null
-            && reloaded.Profile.RetainedApps.Single().Uid == 0 && reloaded.FindProfile(phone)?.Id == adbId, "reopen profile and revoked trust with same ADB ID");
+            && reloaded.FindProfile(phone)?.Id == adbId, "reopen profile and revoked trust with same ADB ID");
         var manager = new AndroidConnectionManager(reloaded, () => throw new InvalidOperationException("An App action must not modify ADB discovery."));
         manager.SetDisconnected(reloaded.Profile.LastDevice!, true);
         Check(manager.Remove(app.Id, out var aliases) && aliases.Single().IsApp, "remove app through coordinator without touching ADB discovery");

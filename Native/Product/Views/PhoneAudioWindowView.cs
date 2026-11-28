@@ -52,13 +52,16 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
     private UiThemePalette _theme;
     private ComboPopupWindow? _comboPopup;
     private bool _airPlaySelected;
+    private IReadOnlyList<AndroidAudioSource>? _visibleSources;
+    private AndroidDevice? _visibleDevice;
+    private AndroidMediaState? _visibleMedia;
+    private string? _visibleGrant;
+    private AndroidApp[] _visibleApps = [];
+    private IReadOnlyList<AndroidApp>? _visiblePinned;
     private string _searchText = "";
-    private IReadOnlyList<AndroidApp>? _filteredAppsSource;
-    private string? _filteredAppsQuery;
-    private string? _filteredGrant;
-    private AndroidApp? _grantApp;
-    private bool _filteredAppChannel;
-    private AndroidApp[] _filteredApps = [];
+    private string? _visibleQuery;
+    private bool AdbLibrary => !_airPlaySelected &&
+        (_activeDevice ?? _host.Phone.Store.Profile.LastDevice) is { IsApp: false };
     private string? _activeProfileId;
     private AndroidDevice? _activeDevice;
     private QuickPanelWindow? _panel;
@@ -81,7 +84,7 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
     private double _seekPositionMs;
     private string? _seekPackage;
     private UiRect _mediaTitleRect;
-    private CancellationTokenSource? _catalogRefresh;
+    private CancellationTokenSource? _connectionRefresh;
     private CancellationTokenSource? _openingReconnect;
     private string? _refreshError;
     private string? _seekTitle;
@@ -121,32 +124,13 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
             commit => _inlineEdit.Close(commit, viaEnter: false),
             "companion.airplay");
 
-        _inlineEdit.TextChanged += (tag, text) =>
-        {
-            if (tag == "companion.search")
-            {
-                _searchText = text;
-                Invalidate();
-            }
-            else
-            {
-                _inlineChanged?.Invoke(text);
-            }
-        };
+        _inlineEdit.TextChanged += (_, text) => _inlineChanged?.Invoke(text);
         _inlineEdit.Committed += (tag, text, viaEnter) =>
         {
             var onCommit = _inlineCommitted;
             _inlineChanged = null;
             _inlineCommitted = null;
-            if (tag == "companion.search")
-            {
-                _searchText = text;
-                Invalidate();
-            }
-            else
-            {
-                onCommit?.Invoke(text, viaEnter);
-            }
+            onCommit?.Invoke(text, viaEnter);
         };
     }
 
@@ -210,8 +194,8 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
         if (_activeProfileId != profile.Id)
         {
             _activeProfileId = profile.Id;
-            CancelCatalogRefresh();
-            ClearFilteredApps();
+            CancelConnectionRefresh();
+            ClearVisibleApps();
             _dropStatusMessage = null;
         }
         _appIcons.SetProfile(profile.Id);
@@ -226,7 +210,7 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
         else if (!Equals(online, _activeDevice))
         {
             _refreshError = null;
-            if (!AndroidDeviceIdentity.Matches(online, _activeDevice))
+            if (!AndroidDeviceIdentity.SameTransport(online, _activeDevice))
             {
                 ++_commandVersion;
                 _selectedPackage = null;
@@ -355,7 +339,7 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
 
     protected override void OnHidden()
     {
-        CancelCatalogRefresh();
+        CancelConnectionRefresh();
         ++_commandVersion;
         CancelAppDrag();
         _seekKey = 0;
@@ -367,7 +351,7 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
         ComboPopupWindow.Close(ref _comboPopup);
         StopMediaWatch();
         ClearArtworkState();
-        ClearFilteredApps();
+        ClearVisibleApps();
         _appIcons.Clear();
         _airPlay.Detach();
         DetachCrossDeviceDrag();
@@ -377,7 +361,7 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
 
     protected override void OnClosed()
     {
-        CancelCatalogRefresh();
+        CancelConnectionRefresh();
         ++_commandVersion;
         CancelAppDrag();
         _seekKey = 0;
@@ -389,7 +373,7 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
         ComboPopupWindow.Close(ref _comboPopup);
         StopMediaWatch();
         ClearArtworkState();
-        ClearFilteredApps();
+        ClearVisibleApps();
         _appIcons.Clear();
         _airPlay.Detach();
         DetachCrossDeviceDrag();
@@ -620,7 +604,7 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
     protected override int HitTestNonClient(float xDip, float yDip) =>
         !_airPlaySelected && _mediaTitleRect.Contains(xDip, yDip) ? 2 : 1;
 
-    private static UiRect ComputeDropAreaRect(float widthDip, float heightDip, bool airPlaySelected)
+    private UiRect ComputeDropAreaRect(float widthDip, float heightDip, bool airPlaySelected)
     {
         if (airPlaySelected) return default;
         const float padX = PanelPaddingX;
@@ -628,7 +612,7 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
         float contentW = widthDip - padX * 2f;
         float footerH = 36f;
         float footerY = heightDip - padY - footerH;
-        float listY = padY + MediaCardHeight + 6f + 28f + 6f;
+        float listY = padY + MediaCardHeight + 6f + (AdbLibrary ? 34f : 0f);
         return new UiRect(padX, listY, contentW, MathF.Max(30f, footerY - 6f - listY));
     }
 
@@ -706,7 +690,7 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
 
         if (_airPlaySelected)
         {
-            // AirPlay mode isolation: hide Android media card & search box, fill upper area with AirPlayPane
+            // AirPlay mode isolation: hide Android media controls, fill upper area with AirPlayPane
             var airBox = AirPlayDropBounds(widthDip, heightDip);
             if (CrossDeviceDragHost.DraggedApp?.ProcessName == "airplay:receiver")
             {
@@ -741,10 +725,8 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
         g.FillRoundedRect(artRect, 8f, _theme.SurfaceBg);
         g.DrawRoundedRect(artRect, 8f, _theme.Border, 1f);
 
-        var mediaApp = _mediaState == null ? null
-            : profile.RetainedApps.FirstOrDefault(a => a.Package == _mediaState.Package);
-        if (mediaApp == null && _mediaState?.Package is { Length: > 0 } activePackage && online is { IsApp: true })
-            mediaApp = new AndroidApp(activePackage, activePackage, 0, "");
+        var mediaApp = _mediaState?.Package is { Length: > 0 } activePackage && online != null
+            ? new AndroidApp(activePackage, activePackage, 0, "") : null;
         if (mediaApp != null) mediaApp = _appIcons.Resolve(online, mediaApp);
 
         bool hasArtwork = TryGetArtwork(_mediaState?.ArtworkPng, out var artBgra, out int aw, out int ah, out int aver);
@@ -825,12 +807,12 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
                 durationMs > 0 ? Math.Round(posMs / 1000, 1) : null, durationMs / 1000d, 0.1, 1,
                 string.Concat(_activeDevice?.Serial, "\0", _mediaState?.Package, "\0", _mediaState?.Title), SetAccessibleSeek);
 
-        y = mediaCard.Bottom + 6f;
-
-        // Search box
-        var searchRect = new UiRect(padX, y, contentW, 28f);
-        UiPrimitives.DrawTextBox(g, _theme, _hit, "companion.search", searchRect, _searchText, L10n.T("Phone.SearchAppsHint"),
-            focused: _inlineEdit.ActiveTag == "companion.search", fontSize: 11.5f, search: true);
+        if (AdbLibrary)
+        {
+            var searchRect = new UiRect(padX, mediaCard.Bottom + 6f, contentW, 28f);
+            UiPrimitives.DrawTextBox(g, _theme, _hit, "companion.search", searchRect, _searchText,
+                L10n.T("Phone.SearchAppsHint"), focused: _inlineEdit.ActiveTag == "companion.search", fontSize: 11.5f, search: true);
+        }
 
         var listRect = ComputeDropAreaRect(widthDip, heightDip, _airPlaySelected);
 
@@ -849,8 +831,7 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
             return;
         }
 
-        // Keep whole-phone audio first and the retained apps in their saved order.
-        var apps = GetFilteredApps(profile);
+        var apps = GetVisibleApps();
         var grant = online?.IsApp == true ? phone.Operations.AppCapture(online) : null;
         const float itemH = 50f;
         const float itemGap = 4f;
@@ -860,10 +841,16 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
 
         if (apps.Length == 0)
         {
-            g.DrawText(L10n.T("Phone.NoDisplayedApps"), new UiRect(listRect.X, listRect.CenterY - 26f, listRect.Width, 20f),
-                _theme.TextSecondary, 11.5f, 400, UiTextAlign.Center, UiVertAlign.Center);
-            UiPrimitives.DrawSecondaryButton(g, _theme, _hit, "companion.manage",
-                new UiRect(listRect.CenterX - 70f, listRect.CenterY + 2f, 140f, 28f), L10n.T("Phone.ManagePhoneApps"), fontSize: 11f);
+            if (AdbLibrary)
+            {
+                g.DrawText(L10n.T("Phone.NoDisplayedApps"), new UiRect(listRect.X, listRect.CenterY - 26f, listRect.Width, 20f),
+                    _theme.TextSecondary, 11.5f, 400, UiTextAlign.Center, UiVertAlign.Center);
+                UiPrimitives.DrawSecondaryButton(g, _theme, _hit, "companion.manage",
+                    new UiRect(listRect.CenterX - 70f, listRect.CenterY + 2f, 140f, 28f), L10n.T("Phone.ManagePhoneApps"), fontSize: 11f);
+            }
+            else
+                g.DrawText(L10n.T(online == null ? "Phone.Disconnected" : "Phone.MediaNonePlaying"), listRect,
+                    _theme.TextSecondary, 11.5f, 400, UiTextAlign.Center, UiVertAlign.Center);
         }
         else
         {
@@ -979,7 +966,7 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
         {
             var refresh = new UiRect(right - footerH, footerY, footerH, footerH);
             UiPrimitives.DrawSecondaryButton(g, _theme, _hit, "companion.refresh", refresh, "",
-                enabled: _catalogRefresh == null, radius: 8f, icon: UiIcon.Refresh,
+                enabled: _connectionRefresh == null, radius: 8f, icon: UiIcon.Refresh,
                 tooltip: _refreshError ?? L10n.T(online == null && profile.LastDevice != null ? "Phone.Reconnect" : "History.Refresh"));
             right = refresh.X - 4f;
         }
@@ -987,10 +974,10 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
         string name = _airPlaySelected ? "AirPlay" : profile.LastDevice == null
             ? L10n.T("Phone.DeviceSelector") : phone.Store.GetProfileDisplayName(profile);
         string status = _airPlaySelected ? AirPlayReceiverViewControl.GetStageLabel(_host.AirPlay.Status)
-            : L10n.T(_catalogRefresh != null ? "Phone.StatusLoading" : online == null ? "Phone.Disconnected" : "Phone.ConnectedStatus");
+            : L10n.T(_connectionRefresh != null ? "Phone.StatusLoading" : online == null ? "Phone.Disconnected" : "Phone.ConnectedStatus");
         string connection = _airPlaySelected ? status : PhoneAppPresentation.ConnectionLabel(profile, online);
         string accessibleName = name + " · " + connection;
-        if (!_airPlaySelected && _catalogRefresh == null && online?.IsApp == true) status = "App · " + status;
+        if (!_airPlaySelected && _connectionRefresh == null && online?.IsApp == true) status = "App · " + status;
         _hit.Add("companion.device", card, UiCursorKind.Hand, _refreshError ?? _dropStatusMessage ?? accessibleName);
         _hit.Describe("companion.device", accessibleName, UiAccessibleRole.ComboBox);
         g.FillRoundedRect(card, 8f, _theme.SurfaceBgAlpha);
@@ -1116,8 +1103,7 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
         if (hit is { } row && row.Id.StartsWith(AppPrefix, StringComparison.Ordinal) && _activeDevice is { } active)
         {
             string package = row.Id[AppPrefix.Length..];
-            _pressApp = !active.IsApp || _host.Phone.Operations.AppCapture(active)?.LocalSourceKey == package
-                ? GetFilteredApps().FirstOrDefault(a => a.Package == package) : null;
+            _pressApp = GetRoutableApp(active, package);
             _pressDevice = active;
             _pressX = e.X;
             _pressY = e.Y;
@@ -1200,14 +1186,14 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
                     _ = RunCompanionCommand(() => client.SendAsync(command, media.Token));
                 }
                 break;
-            case "companion.search":
+            case "companion.search" when AdbLibrary:
                 StartInlineEdit("companion.search", item.Bounds, _searchText, t => { _searchText = t; Invalidate(); }, (t, _) => { _searchText = t; Invalidate(); });
                 break;
-            case "companion.manage":
+            case "companion.manage" when AdbLibrary:
                 OpenPhoneManagementDeepLink();
                 break;
             case "companion.refresh":
-                _ = RefreshCatalogAsync();
+                _ = RefreshConnectionAsync();
                 break;
             case "companion.airplaygrip":
             case "companion.device":
@@ -1218,7 +1204,7 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
                 if (item.Id.StartsWith(AppPrefix, StringComparison.Ordinal) && _activeDevice is { } device)
                 {
                     _selectedPackage = item.Id[AppPrefix.Length..];
-                    var selected = GetFilteredApps().FirstOrDefault(a => a.Package == _selectedPackage);
+                    var selected = GetRoutableApp(device, _selectedPackage);
                     if (selected != null) _ = CrossDeviceDragHost.FinishAndroidDropAsync(_host, device, selected, true, 0, 0);
                     Invalidate();
                 }
@@ -1331,17 +1317,17 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
         _ = CommitMediaSeekAsync();
     }
 
-    private async Task RefreshCatalogAsync()
+    private async Task RefreshConnectionAsync()
     {
-        if (_catalogRefresh != null) return;
-        ClearFilteredApps();
+        if (_connectionRefresh != null) return;
+        ClearVisibleApps();
         _appIcons.Clear();
         CancelOpeningReconnect();
         var phone = _host.Phone;
         var selected = phone.Store.Profile;
         var mediaAtClick = _mediaWatch;
         var refresh = CancellationTokenSource.CreateLinkedTokenSource(phone.Lifetime);
-        _catalogRefresh = refresh;
+        _connectionRefresh = refresh;
         _refreshError = null;
         Invalidate();
         string? error = null;
@@ -1350,13 +1336,12 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
             await phone.ReconnectSelectedDeviceAsync(refresh.Token).ConfigureAwait(false);
             refresh.Token.ThrowIfCancellationRequested();
             var current = phone.Store.Profile;
-            if (current.Id != selected.Id || current.QuickPanelApps.Count == 0 ||
-                phone.Connections.Resolve(current.LastDevice) is not { } device || !phone.Operations.CanListApps(device)) return;
+            if (current.Id != selected.Id || current.QuickPanelApps.Count == 0 || current.LastDevice == null ||
+                phone.Connections.Get(current.LastDevice).Device is not { IsApp: false } device || !phone.IsSelectedAdbAttachment(device)) return;
             using var read = CancellationTokenSource.CreateLinkedTokenSource(refresh.Token, phone.Connections.OperationToken(device));
             var apps = await phone.Operations.AppsAsync(device, read.Token, current.QuickPanelApps.Select(a => a.Package).ToArray()).ConfigureAwait(false);
             read.Token.ThrowIfCancellationRequested();
-            if (phone.Store.Profile.Id == selected.Id && phone.Connections.IsCurrent(device))
-                phone.Store.UpdateMetadata(device, apps);
+            if (phone.Store.Profile.Id == current.Id && phone.IsSelectedAdbAttachment(device)) phone.Store.UpdateMetadata(device, apps);
         }
         catch (OperationCanceledException) { }
         catch (Exception ex)
@@ -1369,8 +1354,8 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
             if (!_host.TryPost(() =>
             {
                 refresh.Dispose();
-                if (!ReferenceEquals(_catalogRefresh, refresh)) return;
-                _catalogRefresh = null;
+                if (!ReferenceEquals(_connectionRefresh, refresh)) return;
+                _connectionRefresh = null;
                 if (!IsVisible || _airPlaySelected || phone.Store.Profile.Id != selected.Id) return;
                 RefreshData();
                 _refreshError = error;
@@ -1382,10 +1367,10 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
         }
     }
 
-    private void CancelCatalogRefresh()
+    private void CancelConnectionRefresh()
     {
-        _catalogRefresh?.Cancel();
-        _catalogRefresh = null;
+        _connectionRefresh?.Cancel();
+        _connectionRefresh = null;
         _refreshError = null;
     }
 
@@ -1425,48 +1410,71 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
         if (IsVisible) Invalidate();
     }
 
-    private AndroidApp[] GetFilteredApps(AndroidPhoneProfile? profile = null)
+    private AndroidApp? GetRoutableApp(AndroidDevice device, string package)
     {
-        profile ??= _host.Phone.Store.Profile;
-        if (profile.LastDevice == null) return Array.Empty<AndroidApp>();
-        var source = profile.QuickPanelApps;
-        bool appChannel = (_activeDevice ?? profile.LastDevice).IsApp;
-        var grant = _activeDevice is { IsApp: true } peer ? _host.Phone.Operations.AppCapture(peer) : null;
-        string? granted = grant?.LocalSourceKey;
-        AndroidApp? grantApp = null;
-        if (grant?.IsDeviceMedia == true) grantApp = AndroidApp.DeviceAudio;
-        else if (granted != null)
+        var phone = _host.Phone;
+        if (device.IsApp ? !phone.Connections.IsCurrent(device) || phone.Operations.AppCapture(device)?.LocalSourceKey != package
+            : !phone.IsSelectedAdbAttachment(device)) return null;
+        var app = GetVisibleApps().FirstOrDefault(a => a.Package == package);
+        return app == null ? null : _appIcons.Resolve(device, app);
+    }
+
+    private AndroidApp[] GetVisibleApps()
+    {
+        var phone = _host.Phone;
+        var profile = phone.Store.Profile;
+        var device = _activeDevice;
+        bool adb = AdbLibrary;
+        if (device == null && !adb) return [];
+        var pinned = adb ? profile.QuickPanelApps : null;
+        string? query = adb ? _searchText.Trim() : null;
+        var sources = phone.Sources.Sources;
+        var grant = device is { IsApp: true } ? phone.Operations.AppCapture(device)?.LocalSourceKey : null;
+        if (ReferenceEquals(_visibleDevice, device) && ReferenceEquals(_visibleSources, sources)
+            && ReferenceEquals(_visibleMedia, _mediaState) && _visibleGrant == grant &&
+            ReferenceEquals(_visiblePinned, pinned) && _visibleQuery == query) return _visibleApps;
+
+        var apps = new Dictionary<string, AndroidApp>(StringComparer.Ordinal);
+        if (adb || grant == AndroidApp.DeviceAudioPackage)
+            apps.Add(AndroidApp.DeviceAudioPackage, AndroidApp.DeviceAudio);
+        if (pinned != null)
+            foreach (var app in pinned) apps[app.Package] = app;
+        foreach (var source in sources)
+            if (device != null && AndroidDeviceIdentity.SameTransport(source.Device, device) && source.Session.State.State != CaptureState.Failed)
+                apps[source.App.Package] = source.App;
+        void AddPackage(string? package)
         {
-            var known = source.FirstOrDefault(a => a.Package == granted)
-                ?? _host.Phone.Sources.Sources.FirstOrDefault(s => AndroidDeviceIdentity.SameTransport(s.Device, _activeDevice) && s.App.Package == granted)?.App
-                ?? (_filteredGrant == granted ? _grantApp : null) ?? new AndroidApp(granted, granted, 0, "");
-            grantApp = _appIcons.Resolve(_activeDevice, known);
+            if (string.IsNullOrEmpty(package) || apps.ContainsKey(package)) return;
+            apps.Add(package, new AndroidApp(package, package, 0, ""));
         }
-        if (ReferenceEquals(_filteredAppsSource, source) && _filteredAppsQuery == _searchText
-            && _filteredGrant == granted && ReferenceEquals(_grantApp, grantApp) && _filteredAppChannel == appChannel) return _filteredApps;
-
-        string query = _searchText.Trim();
-        IEnumerable<AndroidApp> items = source;
-        if (grantApp != null)
-            items = source.Any(a => a.Package == granted) ? items.Select(a => a.Package == granted ? grantApp : a) : items.Prepend(grantApp);
-        if (query.Length != 0) items = items.Where(a =>
-            a.Name.Contains(query, StringComparison.CurrentCultureIgnoreCase) ||
-            a.Package.Contains(query, StringComparison.OrdinalIgnoreCase));
-        _filteredApps = (appChannel ? items : items.Prepend(AndroidApp.DeviceAudio)).ToArray();
-        _filteredAppsSource = source;
-        _filteredAppsQuery = _searchText;
-        _filteredGrant = granted;
-        _grantApp = grantApp;
-        _filteredAppChannel = appChannel;
-        return _filteredApps;
+        AddPackage(grant);
+        if (_mediaState is { } media)
+        {
+            if (media.Playing) AddPackage(media.Package);
+            foreach (var package in media.PlayingPackages) AddPackage(package);
+        }
+        _visibleDevice = device;
+        _visibleSources = sources;
+        _visibleMedia = _mediaState;
+        _visibleGrant = grant;
+        _visiblePinned = pinned;
+        _visibleQuery = query;
+        return _visibleApps = string.IsNullOrEmpty(query) ? apps.Values.ToArray() : apps.Values.Where(app =>
+            app.IsDeviceAudio || app.Name.Contains(query, StringComparison.CurrentCultureIgnoreCase) ||
+            app.Package.Contains(query, StringComparison.OrdinalIgnoreCase)).ToArray();
     }
 
-    private void ClearFilteredApps()
+    private void ClearVisibleApps()
     {
-        _grantApp = null;
-        _filteredAppsSource = null;
-        _filteredApps = [];
+        _visibleDevice = null;
+        _visiblePinned = null;
+        _visibleQuery = null;
+        _visibleSources = null;
+        _visibleMedia = null;
+        _visibleGrant = null;
+        _visibleApps = [];
     }
+
 
     private bool IsAppCurrentlyPlaying(AndroidApp app) => _mediaState is { } state &&
         (app.IsDeviceAudio ? state.Playing || state.PlayingPackages.Count > 0
@@ -1486,7 +1494,7 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
         string selected = _airPlaySelected ? AirPlayChoiceKey : phone.Store.Profile.Id;
         ShowCombo(anchor, choices, selected, picked =>
         {
-            CancelCatalogRefresh();
+            CancelConnectionRefresh();
             CancelOpeningReconnect();
             if (picked.Key == AirPlayChoiceKey)
             {

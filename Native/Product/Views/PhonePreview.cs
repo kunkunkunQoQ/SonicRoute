@@ -40,16 +40,31 @@ internal sealed partial class PhonePreview : IDisposable
     internal readonly AndroidAudioManager Sources;
     internal readonly PcToPhoneAudioManager Pc;
     internal readonly AndroidVirtualDisplayManager Displays;
-    internal readonly AndroidFileTransfers Transfers = new();
+    private AndroidFileTransfers? transfers;
+    private readonly Dictionary<string, AndroidDevice> activeTransferDevices = new(StringComparer.Ordinal);
+    internal AndroidFileTransfers Transfers
+    {
+        get
+        {
+            if (transfers == null)
+            {
+                transfers = new();
+                transfers.Changed += OnTransferChanged;
+            }
+            return transfers;
+        }
+    }
     private readonly Dictionary<string, Queue<(string[] Paths, string Destination, string? PullFrom, CancellationToken Attachment)>> pendingTransfers = new(StringComparer.Ordinal);
-    internal readonly PhoneClipboard Clipboard;
+    private readonly Lazy<PhoneClipboard> adbClipboard;
+    internal PhoneClipboard Clipboard => adbClipboard.Value;
+    internal PhoneClipboard? ActiveClipboard => adbClipboard.IsValueCreated ? adbClipboard.Value : null;
     internal event Action? Changed;
     internal string? Error { get; private set; }
 
     internal PhonePreview(string root, NativeApplicationWindow shell, IMainThread owner, AppConfig config,
         Func<int, IPcProcessSilenceLease?>? silenceLocalProcess = null,
         Func<AirPlayPreview?>? tryGetAirPlay = null, AndroidAudioSettingsStore? settings = null,
-        IAdbTransport? adbFixture = null, Action<string>? openListeningPermission = null)
+        IAdbTransport? adbFixture = null)
     {
         this.owner = owner;
         this.config = config;
@@ -67,26 +82,26 @@ internal sealed partial class PhonePreview : IDisposable
         Store = new(storePath, () => L10n.T("Phone.DefaultName"));
         appTransport = new(Store, root);
         PcListening = new(Store, appTransport);
-        if (openListeningPermission != null) PcListening.PermissionRequested += request => owner.TryPost(() =>
-        {
-            if (Volatile.Read(ref closed) == 0 && PcListening.Pending(request.ProfileId) == request)
-                openListeningPermission(request.ProfileId);
-        });
         Settings = settings ?? new(Path.Combine(root, "android-audio.json"));
         Discovery = new(adbDiscovery.ReadAsync);
         Connections = new(Store, () => Discovery, Settings.MigrateConnectionPreferences, appTransport, adb, Settings.MigrateConnectionPreferences);
         var directOperations = new SrapOperationAdapter(adbOperations, appTransport, Connections.IsCurrent);
         Operations = directOperations;
         Sources = new(() => Operations.CreateCaptureSession(Settings.GetStreaming, Connections.ResolveKey), Settings,
-            (phone, app) => Store.IsSmartVolumeEnabled(phone, app), Connections.IsCurrent, token, Operations.AppCapture);
+            (phone, app) => !phone.IsApp && Store.IsSmartVolumeEnabled(phone, app), Connections.IsCurrent, token, Operations.AppCapture);
         Pc = adbOperations.CreatePcPlayback(silenceLocalProcess);
         Pc.OpenAppPlayback = directOperations.OpenAppPlaybackAsync;
         Pc.OutputsObserved += (device, outputs) => Store.UpdateOutputs(device, outputs);
         Pc.DeviceDisconnected += OnPcPlaybackDisconnected;
         Displays = new(() => Operations.CreateDisplay(() => Settings));
-        Clipboard = new(Operations.OpenClipboard, shell, owner, Path.Combine(root, "phone-clipboard.json"),
-            d => Store.IsRemoved(d), d => Connections.Resolve(d) is { } live && Operations.CanSyncClipboard(live) ? live : null,
-            d => Store.FindProfile(d)?.LastDevice);
+        adbClipboard = new(() =>
+        {
+            var bridge = new PhoneClipboard(Operations.OpenClipboard, shell, owner, Path.Combine(root, "phone-clipboard.json"),
+                Store.IsRemoved, d => SelectedAdb(d) is { } live && Operations.CanSyncClipboard(live) ? live : null,
+                d => Store.FindProfile(d)?.LastDevice is { IsApp: false } last ? last : null);
+            bridge.Changed += Notify;
+            return bridge;
+        });
 
         Sources.Changed += Notify;
         Sources.ResourcesRetired += QueueSourceReconciliation;
@@ -95,9 +110,7 @@ internal sealed partial class PhonePreview : IDisposable
         Store.Changed += OnStoreChanged;
         Store.OutputsChanged += OnPlaybackDevicesChanged;
         Pc.Changed += Notify;
-        Transfers.Changed += OnTransferChanged;
         Displays.ResourcesRetired += Notify;
-        Clipboard.Changed += Notify;
         appTransport.Changed += OnAppTransportChanged;
         appTransport.Start();
     }
@@ -128,7 +141,7 @@ internal sealed partial class PhonePreview : IDisposable
         if (token.IsCancellationRequested) return;
         QueueSourceReconciliation();
         PcListening.Reconcile();
-        owner.TryPost(() => { if (Volatile.Read(ref closed) == 0 && Clipboard.Enabled) Clipboard.Reconcile(); });
+        ScheduleAdbToolsReconciliation();
         UpdatePlaybackConnections();
         Notify();
     }
@@ -272,7 +285,7 @@ internal sealed partial class PhonePreview : IDisposable
         finally
         {
             scans.Release();
-            owner.TryPost(() => { if (Volatile.Read(ref closed) == 0) Clipboard.Reconcile(); });
+            ScheduleAdbToolsReconciliation();
             Notify();
         }
     }
@@ -669,13 +682,40 @@ internal sealed partial class PhonePreview : IDisposable
             Connections.OperationToken(device));
     }
 
+    internal AndroidDevice? SelectedAdb(AndroidDevice device)
+    {
+        if (device.IsApp || Store.FindProfile(device)?.LastDevice is not { } saved ||
+            Connections.Get(saved).Device is not { IsApp: false } online || !Connections.IsCurrent(online)) return null;
+        return online;
+    }
+
+    internal bool IsSelectedAdbAttachment(AndroidDevice device) =>
+        SelectedAdb(device) is { } selected && AndroidDeviceIdentity.SameTransport(selected, device) && Connections.IsCurrent(device);
+
+    private void ScheduleAdbToolsReconciliation()
+    {
+        if (ActiveClipboard == null && transfers == null) return;
+        owner.TryPost(() =>
+        {
+            if (Volatile.Read(ref closed) != 0) return;
+            ActiveClipboard?.Reconcile();
+            if (activeTransferDevices.Count == 0) return;
+            foreach (var (profile, device) in activeTransferDevices.ToArray())
+            {
+                if (IsSelectedAdbAttachment(device)) continue;
+                ClearQueuedTransfers(profile);
+                transfers?.Cancel(profile);
+            }
+        });
+    }
+
     internal int QueuedTransferCount(string profileId) => pendingTransfers.GetValueOrDefault(profileId)?.Count ?? 0;
     internal void ClearQueuedTransfers(string profileId) => pendingTransfers.Remove(profileId);
 
     // Enqueue and advance on the host owner. A closed view does not own accepted transfers.
     internal bool EnqueueTransfer(AndroidDevice device, string profileId, string[] paths, string destination, string? remoteFolder)
     {
-        if (paths.Length == 0 || Connections.Get(device).Profile?.Id != profileId || Operations.FileRoot(device) == null ||
+        if (!IsSelectedAdbAttachment(device) || paths.Length == 0 || Connections.Get(device).Profile?.Id != profileId || Operations.FileRoot(device) == null ||
             remoteFolder == null && !Operations.CanWriteFiles(device)) return false;
         if (Transfers.Get(profileId)?.Phase != AndroidFilePhase.Running && QueuedTransferCount(profileId) == 0)
             return StartTransfer(device, paths, destination, remoteFolder);
@@ -690,14 +730,16 @@ internal sealed partial class PhonePreview : IDisposable
         if (phase != AndroidFilePhase.Running)
             owner.PostContinuation(() =>
             {
-                if (closed != 0 || !pendingTransfers.TryGetValue(profileId, out var queue)) return;
+                if (closed != 0) return;
+                if (Transfers.Get(profileId)?.Phase != AndroidFilePhase.Running) activeTransferDevices.Remove(profileId);
+                if (!pendingTransfers.TryGetValue(profileId, out var queue)) return;
                 if (phase == AndroidFilePhase.Cancelled) { ClearQueuedTransfers(profileId); return; }
                 if (Transfers.Get(profileId)?.Phase == AndroidFilePhase.Running) return;
                 var last = Store.Profiles.FirstOrDefault(p => p.Id == profileId)?.LastDevice;
                 var current = last == null ? null : Connections.Get(last);
                 var next = queue.Dequeue();
                 if (queue.Count == 0) ClearQueuedTransfers(profileId);
-                if (next.Attachment.IsCancellationRequested || current?.Device is not { } device || current.Profile?.Id != profileId ||
+                if (next.Attachment.IsCancellationRequested || current?.Device is not { IsApp: false } device || current.Profile?.Id != profileId ||
                     !StartTransfer(device, next.Paths, next.Destination, next.PullFrom))
                 {
                     ClearQueuedTransfers(profileId);
@@ -710,17 +752,24 @@ internal sealed partial class PhonePreview : IDisposable
 
     internal bool StartTransfer(AndroidDevice device, IReadOnlyList<string> paths, string destination, string? remoteFolder)
     {
+        if (!IsSelectedAdbAttachment(device)) return false;
         var current = Connections.Get(device);
-        if (current.Profile == null || current.Device is not { } confirmed || !AndroidDeviceIdentity.SameTransport(device, confirmed)
+        if (current.Profile == null || current.Device is not { IsApp: false } confirmed || !AndroidDeviceIdentity.SameTransport(device, confirmed)
             || Operations.FileRoot(confirmed) == null ||
             remoteFolder == null && !Operations.CanWriteFiles(confirmed)) return false;
         try
         {
-            return Transfers.TryStart(current.Profile.Id, Operations.OpenFiles(confirmed), paths, destination, remoteFolder,
-                () => Connections.IsCurrent(confirmed), Connections.OperationToken(confirmed), out _);
+            bool accepted = Transfers.TryStart(current.Profile.Id, Operations.OpenFiles(confirmed), paths, destination, remoteFolder,
+                () => IsSelectedAdbAttachment(confirmed), Connections.OperationToken(confirmed), out _);
+            if (accepted) activeTransferDevices[current.Profile.Id] = confirmed;
+            return accepted;
         }
         catch (SrapException) { return false; }
     }
+
+    internal Task<AndroidApp> ResolveAdbAppAsync(AndroidDevice device, AndroidApp app) =>
+        Connections.ResolveDisplayAppAsync(device, app,
+            (selected, package, ct) => Operations.AppsAsync(selected, ct, [package]), token);
 
     internal async Task<IVirtualDisplayClient> OpenDisplayAsync(AndroidDevice device, AndroidApp app, int x, int y)
     {
@@ -730,8 +779,7 @@ internal sealed partial class PhonePreview : IDisposable
         var resolved = await ResolveOperationDeviceAsync(device, AndroidErrorCode.DisplayPhoneNotConnected, token).ConfigureAwait(false);
         if (!AndroidConnectionManager.IsRequestedAdbDisplayAttachment(device, resolved)) throw new SrapException("stale_session");
         device = resolved;
-        app = await Connections.ResolveRetainedDisplayAppAsync(device, app,
-            (selected, package, ct) => Operations.AppsAsync(selected, ct, [package]), token).ConfigureAwait(false);
+        app = await ResolveAdbAppAsync(device, app).ConfigureAwait(false);
 
         var (clampedX, clampedY) = ClampWindowOriginToWorkArea(x, y);
         IVirtualDisplayClient display;
@@ -947,9 +995,9 @@ internal sealed partial class PhonePreview : IDisposable
     private void OnStoreChanged()
     {
         PcListening.Reconcile();
-        Sources.SyncSmartVolume((d, p) => Store.IsSmartVolumeEnabled(d, p));
+        Sources.SyncSmartVolume((d, p) => !d.IsApp && Store.IsSmartVolumeEnabled(d, p));
         QueueSourceReconciliation();
-        owner.TryPost(() => { if (Volatile.Read(ref closed) == 0) Clipboard.Reconcile(); });
+        ScheduleAdbToolsReconciliation();
         Notify();
     }
 
@@ -977,7 +1025,7 @@ internal sealed partial class PhonePreview : IDisposable
             }
         }
         catch (Exception error) { Error = TranslateError(error); }
-        owner.TryPost(() => { if (Volatile.Read(ref closed) == 0) Clipboard.Reconcile(); });
+        ScheduleAdbToolsReconciliation();
         Notify();
     }
 
@@ -994,18 +1042,19 @@ internal sealed partial class PhonePreview : IDisposable
         Sources.ResourcesRetired -= QueueSourceReconciliation;
         Sources.CaptureInterrupted -= OnPcPlaybackDisconnected;
         Sources.BeginShutdown();
-        Transfers.Changed -= OnTransferChanged;
+        if (transfers != null) transfers.Changed -= OnTransferChanged;
         pendingTransfers.Clear();
+        activeTransferDevices.Clear();
         lock (displayWatches)
             foreach (var watch in displayWatches.Values) watch.CloseStatusOnUi();
-        Clipboard.Dispose();
+        ActiveClipboard?.Dispose();
         StopWirelessWatch();
         lifetime.Cancel();
         Task.Run(async () =>
         {
             await PcListening.DisposeAsync().ConfigureAwait(false);
             await appTransport.DisposeAsync().ConfigureAwait(false);
-            await Transfers.CloseAsync().ConfigureAwait(false);
+            if (transfers != null) await transfers.CloseAsync().ConfigureAwait(false);
             if (tracking != null) await tracking.ConfigureAwait(false);
             await WaitForSourceReconciliationAsync().ConfigureAwait(false);
             await Task.WhenAll(Displays.DisposeAsync().AsTask(), Sources.DisposeAsync().AsTask(), Pc.DisposeAsync().AsTask()).ConfigureAwait(false);
@@ -1046,8 +1095,7 @@ internal sealed partial class ApplicationHost
             var created = new PhonePreview(_environment.DataDirectory, _window, this, _config,
                 _audio.ExternalAudio != null ? _audio.ExternalAudio.AcquireLocalSilenceLease : null,
                 () => HasAirPlay ? AirPlay : null, ExternalAudioSettings,
-                _environment.IsolatedAdbFixturePort() is { } port ? new AdbSocketClient(port) : null,
-                profile => OpenPhoneManagement(profile, airPlay: false));
+                _environment.IsolatedAdbFixturePort() is { } port ? new AdbSocketClient(port) : null);
             created.Changed += OnExternalSourcesChanged;
             phone = created;
             EnsureExternalOutputTopology();
@@ -1101,18 +1149,21 @@ internal sealed partial class ApplicationHost
         if (File.Exists(phonePath) || File.Exists(phonePath + ".bak"))
             _ = Task.Run(() =>
             {
-                if (new AndroidPhoneStore(phonePath).Profiles.Any(p => p.AppPublicKeySha256 != null && !p.ManuallyDisconnected && !p.AppTrustRevoked))
+                var visible = settings.ExternalAudio.Where(choice => choice.App != null && choice.Visible)
+                    .Select(choice => choice.DeviceKey).ToHashSet(StringComparer.Ordinal);
+                if (new AndroidPhoneStore(phonePath).Profiles.Any(p =>
+                    p.AppPublicKeySha256 != null && !p.ManuallyDisconnected && !p.AppTrustRevoked ||
+                    p.LastDevice is { IsApp: false } saved && AndroidDeviceIdentity.StableKey(saved) is { } key && visible.Contains(key)))
                     _window.TryPost(() => _ = Phone);
             });
 
-        if (settings.ExternalAudio.Any(choice => choice.App != null && choice.Visible)) _ = Phone;
         if (hasSavedRoutes || preferences is { Enabled.Length: > 0 } or { Archived.Length: > 0 })
         {
             var p = Phone;
             _window.TryPost(() =>
             {
-                if (preferences != null) p.Clipboard.Initialize(preferences);
-                if (hasSavedRoutes || p.Clipboard.Enabled)
+                if (preferences is { Enabled.Length: > 0 } or { Archived.Length: > 0 }) p.Clipboard.Initialize(preferences);
+                if (hasSavedRoutes || p.ActiveClipboard?.Enabled == true)
                 {
                     p.StartTracking();
                     _ = p.RefreshInBackgroundAsync();
@@ -1137,7 +1188,7 @@ internal sealed partial class ApplicationHost
 
     private void FullSignal(ShellSignal signal)
     {
-        if (signal.Kind == ShellSignalKind.Clipboard) phone?.Clipboard.OnClipboardChanged();
+        if (signal.Kind == ShellSignalKind.Clipboard) phone?.ActiveClipboard?.OnClipboardChanged();
         if (signal.Kind is ShellSignalKind.Power or ShellSignalKind.Session) phone?.StartTracking();
     }
 }

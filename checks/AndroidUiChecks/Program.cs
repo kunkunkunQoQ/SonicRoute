@@ -340,9 +340,8 @@ internal static partial class Program
         var session = new AndroidAudioSession(() => throw new InvalidOperationException("Offline UI fixture"),
             (_, _) => throw new InvalidOperationException("Offline UI fixture"), resolvePhone: resolvePhone);
         typeof(AndroidAudioSession).GetField("_state", Hidden)!.SetValue(session, new AndroidAudioState(CaptureState.Receiving, device, app));
-        var source = (AndroidAudioSource)Activator.CreateInstance(typeof(AndroidAudioSource), BindingFlags.NonPublic | BindingFlags.Instance, null, new object[] { device, app, session, true }, null)!;
-        var started = (TaskCompletionSource<AndroidAudioSource>)typeof(AndroidAudioSource).GetField("Started", Hidden)!.GetValue(source)!;
-        started.TrySetResult(source);
+        var source = new AndroidAudioSource(device, app, session, true);
+        source.Started.TrySetResult(source);
         var stage = session.State.State;
         var notify = typeof(AndroidAudioManager).GetMethod("NotifySource", Hidden)!.CreateDelegate<Action<string?>>(manager);
         Action<AndroidAudioState> handler = state =>
@@ -351,7 +350,7 @@ internal static partial class Program
             stage = state.State;
             notify(stageChanged ? null : source.Id);
         };
-        typeof(AndroidAudioSource).GetField("Handler", Hidden)!.SetValue(source, handler); session.Changed += handler;
+        source.Handler = handler; session.Changed += handler;
         ((List<AndroidAudioSource>)typeof(AndroidAudioManager).GetField("_sources", Hidden)!.GetValue(manager)!).Add(source);
         typeof(AndroidAudioManager).GetMethod("PublishSources", Hidden)!.Invoke(manager, null);
         return source;

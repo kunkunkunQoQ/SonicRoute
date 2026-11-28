@@ -64,10 +64,10 @@ internal static partial class Program
                 Check(first != null && second != null && ReferenceEquals(first.Style, second.Style)
                     && first.ActualHeight == second.ActualHeight && first.ActualHeight > 0,
                     "whole-phone and application cards share style and height in " + theme);
-                Check(Descendants<Border>(first!).Single(b => b.Name == "AppIconAccent").Visibility == Visibility.Collapsed
+                Check(ReferenceEquals(Descendants<Image>(first!).Single(i => i.Name == "AppIconImage").Source, wholeItem.Icon)
                     && Descendants<TextBlock>(first!).Single(t => t.Name == "AppIconInitial").Visibility == Visibility.Collapsed
-                    && Descendants<Border>(second!).Single(b => b.Name == "AppIconAccent").Visibility == Visibility.Visible,
-                    "device uses a bare phone outline while ordinary application badges keep their style in " + theme);
+                    && Descendants<TextBlock>(second!).Single(t => t.Name == "AppIconInitial").Visibility == Visibility.Visible,
+                    "the device uses its phone outline and the saved application without artwork shows its initial in " + theme);
             }
             Check(scans == 0 && !host.GetProperty("IsAdbCreated", statics)!.GetValue(null)!.Equals(true),
                 "listing filtering and rendering the inactive device action create no ADB client or scan");

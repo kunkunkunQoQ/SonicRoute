@@ -64,6 +64,8 @@ public partial class PhoneDevicePage : UserControl, IDisposable
     private string? _catalogSerial;
     private string? _profileId;
     private AndroidDevice? _device;
+    private bool AdbFeaturesSelected => (_device ?? AndroidAudioHost.Phone.Profile.LastDevice)?.IsApp != true
+        && (_device == null || PhoneAudioWindowCache.Manager.IsCurrent(_device));
     private static int _activePageCount;
     internal static bool HasActivePage => Volatile.Read(ref _activePageCount) > 0;
     private bool _active, _disposed, _busy, _showConnection, _suppressName, _applyingConnection;
@@ -117,7 +119,7 @@ public partial class PhoneDevicePage : UserControl, IDisposable
     {
         if (AirPlayCard.IsVisible) return Task.CompletedTask;
         if (CatalogPanel.Visibility == Visibility.Visible) return LoadCatalogAsync(true);
-        if (_device is { } device && !_busy)
+        if (_device is { IsApp: false } device && !_busy)
         {
             CancelEncoderRead();
             if (AndroidAudioHost.IsAdbCreated) AndroidAudioHost.Adb.InvalidateEncoders(device);
@@ -186,26 +188,28 @@ public partial class PhoneDevicePage : UserControl, IDisposable
         _device = PhoneAudioWindowCache.GetOnlineDevice(profile.LastDevice);
         PhoneAudioWindowCache.SelectedSerial = _device?.Serial ?? profile.LastDevice?.Serial;
         bool connection = IsConnectionPage;
-        if ((connection || _device == null) && CatalogPanel.Visibility == Visibility.Visible)
+        if ((connection || _device == null || !AdbFeaturesSelected) && CatalogPanel.Visibility == Visibility.Visible)
         { _operation?.Cancel(); ReleaseCatalog(); }
         DeviceName.Text = AndroidAudioHost.Phone.GetProfileDisplayName(profile);
         var display = _device ?? profile.LastDevice;
         DeviceDescription.Text = _device == null ? L10n.T("Phone.Disconnected")
             : $"{DeviceName.Text} · {(_device.IsWifi ? "Wi-Fi" : "USB")} · {L10n.T("Phone.ConnectedStatus")}";
-        bool appsChanged = !ReferenceEquals(_retainedSnapshot, profile.RetainedApps);
+        var retained = AdbFeaturesSelected ? profile.RetainedApps : Array.Empty<AndroidApp>();
+        bool appsChanged = !ReferenceEquals(_retainedSnapshot, retained);
         if (appsChanged)
         {
-            _retainedSnapshot = profile.RetainedApps;
-            RetainedApps.ItemsSource = profile.RetainedApps.Select(a => new PhoneAppChoice(new PhoneAppItem(a), true,
+            _retainedSnapshot = retained;
+            RetainedApps.ItemsSource = retained.Select(a => new PhoneAppChoice(new PhoneAppItem(a), true,
                 !profile.DisabledSmartVolumeApps.Contains(a.Package))).ToArray();
         }
         else if (!ReferenceEquals(_smartVolumeSnapshot, profile.DisabledSmartVolumeApps))
             foreach (PhoneAppChoice choice in RetainedApps.Items) choice.SmartVolume = !profile.DisabledSmartVolumeApps.Contains(choice.Item.Package);
         _smartVolumeSnapshot = profile.DisabledSmartVolumeApps;
-        RetainedCount.Text = string.Format(L10n.T("Phone.RetainedCountFormat"), profile.RetainedApps.Count);
-        RetainedEmpty.Visibility = profile.RetainedApps.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
-        RetainedPanel.Visibility = DeviceCard.Visibility = StreamingCard.Visibility = connection ? Visibility.Collapsed : Visibility.Visible;
-        RefreshStreamingSettings(connection ? null : display);
+        RetainedCount.Text = string.Format(L10n.T("Phone.RetainedCountFormat"), retained.Count);
+        RetainedEmpty.Visibility = retained.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        DeviceCard.Visibility = connection ? Visibility.Collapsed : Visibility.Visible;
+        RetainedPanel.Visibility = StreamingCard.Visibility = AdbFeaturesSelected ? DeviceCard.Visibility : Visibility.Collapsed;
+        RefreshStreamingSettings(connection || !AdbFeaturesSelected ? null : display);
         ConnectionPanel.Visibility = connection ? Visibility.Visible : Visibility.Collapsed;
         var usbChoices = connection && PhoneAudioWindowCache.Devices is { } cached
             ? cached.Where(d => d.State == "device" && !d.IsWifi && PhoneAudioWindowCache.GetOnlineDevice(d) == null
@@ -214,8 +218,8 @@ public partial class PhoneDevicePage : UserControl, IDisposable
             : Array.Empty<UsbRestoreChoice>();
         RestoreUsbDevices.ItemsSource = usbChoices.Length == 0 ? null : usbChoices;
         RestoreUsbDevices.Visibility = usbChoices.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
-        RenameButton.Visibility = RetainedPanel.Visibility;
-        AddAppsButton.IsEnabled = _device != null && !_busy;
+        RenameButton.Visibility = DeviceCard.Visibility;
+        AddAppsButton.IsEnabled = AdbFeaturesSelected && _device != null && !_busy;
         DisconnectButton.IsEnabled = _device != null && !_busy;
         DisconnectButton.Content = _device?.IsWifi == false ? L10n.T("Phone.StopReceiving") : L10n.T("Phone.Disconnect");
         ReconnectButton.IsEnabled = display != null && !_busy;
@@ -236,7 +240,7 @@ public partial class PhoneDevicePage : UserControl, IDisposable
     private void RefreshClipboard()
     {
         if (_disposed || !_active || System.Windows.Application.Current is not App application) return;
-        var device = AndroidAudioHost.Phone.Profile.LastDevice;
+        var device = AdbFeaturesSelected ? AndroidAudioHost.Phone.Profile.LastDevice : null;
         _suppressClipboard = true;
         try { ClipboardSyncToggle.IsChecked = application.PhoneClipboardEnabled(device); ClipboardSyncToggle.IsEnabled = device != null; }
         finally { _suppressClipboard = false; }
@@ -244,13 +248,13 @@ public partial class PhoneDevicePage : UserControl, IDisposable
     }
     private async void ClipboardSync_Changed(object sender, RoutedEventArgs e)
     {
-        if (_suppressClipboard || _disposed || !_active || AndroidAudioHost.Phone.Profile.LastDevice is not { } device
+        if (_suppressClipboard || _disposed || !_active || !AdbFeaturesSelected || AndroidAudioHost.Phone.Profile.LastDevice is not { } device
             || System.Windows.Application.Current is not App application) return;
         bool enabled = ClipboardSyncToggle.IsChecked == true;
         try
         {
             var sync = await application.PreparePhoneClipboardAsync();
-            if (!AndroidAudioHost.Phone.IsRemoved(device)) sync.SetEnabled(device, enabled);
+            if (AdbFeaturesSelected && _profileId == AndroidAudioHost.Phone.FindProfile(device)?.Id && !AndroidAudioHost.Phone.IsRemoved(device)) sync.SetEnabled(device, enabled);
         }
         catch (Exception) { if (!_disposed) SetOperationStatusKey("Phone.ClipboardSaveError"); }
         if (!_disposed) RefreshClipboard();
@@ -421,7 +425,7 @@ public partial class PhoneDevicePage : UserControl, IDisposable
     private void Name_LostFocus(object sender, KeyboardFocusChangedEventArgs e) => PhoneNameBox.Visibility = Visibility.Collapsed;
     private async void AddApps_Click(object sender, RoutedEventArgs e)
     {
-        if (_disposed || !_active || _busy || _device == null) return;
+        if (_disposed || !_active || _busy || _device == null || !AdbFeaturesSelected) return;
         SetCatalogVisible(true);
         CatalogSearch.Focus();
         await LoadCatalogAsync(false);
@@ -449,7 +453,7 @@ public partial class PhoneDevicePage : UserControl, IDisposable
     }
     private async Task LoadCatalogAsync(bool refresh)
     {
-        var device = PhoneAudioWindowCache.GetOnlineDevice(_device); if (device == null) return;
+        var device = PhoneAudioWindowCache.GetOnlineDevice(_device); if (device is not { IsApp: false }) return;
         if (!refresh && _catalogSerial == device.CommandTarget) { ApplyCatalogFilter(); return; }
         await RunAsync(async token =>
         {
@@ -495,19 +499,19 @@ public partial class PhoneDevicePage : UserControl, IDisposable
     }
     private void AddSelectedApps_Click(object sender, RoutedEventArgs e)
     {
-        if (_disposed || !_active || _busy || CatalogPanel.Visibility != Visibility.Visible) return;
+        if (_disposed || !_active || _busy || !AdbFeaturesSelected || CatalogPanel.Visibility != Visibility.Visible) return;
         var apps = CatalogApps.SelectedItems.Cast<PhoneAppChoice>().Where(choice => !choice.Retained).Select(choice => choice.Item.App).ToArray();
         AndroidAudioHost.Phone.RetainMany(apps);
     }
     private void SmartVolume_Changed(object sender, RoutedEventArgs e)
     {
-        if (sender is CheckBox { DataContext: PhoneAppChoice choice } toggle && RetainedApps.Items.Contains(choice)
+        if (AdbFeaturesSelected && sender is CheckBox { DataContext: PhoneAppChoice choice } toggle && RetainedApps.Items.Contains(choice)
             && choice.SmartVolume != (toggle.IsChecked == true))
             AndroidAudioHost.Phone.SetSmartVolume(choice.Item.Package, toggle.IsChecked == true);
     }
     private void RetainApp_Click(object sender, RoutedEventArgs e)
     {
-        if ((sender as Button)?.Tag is not AndroidApp app) return;
+        if (!AdbFeaturesSelected || (sender as Button)?.Tag is not AndroidApp app) return;
         if (AndroidAudioHost.Phone.Profile.RetainedApps.Any(a => a.Package == app.Package)) AndroidAudioHost.Phone.Remove(app.Package);
         else AndroidAudioHost.Phone.Retain(app);
     }

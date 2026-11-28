@@ -45,7 +45,7 @@ internal sealed record ClipboardPreferences(AndroidDevice[] Enabled, AndroidDevi
         if (list.ValueKind != JsonValueKind.Array || (limitEnabledDevices && list.GetArrayLength() > 32))
             throw new JsonException("Invalid clipboard device list.");
         var devices = list.Deserialize(AndroidSettingsJsonContext.Default.AndroidDeviceArray) ?? [];
-        return devices.Where(d => d != null && !string.IsNullOrWhiteSpace(d.Serial) && d.Serial.Length <= 512
+        return devices.Where(d => d is { IsApp: false } && !string.IsNullOrWhiteSpace(d.Serial) && d.Serial.Length <= 512
             && (d.HardwareId?.Length ?? 0) <= 128).DistinctBy(AndroidDeviceIdentity.Key).ToArray();
     }
 

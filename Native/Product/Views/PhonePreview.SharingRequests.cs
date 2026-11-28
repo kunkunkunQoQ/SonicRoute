@@ -44,7 +44,7 @@ internal sealed partial class PhonePreview
 
             async Task PresentSharedScreenAsync()
             {
-                try { await session.ViewScreenAsync(Store.GetDisplayName(device), session.Token).ConfigureAwait(false); }
+                try { await session.ViewScreenAsync(Store.GetDisplayName(device), session.Token, device).ConfigureAwait(false); }
                 catch (OperationCanceledException) { }
                 catch (Exception error) { ExceptionDiagnostics.Record("NativePhone.OpenSharedScreen", error); }
             }

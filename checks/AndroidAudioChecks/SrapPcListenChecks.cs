@@ -3,6 +3,7 @@ using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Threading.Channels;
 using SonicRoute.AndroidAudio;
 
 internal static partial class Program
@@ -10,47 +11,69 @@ internal static partial class Program
     private static async Task SrapPcListenChecksAsync(string directory)
     {
         Directory.CreateDirectory(directory);
+        await CheckPairedListeningAsync(directory, forceUnsupported: false);
+        await CheckPairedListeningAsync(directory, forceUnsupported: true);
+    }
+
+    private static async Task CheckPairedListeningAsync(string directory, bool forceUnsupported)
+    {
         using var signer = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         using var cert = SrapFixtureCertificate(signer);
         using var identity = new SrapIdentity(directory);
         using var listener = new TcpListener(IPAddress.Loopback, 0);
         listener.Start();
         var endpoint = (IPEndPoint)listener.LocalEndpoint;
-        string parent = Guid.NewGuid().ToString("N"), pin = Convert.ToHexString(SHA256.HashData(signer.ExportSubjectPublicKeyInfo()));
-        string first = Guid.NewGuid().ToString("N"), second = Guid.NewGuid().ToString("N");
-        using var stop = new CancellationTokenSource(TimeSpan.FromSeconds(30));
-        var ct = stop.Token;
-        JsonArray Caps(string? id)
-        {
-            var limits = new JsonObject { ["pcm"] = SrapSession.PcmEncoding, ["pcListenInitiate"] = "1" };
-            if (id != null) limits["pcListenRequest"] = id;
-            return [new JsonObject { ["id"] = "audio.play", ["state"] = "available", ["scope"] = "owned_track", ["limits"] = limits },
-                new JsonObject { ["id"] = "audio.route.owned", ["state"] = "available" }];
-        }
-        var accept = AcceptSrapFixtureAsync(listener, cert, identity.Fingerprint, parent, Caps(first), ct);
-        using var session = await new SrapClient(identity).ConnectAsync(endpoint, pin, ct);
-        using var remote = await accept;
+        string parent = Guid.NewGuid().ToString("N");
+        string pin = Convert.ToHexString(SHA256.HashData(signer.ExportSubjectPublicKeyInfo()));
         string path = Path.Combine(directory, parent + ".json");
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(35));
+        var ct = timeout.Token;
         var store = new AndroidPhoneStore(path);
         var profile = store.RegisterApp(pin, endpoint, store.ManagementRevision);
         await using var transport = new SrapPhoneTransport(store, directory);
-        int captures = 0, ended = 0;
+        int captures = 0;
+        var finished = Channel.CreateUnbounded<int>();
+        byte[] samples = [10, 0, 10, 0];
         async Task Capture(Stream output, CancellationToken token)
         {
-            Interlocked.Increment(ref captures);
+            int number = Interlocked.Increment(ref captures);
             try
             {
-                await output.WriteAsync(new byte[] { 10, 0, 10, 0 }, token);
+                await output.WriteAsync(samples, token);
                 await Task.Delay(Timeout.Infinite, token);
             }
-            finally { Interlocked.Increment(ref ended); }
+            finally { finished.Writer.TryWrite(number); }
         }
-        await using var listening = new SrapPcListening(store, transport, Capture);
+        await using var listening = new SrapPcListening(store, transport, Capture, systemCaptureSupported: forceUnsupported ? false : null);
         store.Changed += listening.Reconcile;
         transport.Changed += listening.Reconcile;
+        Check(!listening.HasActiveWork && captures == 0 && store.HasUniqueAppOwner(profile.Id, pin),
+            "registering a paired fingerprint alone starts no audio source");
+
+        static JsonArray Caps(string? request = null, string playScope = "owned_track", string? misplacedRequest = null)
+        {
+            var playback = new JsonObject { ["pcm"] = SrapSession.PcmEncoding, ["pcListenInitiate"] = "1" };
+            if (request != null) playback["pcListenRequest"] = request;
+            var route = new JsonObject();
+            if (misplacedRequest != null) route["pcListenRequest"] = misplacedRequest;
+            return [
+                new JsonObject { ["id"] = "audio.play", ["state"] = "available", ["scope"] = playScope, ["limits"] = playback },
+                new JsonObject { ["id"] = "audio.route.owned", ["state"] = "available", ["scope"] = "owned_track", ["limits"] = route },
+                new JsonObject { ["id"] = "audio.devices", ["state"] = "available", ["scope"] = "device" }
+            ];
+        }
+
+        var accept = AcceptSrapFixtureAsync(listener, cert, identity.Fingerprint, parent, Caps(), ct);
+        using var originalSession = await new SrapClient(identity).ConnectAsync(endpoint, pin, ct);
+        using var originalPeer = await accept;
+        var session = originalSession;
+        var remote = originalPeer;
+        await Reject(() => Task.FromResult(transport.Admit(profile with { AppPublicKeySha256 = new string('0', 64) }, session)), "stale_session");
         var device = transport.Admit(profile, session);
         long revision = 1;
-        async Task Capabilities(string? request)
+        int sequence = 0;
+
+        async Task Publish(JsonArray entries)
         {
             var observed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             long version = ++revision;
@@ -58,128 +81,184 @@ internal static partial class Program
             session.CapabilitiesChanged += Changed;
             try
             {
-                await SrapClient.WriteAsync(remote, "capabilities", new() { ["capabilityRevision"] = version, ["entries"] = Caps(request) }, ct, session: parent);
+                await SrapClient.WriteAsync(remote, "capabilities", new() { ["capabilityRevision"] = version, ["entries"] = entries }, ct, session: parent);
                 await observed.Task.WaitAsync(ct);
             }
             finally { session.CapabilitiesChanged -= Changed; }
         }
+
         async Task<JsonElement> Read(string op, string? state = null, string? request = null)
         {
-            var message = await SrapClient.ReadAsync(remote, ct);
-            var body = SrapClient.Body(message);
+            var wire = await SrapClient.ReadAsync(remote, ct);
+            var body = SrapClient.Body(wire);
             var parameters = body.GetProperty("params");
-            Check(SrapClient.Text(body, "op") == op && (state == null || SrapClient.Text(parameters, "state") == state)
-                && (request == null || SrapClient.Text(parameters, "request") == request), "phone listening RPC " + op + " " + state);
-            return message;
+            string? actual = SrapClient.Text(body, "op"), actualState = SrapClient.Text(parameters, "state");
+            Check(SrapClient.Text(wire, "session") == parent && actual == op && (state == null || actualState == state)
+                && (request == null || SrapClient.Text(parameters, "request") == request),
+                $"current TLS request {op} {state} (received {actual} {actualState})");
+            return wire;
         }
+
         Task Done(JsonElement message, JsonObject? result = null) => SrapClient.WriteAsync(remote, "response",
             new() { ["status"] = "done", ["result"] = result ?? new JsonObject() }, ct, SrapClient.Text(message, "id"), parent);
-        int sequence = 0;
-        async Task<uint> OpenFromPhone(string request, bool alreadyRequested = false)
+
+        // A reply on the existing TLS connection marks progress without a sleep or a timed, partial TLS read.
+        async Task CheckIdle(string reason, int expectedCaptures, string? mayDecline = null)
         {
-            int prior = captures;
-            if (!alreadyRequested) await Capabilities(request);
+            var barrier = session.RequestAsync("audio.devices.list", "audio.devices", new(), ct);
+            JsonElement message = await SrapClient.ReadAsync(remote, ct);
+            var body = SrapClient.Body(message);
+            if (mayDecline != null && SrapClient.Text(body, "op") == "audio.listen.status")
+            {
+                var parameters = body.GetProperty("params");
+                Check(SrapClient.Text(parameters, "request") == mayDecline && SrapClient.Text(parameters, "state") == "declined",
+                    "unsupported request can only be declined");
+                await Done(message);
+                message = await SrapClient.ReadAsync(remote, ct);
+                body = SrapClient.Body(message);
+            }
+            Check(SrapClient.Text(message, "session") == parent && SrapClient.Text(body, "op") == "audio.devices.list",
+                reason + " sent no track-start request");
+            await Done(message, new() { ["outputs"] = new JsonArray() });
+            await barrier;
+            Check(!listening.HasActiveWork && listening.StoppableRequest(device) == null && Volatile.Read(ref captures) == expectedCaptures, reason);
+        }
+
+        async Task<uint> OpenTrack(string request)
+        {
+            int previous = Volatile.Read(ref captures);
             var start = await Read("audio.play.start");
             var parameters = SrapClient.Body(start).GetProperty("params");
             uint id = parameters.GetProperty("streamId").GetUInt32();
             Check(SrapClient.Text(parameters, "listenRequest") == request && SrapClient.Text(parameters, "targetKey") == "current",
-                "only exact lower-case phone request opens a bound current-output track");
+                "one authenticated request is bound to this owned track and the phone's current output");
             await Done(start, new() { ["encoding"] = SrapSession.PcmEncoding, ["credit"] = 4, ["streamId"] = id });
             var route = await Read("audio.route.set");
+            var routeParams = SrapClient.Body(route).GetProperty("params");
+            Check(routeParams.GetProperty("streamId").GetUInt32() == id && SrapClient.Text(routeParams, "targetKey") == "current",
+                "route verification targets the exact new stream");
             string routeId = SrapClient.Text(route, "id")!;
             await SrapClient.WriteAsync(remote, "response", new() { ["status"] = "pending" }, ct, routeId, parent);
-            Check(captures == prior, "capture waits for verified phone routing");
+            Check(Volatile.Read(ref captures) == previous, "source stays closed until the route is verified");
             var routed = new JsonObject { ["type"] = "event", ["session"] = parent, ["seq"] = ++sequence, ["body"] = new JsonObject
                 { ["name"] = "audio.routed", ["requestId"] = routeId, ["streamId"] = id, ["targetKey"] = "current",
                     ["actualKey"] = "speaker", ["verified"] = true } };
             await remote.WriteAsync(SrapProtocol.Encode(new(SrapFrameType.Control, 0, JsonSerializer.SerializeToUtf8Bytes(routed))), ct);
-            var data = await SrapProtocol.ReadAsync(remote, ct);
-            Check(data is { Type: SrapFrameType.Data } && data.StreamId == id && data.Payload[12..].SequenceEqual(new byte[] { 10, 0, 10, 0 }),
-                "one requested stream carries fixture PCM");
+            var frame = await SrapProtocol.ReadAsync(remote, ct);
+            Check(frame is { Type: SrapFrameType.Data } && frame.StreamId == id && frame.Payload[12..].SequenceEqual(samples)
+                && Volatile.Read(ref captures) == previous + 1 && listening.StoppableRequest(device) == request,
+                "only the exact four synthetic PCM bytes reach the requested stream");
             return id;
         }
 
-        await Done(await Read("audio.listen.offer", SrapPcListening.Supported ? "needs_authorization" : "unsupported"));
-        if (SrapPcListening.Supported)
+        async Task TrackStopped(string request, uint stream, int captureNumber)
         {
-            var initial = listening.Pending(profile.Id) ?? throw new InvalidOperationException("Expected a local authorization prompt.");
-            Check(initial.Request == first && !listening.Answer(initial with { Request = second }, true) && captures == 0 &&
-                listening.Answer(initial, false), "only the current request can be answered and explicit rejection keeps audio private");
+            var close = await Read("stream.stop");
+            Check(SrapClient.Body(close).GetProperty("params").GetProperty("streamId").GetUInt32() == stream, "stop closes the exact active track");
+            await Done(close, new() { ["streamId"] = stream, ["stopped"] = true });
+            await Done(await Read("audio.listen.status", "stopped", request));
+            Check(await finished.Reader.ReadAsync(ct) == captureNumber && !listening.HasActiveWork, "the active source is canceled and joined");
         }
-        await Done(await Read("audio.listen.status", "declined", first));
-        Check(captures == 0 && !profile.AllowsPcListening, "no WASAPI worker before explicit authorization");
-        if (!SrapPcListening.Supported) return;
-        await Capabilities(new string('A', 32));
-        var asked = new TaskCompletionSource<PcListeningPrompt>(TaskCreationOptions.RunContinuationsAsynchronously);
-        void NewPrompt(PcListeningPrompt p) { if (p.Request == second) asked.TrySetResult(p); }
-        listening.PermissionRequested += NewPrompt;
-        await Capabilities(second);
-        var shown = await asked.Task.WaitAsync(ct);
-        Check(shown.ProfileId == profile.Id && shown.Fingerprint == pin && captures == 0 && listening.Answer(shown, true),
-            "explicit approval of this attachment and request persists authorization before capture");
-        listening.PermissionRequested -= NewPrompt;
+
+        static async Task Reject(Func<Task> action, string code)
+        {
+            try { await action(); }
+            catch (SrapException ex) when (ex.Code == code) { Check(true, "refused operation with " + code); return; }
+            Check(false, "expected refusal " + code);
+        }
+
+        bool hardware = !forceUnsupported && SrapPcListening.Supported;
+        await Done(await Read("audio.listen.offer", hardware ? "available" : "unsupported"));
+        await CheckIdle("admission and offer leave the source idle", 0);
+        Check(listening.CanStartOnPhone(device) == hardware, "start is gated by actual host support and the admitted device");
+        if (!hardware)
+        {
+            string unusable = Guid.NewGuid().ToString("N");
+            await Reject(() => listening.StartOnPhoneAsync(device, ct), "unsupported");
+            await Publish(Caps(unusable));
+            await CheckIdle("unsupported host keeps the source closed even on an explicit phone request", 0, unusable);
+            return;
+        }
+
+        string first = Guid.NewGuid().ToString("N"), second = Guid.NewGuid().ToString("N");
+        await Publish(Caps(new string('A', 32)));
+        await CheckIdle("uppercase request is ignored", 0);
+        await Publish(Caps(misplacedRequest: first));
+        await CheckIdle("request advertised on the route capability is ignored", 0);
+        await Publish(Caps(second, playScope: "system_media"));
+        await Done(await Read("audio.listen.offer", "unsupported"));
+        await CheckIdle("an unrelated playback scope cannot open the source", 0, second);
+        await Publish(Caps(second));
         await Done(await Read("audio.listen.offer", "available"));
-        Check(new AndroidPhoneStore(path).Profile.AllowsPcListening, "exact authorized key persisted before offer");
-        string fallback = Path.Combine(directory, "fallback-" + parent + ".json");
-        File.Copy(path, fallback + ".bak");
-        Check(!new AndroidPhoneStore(fallback).Profile.AllowsPcListening, "backup recovery never revives a withdrawn audio grant");
-        uint stream = await OpenFromPhone(second, alreadyRequested: true);
-        listening.SetPermission(profile.Id, pin, false);
-        await Done(await Read("stream.stop"), new() { ["streamId"] = stream, ["stopped"] = true });
-        await Done(await Read("audio.listen.status", "stopped", second));
-        await Done(await Read("audio.listen.offer", "needs_authorization"));
-        Check(captures == 1 && !listening.HasActiveWork && !new AndroidPhoneStore(path).Profile.AllowsPcListening,
-            "revocation cancels capture and closes the track before returning to idle");
-        listening.SetPermission(profile.Id, pin, true);
-        await Done(await Read("audio.listen.offer", "available"));
-        string third = Guid.NewGuid().ToString("N");
-        stream = await OpenFromPhone(third);
-        await Capabilities(null);
-        await Done(await Read("stream.stop"), new() { ["streamId"] = stream, ["stopped"] = true });
-        await Done(await Read("audio.listen.status", "stopped", third));
-        Check(ended == 2 && !listening.HasActiveWork, "withdrawn or expired phone request retires the worker and AudioTrack");
-        listening.SetPermission(profile.Id, pin, false);
-        await Done(await Read("audio.listen.offer", "needs_authorization"));
+        await CheckIdle("restoring owned-track capability cannot revive an earlier request", 0);
+        await Publish(Caps());
+        await Publish(Caps(first));
+        uint stream = await OpenTrack(first);
+        await Publish(Caps(first));
+        await Reject(() => listening.StartOnPhoneAsync(device, ct), "busy");
+        await Reject(() => listening.StopOnPhoneAsync(device, second), "stale_session");
+        await Publish(Caps());
+        await TrackStopped(first, stream, 1);
+        await Publish(Caps(first));
+        await CheckIdle("a withdrawn request and its repeated publication cannot reopen the source", 1);
+        await Publish(Caps());
+
         foreach (bool match in new[] { false, true })
         {
             var initiated = listening.StartOnPhoneAsync(device, ct);
             var message = await Read("audio.listen.request");
             string ticket = SrapClient.Text(SrapClient.Body(message).GetProperty("params"), "request")!;
-            await Capabilities(ticket);
-            Check(captures == 2 && listening.Pending(profile.Id) == null, "a published PC request alone cannot open an audio stream");
+            Check(Guid.TryParseExact(ticket, "N", out _) && ticket == ticket.ToLowerInvariant(), "desktop generates a scoped request ID");
+            await Publish(Caps(ticket));
+            Check(!listening.HasActiveWork && Volatile.Read(ref captures) == 1,
+                "publishing the desktop ticket alone does not open the source before an exact echo");
             await Done(message, new() { ["request"] = match ? ticket : first, ["state"] = "requested" });
             if (!match)
             {
                 await Done(await Read("audio.listen.status", "stopped", ticket));
-                bool rejected = false;
-                try { await initiated; } catch (SrapException e) when (e.Code == "invalid_argument") { rejected = true; }
-                Check(rejected && !listening.HasActiveWork, "a wrong echo cannot claim the computer's one-time permission");
+                await Reject(() => initiated, "invalid_argument");
+                await CheckIdle("mismatched desktop echo starts no track", 1);
             }
             else
             {
                 await initiated;
-                stream = await OpenFromPhone(ticket, alreadyRequested: true);
-                Check(listening.StoppableRequest(device) == ticket && !store.Profile.AllowsPcListening, "PC started current authenticated phone without storing a grant");
+                stream = await OpenTrack(ticket);
                 await listening.StopOnPhoneAsync(device, ticket);
-                await Done(await Read("stream.stop"), new() { ["streamId"] = stream, ["stopped"] = true });
-                await Done(await Read("audio.listen.status", "stopped", ticket));
+                await TrackStopped(ticket, stream, 2);
             }
-            await Capabilities(null);
+            await Publish(Caps());
         }
-        listening.SetPermission(profile.Id, pin, true);
-        await Done(await Read("audio.listen.offer", "available"));
-        await OpenFromPhone(Guid.NewGuid().ToString("N"));
+
+        string interrupted = Guid.NewGuid().ToString("N");
+        await Publish(Caps(interrupted));
+        await OpenTrack(interrupted);
+        var oldDevice = device;
         transport.Close(profile.Id);
-        await listening.DisposeAsync();
-        Check(ended == 4, "disconnect joins the active capture worker");
-        store.RevokeAppTrust(profile.Id, pin);
-        var rebound = store.RegisterApp(pin, endpoint, store.ManagementRevision);
-        Check(!rebound.AllowsPcListening, "explicit re-pair after revoked trust requires a new grant");
-        store.SetPcListening(rebound.Id, pin, true);
-        store.RemoveDevice(rebound.Id);
-        var reopened = new AndroidPhoneStore(path);
-        Check(!reopened.RegisterApp(pin, endpoint, reopened.ManagementRevision).AllowsPcListening,
-            "removed phone cannot restore its saved listening permission");
+        Check(await finished.Reader.ReadAsync(ct) == 3 && !listening.CanStartOnPhone(oldDevice),
+            "disconnect cancels the active source and invalidates the old device handle");
+
+        parent = Guid.NewGuid().ToString("N");
+        revision = 1;
+        sequence = 0;
+        accept = AcceptSrapFixtureAsync(listener, cert, identity.Fingerprint, parent, Caps(interrupted), ct);
+        using var newSession = await new SrapClient(identity).ConnectAsync(endpoint, pin, ct);
+        using var newPeer = await accept;
+        session = newSession;
+        remote = newPeer;
+        device = transport.Admit(profile, session);
+        await Done(await Read("audio.listen.offer", "available"));
+        await CheckIdle("reconnection with a stale request in its first snapshot starts no capture", 3);
+        await Reject(() => listening.StartOnPhoneAsync(oldDevice, ct), "unsupported");
+        await Reject(() => listening.StopOnPhoneAsync(oldDevice, interrupted), "stale_session");
+        await Publish(Caps());
+        string last = Guid.NewGuid().ToString("N");
+        await Publish(Caps(last));
+        await OpenTrack(last);
+        transport.RevokeTrust(profile.Id, pin);
+        Check(await finished.Reader.ReadAsync(ct) == 4 && !listening.CanStartOnPhone(device) && !listening.HasActiveWork
+            && new AndroidPhoneStore(path).Profiles.Single(p => p.Id == profile.Id).AppTrustRevoked,
+            "revoking this paired fingerprint retires the source and persists loss of trust");
+        await Reject(() => listening.StartOnPhoneAsync(device, ct), "unsupported");
         store.Changed -= listening.Reconcile;
         transport.Changed -= listening.Reconcile;
     }

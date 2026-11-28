@@ -18,8 +18,6 @@ public sealed record AndroidPhoneProfile(string Name, AndroidDevice? LastDevice,
     internal string? AppPublicKeySha256 { get; init; }
     internal string? LastAppAddress { get; init; }
     internal bool AppTrustRevoked { get; init; }
-    internal string? PcListenFingerprint { get; init; }
-    internal bool AllowsPcListening => !AppTrustRevoked && PcListenFingerprint != null && PcListenFingerprint == AppPublicKeySha256;
     internal bool PreferAppTransport { get; init; }
 
     internal static string? WirelessAddress(string? serial) =>
@@ -61,6 +59,7 @@ public sealed class AndroidPhoneStore
     private long _managementRevision;
     private bool _loadedSafely = true;
     private bool _legacyFormat;
+    internal Func<AndroidDevice, AndroidDevice?>? SelectedTransport { get; set; }
     internal long ManagementRevision { get { lock (_gate) return _managementRevision; } }
     internal long LibraryRevision { get { lock (_gate) return _revision; } }
     internal bool HasUnresolvedRemovals { get { lock (_gate) return _state.RemovedDevices?.Any(d => AndroidDeviceIdentity.StableKey(d) == null) == true; } }
@@ -92,8 +91,8 @@ public sealed class AndroidPhoneStore
         }
         if (hasBackup && TryLoadState(backup, out loaded, out legacy))
         {
-            // A fallback copy can predate revocation. Recover the library and require a fresh audio grant.
-            _state = loaded with { Profiles = Array.AsReadOnly(loaded.Profiles.Select(p => p with { PcListenFingerprint = null }).ToArray()) };
+            // A fallback copy can predate revocation. Recover the ADB library and require a fresh App pairing.
+            _state = loaded with { Profiles = Array.AsReadOnly(loaded.Profiles.Select(WithoutAppTrust).ToArray()) };
             _loadedSafely = true;
             _legacyFormat = legacy;
         }
@@ -150,7 +149,7 @@ public sealed class AndroidPhoneStore
         {
             if (item?.Device is not { } device || string.IsNullOrWhiteSpace(device.Serial) || device.Serial.Length > 512
                 || (device.HardwareId?.Length ?? 0) > 128) continue;
-            try { var profile = LoadProfile(item) with { PcListenFingerprint = null }; profiles[profile.Id] = profile; }
+            try { var profile = WithoutAppTrust(LoadProfile(item)); profiles[profile.Id] = profile; }
             catch (ArgumentException ex) { Trace.WriteLine("Removed phone preferences: " + ex.Message); }
         }
         return Array.AsReadOnly(profiles.Values.ToArray());
@@ -158,6 +157,7 @@ public sealed class AndroidPhoneStore
     private static AndroidPhoneProfile LoadProfile(SavedPhone saved)
     {
         if (saved == null || string.IsNullOrEmpty(saved.Id) || saved.Id.Length > 128 || saved.Apps == null) throw new ArgumentException("Invalid phone library.");
+        saved.AdditionalFields?.Remove("PcListenFingerprint");
         string? appFingerprint = NormalizeAppFingerprint(saved.AppPublicKeySha256);
         if (saved.Device is { IsApp: true } savedApp && (appFingerprint == null || savedApp.Serial != appFingerprint))
             throw new ArgumentException("Conflicting App identity in phone library.");
@@ -169,8 +169,6 @@ public sealed class AndroidPhoneStore
             Id = saved.Id,
             AdditionalFields = saved.AdditionalFields,
             AppPublicKeySha256 = appFingerprint,
-            PcListenFingerprint = !saved.AppTrustRevoked && NormalizeAppFingerprint(saved.PcListenFingerprint) == appFingerprint
-                ? appFingerprint : null,
             LastAppAddress = saved.LastAppAddress != null && System.Net.IPEndPoint.TryParse(saved.LastAppAddress, out var appAddress) && appAddress.Port > 0
                 ? appAddress.ToString() : null,
             AppTrustRevoked = saved.AppTrustRevoked,
@@ -255,13 +253,9 @@ public sealed class AndroidPhoneStore
 
     public bool IsSmartVolumeEnabled(AndroidDevice? device, string package)
     {
-        lock (_gate)
-        {
-            var profile = device != null
-                ? FindProfile(device)
-                : _state.Profiles.FirstOrDefault(p => p.Id == _state.SelectedId);
-            return profile == null || !profile.DisabledSmartVolumeApps.Contains(package, StringComparer.Ordinal);
-        }
+        if (device?.IsApp == true) return false;
+        var profile = device == null ? Profile : FindProfile(device);
+        return profile == null || AllowsAdbSettings(profile) && !profile.DisabledSmartVolumeApps.Contains(package, StringComparer.Ordinal);
     }
     public bool SelectProfile(string id)
     {
@@ -322,7 +316,6 @@ public sealed class AndroidPhoneStore
             var merged = WithQuickPanelApps(target with
             {
                 AppPublicKeySha256 = fingerprint, LastAppAddress = source.LastAppAddress, AppTrustRevoked = false,
-                PcListenFingerprint = source.AllowsPcListening ? fingerprint : null,
                 RetainedApps = Array.AsReadOnly(apps), DisabledSmartVolumeApps = Array.AsReadOnly(disabled),
                 ReceiveFolder = first.ReceiveFolder != AndroidFileTransfer.Downloads ? first.ReceiveFolder : second.ReceiveFolder,
                 AdditionalFields = extensions.Count == 0 ? null : extensions
@@ -356,7 +349,6 @@ public sealed class AndroidPhoneStore
             {
                 LastDevice = previous?.LastDevice is { IsApp: false } bound ? bound : saved,
                 AppPublicKeySha256 = fingerprint, LastAppAddress = endpoint.ToString(),
-                PcListenFingerprint = active.Length == 1 && active[0].AllowsPcListening ? fingerprint : null,
                 ManuallyDisconnected = false, AppTrustRevoked = false
             };
             var phones = state.Profiles.Contains(previous!)
@@ -380,10 +372,13 @@ public sealed class AndroidPhoneStore
             && p.LastAppAddress != address ? p with { LastAppAddress = address } : p);
     }
 
+    private static AndroidPhoneProfile WithoutAppTrust(AndroidPhoneProfile profile) => profile.AppPublicKeySha256 == null ? profile :
+        profile with { AppTrustRevoked = true, LastAppAddress = null, ManuallyDisconnected = profile.LastDevice?.IsApp == true || profile.ManuallyDisconnected };
+
     internal void RevokeAppTrust(string id, string fingerprint) => Change(state =>
     {
         var phones = state.Profiles.Select(p => p.Id == id && p.AppPublicKeySha256 == fingerprint && !p.AppTrustRevoked
-            ? p with { AppTrustRevoked = true, PcListenFingerprint = null, LastAppAddress = null, ManuallyDisconnected = p.LastDevice?.IsApp == true || p.ManuallyDisconnected } : p).ToArray();
+            ? WithoutAppTrust(p) : p).ToArray();
         return phones.SequenceEqual(state.Profiles) ? state : state with { Profiles = Array.AsReadOnly(phones) };
     }, durable: true, management: true);
 
@@ -394,15 +389,9 @@ public sealed class AndroidPhoneStore
             throw new SrapException("stale_session");
         var next = preferApp is { } prefer
             ? profile with { PreferAppTransport = prefer }
-            : profile with { AppPublicKeySha256 = null, PcListenFingerprint = null, LastAppAddress = null, AppTrustRevoked = false, PreferAppTransport = false };
+            : profile with { AppPublicKeySha256 = null, LastAppAddress = null, AppTrustRevoked = false, PreferAppTransport = false };
         return next == profile ? state : state with { Profiles = Array.AsReadOnly(state.Profiles.Select(p => p.Id == id ? next : p).ToArray()) };
     }, durable: true, management: true);
-
-    internal void SetPcListening(string profileId, string fingerprint, bool allow) => ChangeProfile(profileId, profile =>
-    {
-        if (profile.AppTrustRevoked || !HasUniqueAppOwner(profileId, fingerprint)) throw new SrapException("stale_session");
-        return profile with { PcListenFingerprint = allow ? fingerprint : null };
-    }, durable: true);
 
     private static string? NormalizeAppFingerprint(string? fingerprint) =>
         fingerprint?.Length == 64 && fingerprint.All(char.IsAsciiHexDigit) ? fingerprint.ToUpperInvariant() : null;
@@ -451,6 +440,8 @@ public sealed class AndroidPhoneStore
             var combined = new[] { primary }.Concat(matching).Concat(preserved).DistinctBy(p => p.Id).ToArray();
             var appAliases = combined.Select(p => p.AppPublicKeySha256).OfType<string>().Distinct(StringComparer.Ordinal).ToArray();
             if (appAliases.Length > 1) return state;
+            var appOwner = matching.FirstOrDefault(p => p.AppPublicKeySha256 != null && !p.AppTrustRevoked);
+            bool appRevoked = appAliases.Length != 0 && (appOwner == null || combined.Any(p => p.AppTrustRevoked));
             if (primary.LastDevice is { } prior && AndroidDeviceIdentity.Key(prior) != AndroidDeviceIdentity.Key(device))
                 Migrate(prior);
             foreach (var secondary in matching.Concat(preserved).Where(p => p.Id != primary.Id))
@@ -458,7 +449,7 @@ public sealed class AndroidPhoneStore
             var connected = primary.WithDevice(device, wirelessAddress);
             var merged = WithQuickPanelApps(connected with {
                 AppPublicKeySha256 = appAliases.FirstOrDefault(),
-                PcListenFingerprint = matching.FirstOrDefault(p => p.AllowsPcListening)?.PcListenFingerprint,
+                AppTrustRevoked = appRevoked, LastAppAddress = appRevoked ? null : appOwner?.LastAppAddress,
                 Name = primary.Name.Length != 0 ? primary.Name : combined.FirstOrDefault(p => p.Name.Length != 0)?.Name ?? "",
                 LastWirelessAddress = connected.LastWirelessAddress ?? combined.Select(p => p.LastWirelessAddress).FirstOrDefault(a => a != null),
                 ManuallyDisconnected = false,
@@ -516,8 +507,8 @@ public sealed class AndroidPhoneStore
             if (device != null)
             {
                 // Keep preferences without keeping per-device app artwork or live output endpoints.
-                var saved = WithQuickPanelApps(profile with {
-                    LastDevice = identity ?? device, OutputSinks = [AndroidOutputSink.DefaultSpeaker], PcListenFingerprint = null,
+                var saved = WithQuickPanelApps(WithoutAppTrust(profile) with {
+                    LastDevice = identity ?? device, OutputSinks = [AndroidOutputSink.DefaultSpeaker],
                     RetainedApps = Array.AsReadOnly(profile.RetainedApps.Select(a => a.IconPng == null ? a : a with { IconPng = null }).ToArray())
                 });
                 archived = Array.AsReadOnly((archived ?? []).Where(p => !AndroidDeviceIdentity.MatchesSavedDevice(p.LastDevice, identity ?? device)).Append(saved).ToArray());
@@ -581,7 +572,7 @@ public sealed class AndroidPhoneStore
     {
         foreach (var app in apps) ValidateApp(app);
         if (apps.Count == 0) return;
-        ChangeProfile(null, p =>
+        ChangeAdbProfile(null, p =>
         {
             if (apps.Count == 1) return p.RetainedApps.Any(a => a.Package == apps[0].Package) ? p
                 : p with { RetainedApps = Array.AsReadOnly(p.RetainedApps.Append(apps[0]).ToArray()) };
@@ -590,12 +581,12 @@ public sealed class AndroidPhoneStore
             return added.Length == 0 ? p : p with { RetainedApps = Array.AsReadOnly(p.RetainedApps.Concat(added).ToArray()) };
         });
     }
-    public void Remove(string package) => ChangeProfile(null, p => !p.RetainedApps.Any(a => a.Package == package) ? p
+    public void Remove(string package) => ChangeAdbProfile(null, p => !p.RetainedApps.Any(a => a.Package == package) ? p
         : p with { RetainedApps = Array.AsReadOnly(p.RetainedApps.Where(a => a.Package != package).ToArray()),
             DisabledSmartVolumeApps = p.DisabledSmartVolumeApps.Contains(package)
                 ? Array.AsReadOnly(p.DisabledSmartVolumeApps.Where(a => a != package).ToArray()) : p.DisabledSmartVolumeApps });
 
-    internal void MoveRetainedApp(string profileId, string package, string anchorPackage, bool after) => ChangeProfile(profileId, profile =>
+    internal void MoveRetainedApp(string profileId, string package, string anchorPackage, bool after) => ChangeAdbProfile(profileId, profile =>
     {
         if (package == anchorPackage) return profile;
         int source = -1, anchor = -1;
@@ -620,21 +611,22 @@ public sealed class AndroidPhoneStore
     internal void SetReceiveFolder(string profileId, string folder)
     {
         AndroidFileTransfer.ValidateFolder(folder);
-        ChangeProfile(profileId, p => p.ReceiveFolder == folder ? p : p with { ReceiveFolder = folder });
+        ChangeAdbProfile(profileId, p => p.ReceiveFolder == folder ? p : p with { ReceiveFolder = folder });
     }
 
     public void SetSmartVolume(string package, bool enabled)
     {
         AdbClient.ValidatePackage(package);
-        ChangeProfile(null, p => !p.RetainedApps.Any(a => a.Package == package) || enabled == !p.DisabledSmartVolumeApps.Contains(package) ? p
+        ChangeAdbProfile(null, p => !p.RetainedApps.Any(a => a.Package == package) || enabled == !p.DisabledSmartVolumeApps.Contains(package) ? p
             : p with { DisabledSmartVolumeApps = Array.AsReadOnly(enabled
                 ? p.DisabledSmartVolumeApps.Where(a => a != package).ToArray() : p.DisabledSmartVolumeApps.Append(package).ToArray()) });
     }
     private static AndroidPhoneProfile WithQuickPanelApps(AndroidPhoneProfile profile) =>
-        profile with { QuickPanelApps = profile.RetainedApps };
+        profile with { QuickPanelApps = profile.LastDevice?.IsApp == true ? Array.Empty<AndroidApp>() : profile.RetainedApps };
     public void UpdateMetadata(IReadOnlyList<AndroidApp> apps) => UpdateMetadataCore(null, apps);
     public void UpdateMetadata(AndroidDevice device, IReadOnlyList<AndroidApp> apps)
     {
+        if (device.IsApp) return;
         string? id = FindProfile(device)?.Id;
         if (id != null) UpdateMetadataCore(id, apps);
     }
@@ -666,7 +658,7 @@ public sealed class AndroidPhoneStore
     {
         foreach (var app in apps) ValidateApp(app);
         var current = apps.ToDictionary(a => a.Package, StringComparer.Ordinal);
-        ChangeProfile(id, p =>
+        ChangeAdbProfile(id, p =>
         {
             var updated = p.RetainedApps.Select(a =>
             {
@@ -686,6 +678,18 @@ public sealed class AndroidPhoneStore
             return same ? p : p with { RetainedApps = Array.AsReadOnly(updated) };
         });
     }
+    private bool AllowsAdbSettings(AndroidPhoneProfile profile) => profile.LastDevice?.IsApp != true &&
+        (profile.AppPublicKeySha256 == null || profile.LastDevice == null || SelectedTransport?.Invoke(profile.LastDevice)?.IsApp != true);
+
+    private void ChangeAdbProfile(string? id, Func<AndroidPhoneProfile, AndroidPhoneProfile> change)
+    {
+        var profile = id == null ? Profile : Profiles.FirstOrDefault(p => p.Id == id);
+        if (profile == null || !AllowsAdbSettings(profile)) return;
+        ChangeProfile(profile.Id, current => current.LastDevice == profile.LastDevice &&
+            current.AppPublicKeySha256 == profile.AppPublicKeySha256 && current.PreferAppTransport == profile.PreferAppTransport
+            ? change(current) : current);
+    }
+
     private void ChangeProfile(string? id, Func<AndroidPhoneProfile, AndroidPhoneProfile> change, bool durable = false) => Change(state =>
     {
         int index = state.Profiles.ToList().FindIndex(p => p.Id == (id ?? state.SelectedId));
@@ -768,8 +772,7 @@ public sealed class AndroidPhoneStore
         profile.RetainedApps.ToArray(), profile.DisabledSmartVolumeApps.ToArray(), profile.ReceiveFolder, profile.ManuallyDisconnected, profile.LastWirelessAddress)
         {
             AdditionalFields = profile.AdditionalFields, AppPublicKeySha256 = profile.AppPublicKeySha256,
-            LastAppAddress = profile.LastAppAddress, AppTrustRevoked = profile.AppTrustRevoked, PreferAppTransport = profile.PreferAppTransport,
-            PcListenFingerprint = profile.AllowsPcListening ? profile.PcListenFingerprint : null
+            LastAppAddress = profile.LastAppAddress, AppTrustRevoked = profile.AppTrustRevoked, PreferAppTransport = profile.PreferAppTransport
         };
     internal sealed record LegacyFile(int Version, string Name, AndroidDevice? Device, AndroidApp[] Apps, string[]? DisabledSmartVolumePackages = null)
     {
@@ -780,8 +783,6 @@ public sealed class AndroidPhoneStore
     {
         [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
         public string? AppPublicKeySha256 { get; set; }
-        [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
-        public string? PcListenFingerprint { get; set; }
         [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
         public string? LastAppAddress { get; set; }
         [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault)]

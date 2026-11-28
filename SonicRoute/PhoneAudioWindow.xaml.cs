@@ -629,6 +629,7 @@ public partial class PhoneAudioWindow : Window
     }
     private async Task LoadCatalogAsync(AndroidDevice device)
     {
+        if (device.IsApp || !PhoneAudioWindowCache.Manager.IsCurrent(device)) return;
         _catalogRead?.Cancel();
         using var read = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token, PhoneAudioWindowCache.Manager.OperationToken(device));
         _catalogRead = read;
@@ -689,7 +690,8 @@ public partial class PhoneAudioWindow : Window
         _deviceAudioItem.UpdateDeviceName(device);
         if (PcDropHighlight.Visibility == Visibility.Visible || _pcDropCells.Count > 0)
             EnsurePcDropZones();
-        var snapshot = profile.QuickPanelApps;
+        var attachment = PhoneAudioWindowCache.GetOnlineDevice(device) ?? device;
+        var snapshot = attachment.IsApp ? Array.Empty<AndroidApp>() : profile.QuickPanelApps;
         if (ReferenceEquals(_retainedSnapshot, snapshot)) return;
         _retainedSnapshot = snapshot;
         if (_apps.Count == 0) _apps = new[] { _deviceAudioItem }.Concat(CreateItems(snapshot, _lifetime.Token)).ToArray();
@@ -937,7 +939,7 @@ public partial class PhoneAudioWindow : Window
         _mediaDevice = device;
         ApplyMediaState(null);
         ApplyConnectionQuality(null);
-        if (device?.State != "device") { read.Dispose(); _mediaRead = null; return; }
+        if (device is not { IsApp: false, State: "device" }) { read.Dispose(); _mediaRead = null; return; }
         _mediaTask = WatchMediaAsync(device, previous, read);
     }
     private void StopMediaSubscription()

@@ -141,6 +141,7 @@ internal sealed partial class PhoneDevicePageView
 
     private void ShowCatalogMenu(string package)
     {
+        if (_activeDevice is not { IsApp: false } device || !CurrentAdb(device)) return;
         if (!_selectedCatalog.Contains(package)) SelectCatalogRow(package, false, false);
         var store = _actions.Host.Phone.Store;
         string profile = store.Profile.Id;
@@ -152,7 +153,7 @@ internal sealed partial class PhoneDevicePageView
             Enabled = apps.Length > 0 && !_busy && !_catalogLoading,
             Click = () =>
             {
-                if (_active && _showCatalog && !_busy && !_catalogLoading && store.Profile.Id == profile) store.RetainMany(apps);
+                if (_active && _showCatalog && !_busy && !_catalogLoading && store.Profile.Id == profile && CurrentAdb(device)) store.RetainMany(apps);
             }
         }]);
     }

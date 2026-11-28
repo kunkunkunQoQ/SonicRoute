@@ -19,7 +19,7 @@ internal sealed record AndroidStorageFile(string Name, bool Directory)
     };
 }
 
-internal sealed class AndroidFileTransfer(AdbClient adb, string serial) : IPhoneFileOperations
+internal sealed class AndroidFileTransfer(AdbClient adb, string serial, Action? requireCurrent = null) : IPhoneFileOperations
 {
     internal const string Storage = "/sdcard";
     internal const string Downloads = Storage + "/Download";
@@ -28,6 +28,7 @@ internal sealed class AndroidFileTransfer(AdbClient adb, string serial) : IPhone
 
     public async Task<string> SendAsync(string path, string destination, CancellationToken token)
     {
+        requireCurrent?.Invoke();
         ValidateFolder(destination);
         string name = Path.GetFileName(path);
         if (!Path.IsPathFullyQualified(path) || !IsSafeTransferName(name))
@@ -120,6 +121,7 @@ internal sealed class AndroidFileTransfer(AdbClient adb, string serial) : IPhone
 
     public async Task<List<AndroidStorageFile>> ListAsync(string folder, CancellationToken token)
     {
+        requireCurrent?.Invoke();
         var transport = await adb.ResolveTransportAsync(token).ConfigureAwait(false);
         bool wide;
         try { wide = (await transport.FeaturesAsync(serial, token).ConfigureAwait(false)).Contains("ls_v2"); }
@@ -184,6 +186,7 @@ internal sealed class AndroidFileTransfer(AdbClient adb, string serial) : IPhone
 
     public async Task<string> ReceiveAsync(string folder, string name, string destination, CancellationToken token)
     {
+        requireCurrent?.Invoke();
         if (!ValidSegment(name) || !IsSafeTransferName(name)) throw new IOException("Invalid Windows file name.");
         Directory.CreateDirectory(destination);
         string temp = Path.Combine(destination, ".sonicroute-" + Guid.NewGuid().ToString("N") + ".part");
@@ -276,6 +279,7 @@ internal sealed class AndroidFileTransfer(AdbClient adb, string serial) : IPhone
 
     private async Task<Stream> OpenAsync(string request, string path, CancellationToken token, IAdbTransport? transport = null)
     {
+        requireCurrent?.Invoke();
         ValidateFolder(path);
         byte[] data = Utf8.GetBytes(path);
         byte[] header = new byte[8];

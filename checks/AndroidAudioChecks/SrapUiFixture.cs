@@ -6,6 +6,21 @@ using SonicRoute.AndroidAudio;
 
 internal static partial class Program
 {
+    private static void CheckPairedWindowOperations(string path)
+    {
+        var file = new FileInfo(Path.GetFullPath(path));
+        if (!file.Exists || file.Name != "fixture-ops.log" || file.Directory?.Name != "data" || file.Directory.Parent?.Name != "Full" ||
+            file.Directory.Parent.Parent?.Parent?.Name != "SonicRoute.NativeCandidate")
+            throw new ArgumentException("Supply a private Native Full UI fixture operation log.");
+        string[][] operations = File.ReadLines(file.FullName).Select(line => line.Split(' ', StringSplitOptions.RemoveEmptyEntries)).ToArray();
+        Check(operations.Any(row => row is ["audio.listen.offer", "available", "done"]), "the real desktop offered audio immediately");
+        Check(!operations.Any(row => row is ["audio.listen.offer", "needs_authorization", ..]), "no secondary desktop permission was requested");
+        Check(operations.Any(row => row is ["audio.play.start", "done"]) && operations.Any(row => row is ["audio.route.set", "pending"]),
+            "a requested phone audio track reached the route verification step");
+        Check(!operations.Any(row => row.Length != 0 && (row[0].StartsWith("clipboard.", StringComparison.Ordinal) ||
+            row[0].StartsWith("file.", StringComparison.Ordinal))), "the real desktop never requested clipboard or file operations from the legacy peer");
+    }
+
     private static async Task SrapUiFixtureAsync(string dataDirectory, bool sharing = false)
     {
         var directory = new DirectoryInfo(Path.GetFullPath(dataDirectory));
@@ -26,7 +41,6 @@ internal static partial class Program
             (IPEndPoint)server.LocalEndpoint, store.ManagementRevision);
         store.SelectProfile(profile.Id);
         store.Rename("演示手机");
-        store.Retain(new AndroidApp("org.sonicroute.demo.player", "音乐播放器", 0, ""));
         await store.FlushAsync();
         Console.WriteLine($"UI_FIXTURE_READY adbPort={adb.EndPoint.Port}");
         Console.Out.Flush();
@@ -44,7 +58,7 @@ internal static partial class Program
             {
                 string session = Guid.NewGuid().ToString("N");
                 long revision = 1;
-                int screenRequests = 0, computerRequests = 0;
+                int screenRequests = 0;
                 string? phoneRequest = null;
                 bool screen = false, sound = false;
                 JsonArray Capabilities()
@@ -56,7 +70,13 @@ internal static partial class Program
                     if (screen) display["limits"] = new JsonObject { ["grant"] = "123", ["codec"] = "h264", ["autoview"] = "pc_viewer_v1" };
                     var caps = new JsonArray(Cap("audio.devices", "device"), Cap("volume.device", "system_media"), Cap("catalog.apps", "launchable"),
                         play, Cap("audio.route.owned", "owned_track"), Cap("audio.capture.app", "other_app", true), display);
-                    if (sharing) caps.Add(Cap("sharing.prompt", "local_confirmation"));
+                    if (sharing)
+                    {
+                        caps.Add(Cap("sharing.prompt", "local_confirmation"));
+                        // An older phone can still advertise these services. The modern desktop must never request either.
+                        caps.Add(Cap("clipboard.sync", "focused_text"));
+                        caps.Add(Cap("files.transfer", "saf_tree"));
+                    }
                     if (sound) caps.Add(new JsonObject { ["id"] = "audio.capture.device", ["state"] = "available", ["scope"] = "device_media",
                         ["limits"] = new JsonObject { ["grant"] = "124", ["pcm"] = SrapSession.PcmEncoding, ["mode"] = "playback_capture", ["autoplay"] = "pc_output_v1" } });
                     return caps;
@@ -87,13 +107,14 @@ internal static partial class Program
                         if (sharing && op == "audio.listen.offer") result = new();
                         if (sharing && op == "audio.listen.request")
                         {
-                            if (computerRequests++ == 0) error = "permission_required";
-                            else
+                            string? requested = SrapClient.Text(parameters, "request");
+                            if (phoneRequest == null && requested != null && Guid.TryParseExact(requested, "N", out _))
                             {
-                                phoneRequest = SrapClient.Text(parameters, "request");
+                                phoneRequest = requested;
                                 result = new() { ["request"] = phoneRequest, ["state"] = "requested" };
                                 update = true;
                             }
+                            else error = "busy";
                         }
                         if (sharing && op == "audio.play.start" && phoneRequest != null &&
                             SrapClient.Text(parameters, "listenRequest") == phoneRequest)

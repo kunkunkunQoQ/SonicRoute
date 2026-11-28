@@ -81,7 +81,7 @@ internal sealed partial class PhoneClipboard : IDisposable
 
     internal bool IsEnabled(AndroidDevice? device)
     {
-        if (device == null) return false;
+        if (device is not { IsApp: false }) return false;
         EnsureLoaded();
         lock (_enabledDevices)
             return _enabledDevices.Any(d => AndroidDeviceIdentity.MatchesSavedDevice(d, device));
@@ -115,8 +115,8 @@ internal sealed partial class PhoneClipboard : IDisposable
         _initialized = true;
         if (saved == null) { _readFailed = _saveError = true; return; }
         _otherSettings = saved.Other;
-        _enabledDevices.AddRange(saved.Enabled);
-        _archivedDevices.AddRange(saved.Archived.Where(d => AndroidDeviceIdentity.StableKey(d) != null));
+        _enabledDevices.AddRange(saved.Enabled.Where(d => !d.IsApp));
+        _archivedDevices.AddRange(saved.Archived.Where(d => !d.IsApp && AndroidDeviceIdentity.StableKey(d) != null));
     }
 
     internal void Reconcile()
@@ -159,7 +159,7 @@ internal sealed partial class PhoneClipboard : IDisposable
             foreach (var saved in _enabledDevices)
             {
                 var online = _resolveOnline?.Invoke(saved);
-                if (online != null && string.Equals(online.State, "device", StringComparison.Ordinal))
+                if (online is { IsApp: false } && string.Equals(online.State, "device", StringComparison.Ordinal))
                 {
                     target = online;
                     break;
@@ -179,6 +179,7 @@ internal sealed partial class PhoneClipboard : IDisposable
     {
         ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
         ArgumentNullException.ThrowIfNull(device);
+        if (device.IsApp) return;
         EnsureLoaded();
         if (_readFailed) { NotifyChanged(); return; }
         if (enabled && _isRemoved?.Invoke(device) == true) return;
@@ -206,7 +207,7 @@ internal sealed partial class PhoneClipboard : IDisposable
 
         if (enabled)
         {
-            var target = _resolveOnline?.Invoke(device) ?? (!device.IsApp && string.Equals(device.State, "device", StringComparison.Ordinal) ? device : null);
+            var target = _resolveOnline != null ? _resolveOnline(device) : string.Equals(device.State, "device", StringComparison.Ordinal) ? device : null;
             if (target != null) StartBridge(target);
             else SetStatus(L10n.T("Phone.ClipboardWaitingPhone"));
         }
@@ -233,12 +234,23 @@ internal sealed partial class PhoneClipboard : IDisposable
         StopBridge(L10n.T("Phone.ClipboardDefaultHint"));
     }
 
+    private bool IsCurrentAdb(AndroidDevice? device) => device is { IsApp: false } &&
+        (_resolveOnline == null || _resolveOnline(device) is { IsApp: false } online && AndroidDeviceIdentity.SameTransport(device, online));
+
     private void StartBridge(AndroidDevice device)
     {
+        if (!IsCurrentAdb(device)) return;
         if (Volatile.Read(ref _disposed) != 0) return;
         if (Volatile.Read(ref _enabled) != 0 && _device is { } current && AndroidDeviceIdentity.SameTransport(current, device))
             return;
         StopBridge(null);
+        IAndroidClipboardClient client;
+        try { client = _openClipboard(device); }
+        catch (Exception error) when (error is SrapException or OperationCanceledException)
+        {
+            SetStatus(L10n.T("Phone.ClipboardWaitingPhone"));
+            return;
+        }
 
         _window.SetInterest(_window.Interest | ShellInterest.Clipboard);
         if (!_window.Interest.HasFlag(ShellInterest.Clipboard))
@@ -254,7 +266,6 @@ internal sealed partial class PhoneClipboard : IDisposable
             SingleReader = true,
             SingleWriter = false
         });
-        var client = _openClipboard(device);
         _device = device;
         _client = client;
         _lifetime = lifetime;
@@ -292,7 +303,7 @@ internal sealed partial class PhoneClipboard : IDisposable
     /// <summary>Called by the host after WM_CLIPBOARDUPDATE, on the host STA.</summary>
     internal void OnClipboardChanged()
     {
-        if (Volatile.Read(ref _enabled) == 0) return;
+        if (Volatile.Read(ref _enabled) == 0 || !IsCurrentAdb(_device)) return;
         uint sequence = GetClipboardSequenceNumber();
         if (sequence != 0 && sequence == _lastWriteSequence) return;
         if (sequence == 0) return;
@@ -318,7 +329,7 @@ internal sealed partial class PhoneClipboard : IDisposable
         int attempt = 0;
         try
         {
-            while (!token.IsCancellationRequested)
+            while (!token.IsCancellationRequested && IsCurrentAdb(device))
             {
                 try
                 {
@@ -386,6 +397,7 @@ internal sealed partial class PhoneClipboard : IDisposable
             {
                 try
                 {
+                    if (!IsCurrentAdb(_device) || !ReferenceEquals(_client, client)) return;
                     await client.SendAsync(item.Text, item.Revision, token).ConfigureAwait(false);
                     _owner.TryPost(() =>
                     {
@@ -409,7 +421,7 @@ internal sealed partial class PhoneClipboard : IDisposable
 
     private void ApplyPhoneText(string text, IAndroidClipboardClient client)
     {
-        if (Volatile.Read(ref _enabled) == 0 || !ReferenceEquals(_client, client) || !AndroidClipboardClient.IsSupported(text)
+        if (Volatile.Read(ref _enabled) == 0 || !ReferenceEquals(_client, client) || !IsCurrentAdb(_device) || !AndroidClipboardClient.IsSupported(text)
             || string.Equals(text, _lastText, StringComparison.Ordinal)) return;
         uint sequence = GetClipboardSequenceNumber();
         string? current = ReadUnicodeText(sequence, true, out _);

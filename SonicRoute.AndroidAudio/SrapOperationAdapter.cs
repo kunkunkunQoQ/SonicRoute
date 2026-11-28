@@ -25,7 +25,7 @@ internal sealed class SrapOperationAdapter(AdbOperationAdapter adb, SrapPhoneTra
     public bool CanViewSharedScreen(AndroidDevice device) => device.IsApp && Selected(device)?.ScreenGrant != null;
     public bool NeedsScreenConsent(AndroidDevice device) => device.IsApp && Selected(device)?.Capabilities.Entries
         .GetValueOrDefault("display.mirror") is { Scope: "one_projection", State: "needs_authorization" };
-    public Task ViewSharedScreenAsync(AndroidDevice device, string title, CancellationToken token) => Require(device).ViewScreenAsync(title, token);
+    public Task ViewSharedScreenAsync(AndroidDevice device, string title, CancellationToken token) => Require(device).ViewScreenAsync(title, token, device);
     public bool CanControlVolume(AndroidDevice device) => device.IsApp && Allows(device, "volume.device");
     public bool CanTestRoute(AndroidDevice device) => CanListOutputs(device) && device.IsApp
         && Allows(device, "audio.play") && Allows(device, "audio.route.owned");
@@ -162,24 +162,20 @@ internal sealed class SrapOperationAdapter(AdbOperationAdapter adb, SrapPhoneTra
     }
 
     public Task<AndroidEncoderCatalog> EncodersAsync(AndroidDevice device, CancellationToken token) => device.IsApp
-        ? Task.FromException<AndroidEncoderCatalog>(new SrapException("unsupported")) : adb.EncodersAsync(device, token);
-    public void InvalidateEncoders(AndroidDevice device) { if (!device.IsApp) adb.InvalidateEncoders(device); }
+        ? Task.FromException<AndroidEncoderCatalog>(new SrapException("unsupported")) : HasAdbAttachment(device) ? adb.EncodersAsync(device, token)
+        : Task.FromException<AndroidEncoderCatalog>(new SrapException("stale_session"));
+    public void InvalidateEncoders(AndroidDevice device) { if (HasAdbAttachment(device)) adb.InvalidateEncoders(device); }
     public bool CanWatchMedia(AndroidDevice device) => device.IsApp ? Allows(device, "media.control") : adb.CanWatchMedia(device);
     public IPhoneMediaSession OpenMediaSession(AndroidDevice device) =>
         device.IsApp ? new SrapMediaClient(app) : adb.OpenMediaSession(device);
-    public bool CanSyncClipboard(AndroidDevice device) => device.IsApp
-        ? app.Session(device)?.AllowsFocusedClipboard == true : adb.CanSyncClipboard(device);
-    public IAndroidClipboardClient OpenClipboard(AndroidDevice device) =>
-        device.IsApp ? new SrapClipboardClient(app) : adb.OpenClipboard(device);
-    public IPhoneFileOperations OpenFiles(AndroidDevice device) => device.IsApp ? new SrapFilesClient(Require(device)) : adb.OpenFiles(device);
-    public string? FileRoot(AndroidDevice device)
-    {
-        if (!device.IsApp) return adb.FileRoot(device);
-        try { return SrapFilesClient.Root(Require(device)); } catch (SrapException) { return null; }
-    }
-    public bool CanWriteFiles(AndroidDevice device) => !device.IsApp ? adb.CanWriteFiles(device) :
-        Selected(device)?.Capabilities.Entries.TryGetValue("files.transfer", out var cap) == true &&
-            cap.State == "available" && cap.Scope == "saf_tree" && cap.Limits?.GetValueOrDefault("write") == "true";
+    private bool HasAdbAttachment(AndroidDevice device) => !device.IsApp && isCurrent?.Invoke(device) != false;
+    private AndroidDevice RequireAdbAttachment(AndroidDevice device) => device.IsApp ? throw new SrapException("unsupported")
+        : HasAdbAttachment(device) ? device : throw new SrapException("stale_session");
+    public bool CanSyncClipboard(AndroidDevice device) => HasAdbAttachment(device);
+    public IAndroidClipboardClient OpenClipboard(AndroidDevice device) => adb.OpenClipboard(RequireAdbAttachment(device), () => RequireAdbAttachment(device));
+    public IPhoneFileOperations OpenFiles(AndroidDevice device) => adb.OpenFiles(RequireAdbAttachment(device), () => RequireAdbAttachment(device));
+    public string? FileRoot(AndroidDevice device) => HasAdbAttachment(device) ? adb.FileRoot(device) : null;
+    public bool CanWriteFiles(AndroidDevice device) => HasAdbAttachment(device);
     public AndroidAudioSession CreateCaptureSession(Func<AndroidDevice, AndroidStreamSettings> settings, Func<string, AndroidDevice?> resolvePhone)
     {
         var capture = adb.CreateCaptureSession(settings, key => resolvePhone(key) is { IsApp: false } device ? device : null);

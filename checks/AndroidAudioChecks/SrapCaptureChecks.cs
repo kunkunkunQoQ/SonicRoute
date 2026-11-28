@@ -35,7 +35,6 @@ internal static partial class Program
         var device = new AndroidDevice(pin, "Capture peer", "device", true) { IsApp = true };
         var capture = new AndroidAudioSession(() => throw new Exception("An App capture invoked ADB"), (_, _) => new FakePlayer())
             { AppSession = _ => session };
-        capture.SetSmartVolume(false);
         await using var owned = capture;
         async Task<JsonElement> Request(string op)
         {
@@ -125,6 +124,8 @@ internal static partial class Program
         await Ack(initial, 2, 0);
         await AckConsumed(2, 2);
         await start;
+        capture.SetSmartVolume(true);
+        Check(!capture.State.SmartVolume && capture.Pcm?.SmartVolume == false, "App capture never applies the ADB smart-volume processor");
         Check(capture.State.State == CaptureState.Receiving && capture.UsesSourcePhonePlayback && capture.PacketsDecoded == 2,
             "the ordinary Android audio session opens non-exclusive App PCM");
         var pcm = capture.Pcm!;
@@ -278,10 +279,6 @@ internal static partial class Program
             WicIconLoader.TryDecodePngToBgra32(png, 48, 48, out var pixels, out int width, out int height) &&
             width == 48 && height == 48 && pixels.Length == 48 * 48 * 4 && pixels[3] == 255,
             "the authenticated source name and bounded 48x48 PNG decode to real renderer pixels");
-        store.Retain(row with { Uid = 10995, Category = "media", PlatformCategory = 1 });
-        store.UpdateMetadata(peer, [new(package, "Updated label", 0, "")]);
-        Check(store.Profile.RetainedApps.Single() is { Name: "Updated label", Uid: 10995, Category: "media", PlatformCategory: 1 } stored &&
-            ReferenceEquals(stored.IconPng, row.IconPng), "metadata-only refresh preserves the saved image and ADB identity");
         var legacy = operations.AppsAsync(peer, ct);
         await Reply(await Request("catalog.list"), Catalog(false));
         await legacy;

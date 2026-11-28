@@ -60,7 +60,7 @@ internal static partial class AndroidAudioHost
     {
         var manager = PhoneAudioWindowCache.Manager;
         var admission = manager.Get(device);
-        if (admission.Profile == null || !manager.IsCurrent(device)) return false;
+        if (device.IsApp || admission.Profile == null || !manager.IsCurrent(device)) return false;
         var transfer = new AndroidFileTransfer(adb, device.CommandTarget);
         return FileTransfers.TryStart(admission.Profile.Id, transfer, paths, destination, pullFrom,
             () => manager.IsCurrent(device), manager.OperationToken(device), out _);

@@ -2,30 +2,23 @@ using System.Threading.Channels;
 
 namespace SonicRoute.AndroidAudio;
 
-internal sealed record PcListeningPrompt(string ProfileId, string Fingerprint, string Attachment, string Request);
-
-// One event-driven coordinator per authenticated attachment. Only a current, authorized phone
-// request opens WASAPI and an owned AudioTrack. Ordinary PC-initiated routes share the PCM slot.
+// A paired, authenticated attachment can select PC audio. Only its current request opens the shared PCM slot.
 internal sealed class SrapPcListening(AndroidPhoneStore store, SrapPhoneTransport transport,
-    Func<Stream, CancellationToken, Task>? captureSystemAudio = null) : IAsyncDisposable
+    Func<Stream, CancellationToken, Task>? captureSystemAudio = null, bool? systemCaptureSupported = null) : IAsyncDisposable
 {
     private readonly Func<Stream, CancellationToken, Task> captureAudio = captureSystemAudio ?? CaptureSystemAudio;
+    private readonly bool canCapture = systemCaptureSupported ?? Supported;
     private readonly object gate = new();
     private readonly Dictionary<SrapSession, Peer> peers = [];
     private readonly HashSet<Task> retiring = [];
-    private readonly HashSet<(string Id, string Pin)> failedRevocations = [];
     private bool closed;
-    internal event Action<PcListeningPrompt>? PermissionRequested;
     internal static bool Supported => OperatingSystem.IsWindowsVersionAtLeast(10, 0, 20348);
     internal bool HasActiveWork { get { lock (gate) return peers.Values.Any(p => p.HasActiveWork); } }
-
-    internal bool CanGrant(AndroidPhoneProfile profile) => Supported && transport.Resolve(profile) is { } device &&
-        transport.Session(device)?.SupportsPcm == true;
 
     private static bool AcceptsComputerRequest(SrapSession session) => session.SupportsPcm &&
         session.Capabilities.Entries.TryGetValue("audio.play", out var play) && play.Limits?.GetValueOrDefault("pcListenInitiate") == "1";
 
-    internal bool CanStartOnPhone(AndroidDevice device) => Supported && transport.Session(device) is { } session && AcceptsComputerRequest(session);
+    internal bool CanStartOnPhone(AndroidDevice device) => canCapture && transport.Session(device) is { } session && AcceptsComputerRequest(session);
 
     internal string? StoppableRequest(AndroidDevice device)
     {
@@ -51,63 +44,18 @@ internal sealed class SrapPcListening(AndroidPhoneStore store, SrapPhoneTranspor
         }
     }
 
-    internal PcListeningPrompt? Pending(string profileId)
-    {
-        lock (gate) return peers.Values.FirstOrDefault(p => p.ProfileId == profileId)?.Prompt;
-    }
-
-    internal bool Answer(PcListeningPrompt shown, bool allow)
-    {
-        lock (gate)
-        {
-            var peer = peers.Values.FirstOrDefault(p => p.Prompt == shown);
-            if (peer == null) return false;
-            if (allow) SetPermission(shown.ProfileId, shown.Fingerprint, true);
-            else peer.Decline(shown.Request);
-            return true;
-        }
-    }
-
-    internal bool IsAllowed(AndroidPhoneProfile profile)
-    {
-        lock (gate) return profile.AllowsPcListening && !failedRevocations.Contains((profile.Id, profile.AppPublicKeySha256!));
-    }
-
-    internal void SetPermission(string id, string fingerprint, bool allow)
-    {
-        var profile = store.Profiles.FirstOrDefault(p => p.Id == id && p.AppPublicKeySha256 == fingerprint);
-        if (profile == null || allow && !CanGrant(profile)) throw new SrapException("stale_session");
-        try { store.SetPcListening(id, fingerprint, allow); }
-        catch (Exception) when (!allow)
-        {
-            // A disk error must not keep a live capture running after the user turns sharing off.
-            lock (gate) failedRevocations.Add((id, fingerprint));
-            Reconcile();
-            throw;
-        }
-        bool changed;
-        lock (gate) changed = failedRevocations.Remove((id, fingerprint));
-        if (changed) Reconcile();
-    }
-
     internal void Reconcile()
     {
-        List<PcListeningPrompt>? requests = null;
         lock (gate)
         {
             if (closed) return;
             var current = new HashSet<SrapSession>();
-            var profiles = store.Profiles;
-            if (failedRevocations.Count != 0) failedRevocations.RemoveWhere(f => !profiles.Any(p =>
-                p.Id == f.Id && p.PcListenFingerprint == f.Pin && p.AllowsPcListening));
-            foreach (var profile in profiles)
+            foreach (var profile in store.Profiles)
             {
                 if (transport.Resolve(profile) is not { } device || transport.Session(device) is not { } session) continue;
                 current.Add(session);
-                if (!peers.TryGetValue(session, out var peer)) peers.Add(session, peer = new(profile.Id, session, device, captureAudio));
-                string state = !Supported || !session.SupportsPcm ? "unsupported" :
-                    IsAllowed(profile) ? "available" : "needs_authorization";
-                if (peer.Update(state, ReadRequest(session.Capabilities)) is { } prompt) (requests ??= []).Add(prompt);
+                if (!peers.TryGetValue(session, out var peer)) peers.Add(session, peer = new(session, device, transport, captureAudio));
+                peer.Update(canCapture && session.SupportsPcm ? "available" : "unsupported", ReadRequest(session.Capabilities));
             }
             foreach (var session in peers.Keys.Where(s => !current.Contains(s)).ToArray())
             {
@@ -117,7 +65,6 @@ internal sealed class SrapPcListening(AndroidPhoneStore store, SrapPhoneTranspor
             }
             retiring.RemoveWhere(t => t.IsCompleted);
         }
-        if (requests != null) foreach (var prompt in requests) PermissionRequested?.Invoke(prompt);
     }
 
     internal static string? ReadRequest(SrapCapabilitySnapshot caps)
@@ -148,12 +95,17 @@ internal sealed class SrapPcListening(AndroidPhoneStore store, SrapPhoneTranspor
     {
         private readonly SrapSession session;
         private readonly AndroidDevice device;
+        private readonly SrapPhoneTransport transport;
         private readonly Func<Stream, CancellationToken, Task> captureAudio;
         private readonly CancellationTokenSource lifetime;
+        private readonly CancellationToken token;
         private readonly object gate = new();
         private readonly Channel<bool> changes = Channel.CreateBounded<bool>(1);
         private string? offer, request;
-        private string? declined;
+        private string? activeRequest;
+        private readonly HashSet<Guid> used = [];
+        private long offerVersion, sentVersion;
+        private TaskCompletionSource<bool> offerReady = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private LocalRequest? local;
         private sealed class LocalRequest
         {
@@ -165,64 +117,50 @@ internal sealed class SrapPcListening(AndroidPhoneStore store, SrapPhoneTranspor
         private bool stopped;
         internal Task Completion { get; }
         internal bool HasActiveWork { get { lock (gate) return active != null; } }
-        internal string? StoppableRequest { get { lock (gate) return local?.Id ?? (active != null ? request : null); } }
-        internal string ProfileId { get; }
-        internal PcListeningPrompt? Prompt
+        internal string? StoppableRequest { get { lock (gate) return local?.Id ?? activeRequest; } }
+        internal Peer(SrapSession session, AndroidDevice device, SrapPhoneTransport transport, Func<Stream, CancellationToken, Task> captureAudio)
         {
-            get
-            {
-                lock (gate) return !stopped && !session.Token.IsCancellationRequested && offer == "needs_authorization" &&
-                    request != null && local == null && declined != request && ReadRequest(session.Capabilities) == request
-                    ? new(ProfileId, device.Serial, device.ConnectionTarget!, request) : null;
-            }
-        }
-
-        internal Peer(string profileId, SrapSession session, AndroidDevice device, Func<Stream, CancellationToken, Task> captureAudio)
-        {
-            ProfileId = profileId;
             this.session = session;
             this.device = device;
+            this.transport = transport;
             this.captureAudio = captureAudio;
             lifetime = CancellationTokenSource.CreateLinkedTokenSource(session.Token);
+            token = lifetime.Token;
             Completion = Task.Run(RunAsync);
         }
 
-        internal PcListeningPrompt? Update(string nextOffer, string? nextRequest)
+        // Request IDs are single-use for this attachment, including withdrawn or never eligible IDs.
+        private void Retire(string? id) { if (id != null) used.Add(Guid.ParseExact(id, "N")); }
+
+        internal void Update(string nextOffer, string? nextRequest)
         {
             lock (gate)
             {
-                if (stopped) return null;
+                if (stopped) return;
                 bool localUnsupported = local != null && !AcceptsComputerRequest(session);
-                if (!localUnsupported && nextOffer == offer && nextRequest == request) return null;
-                if (offer == "available" && request == nextRequest && nextOffer != "available") declined = nextRequest;
+                if (!localUnsupported && nextOffer == offer && nextRequest == request) return;
+                if (nextOffer != offer)
+                {
+                    offerVersion++;
+                    offerReady.TrySetResult(false);
+                    offerReady = new(TaskCreationOptions.RunContinuationsAsynchronously);
+                }
+                if (request != nextRequest) Retire(request);
+                if (nextOffer != "available" || sentVersion != offerVersion) Retire(nextRequest);
                 if (local is { } initiating)
                 {
-                    if (localUnsupported)
+                    if (nextRequest != initiating.Id) Retire(nextRequest);
+                    if (localUnsupported || request == initiating.Id && nextRequest != initiating.Id)
                     {
-                        declined = initiating.Id;
+                        Retire(initiating.Id);
                         local = null;
                         initiating.Advertised.TrySetCanceled();
                     }
                     else if (nextRequest == initiating.Id) initiating.Advertised.TrySetResult();
-                    else if (request == initiating.Id)
-                    {
-                        local = null;
-                        initiating.Advertised.TrySetCanceled();
-                    }
                 }
                 offer = nextOffer;
                 request = nextRequest;
                 active?.Cancel();
-                changes.Writer.TryWrite(true);
-                return Prompt;
-            }
-        }
-
-        internal void Decline(string id)
-        {
-            lock (gate)
-            {
-                declined = id;
                 changes.Writer.TryWrite(true);
             }
         }
@@ -230,16 +168,31 @@ internal sealed class SrapPcListening(AndroidPhoneStore store, SrapPhoneTranspor
         internal async Task StartFromComputerAsync(CancellationToken cancel)
         {
             var attempt = new LocalRequest();
+            Task<bool> offerAcknowledged;
             lock (gate)
             {
-                if (stopped || session.Token.IsCancellationRequested) throw new SrapException("stale_session");
-                if (!AcceptsComputerRequest(session)) throw new SrapException("unsupported");
-                if (local != null || request != null || active != null) throw new SrapException("busy");
+                if (stopped || transport.Session(device) != session) throw new SrapException("stale_session");
+                if (offer != "available" || !AcceptsComputerRequest(session)) throw new SrapException("unsupported");
+                if (local != null || active != null || request != null && !used.Contains(Guid.ParseExact(request, "N"))) throw new SrapException("busy");
                 local = attempt;
+                if (offerReady.Task.IsCompletedSuccessfully && !offerReady.Task.Result)
+                {
+                    offerReady = new(TaskCreationOptions.RunContinuationsAsynchronously);
+                    changes.Writer.TryWrite(true);
+                }
+                offerAcknowledged = offerReady.Task;
             }
-            using var effective = CancellationTokenSource.CreateLinkedTokenSource(cancel, session.Token);
+            using var effective = CancellationTokenSource.CreateLinkedTokenSource(cancel, token);
+            bool requested = false;
             try
             {
+                if (!await offerAcknowledged.WaitAsync(effective.Token).ConfigureAwait(false)) throw new SrapException("unavailable");
+                lock (gate)
+                {
+                    if (stopped || local != attempt || !AcceptsComputerRequest(session) || transport.Session(device) != session)
+                        throw new SrapException("stale_session");
+                }
+                requested = true;
                 var reply = await session.RequestAsync("audio.listen.request", "audio.play", new() { ["request"] = attempt.Id }, effective.Token)
                     .ConfigureAwait(false);
                 if (SrapClient.Text(reply, "request") != attempt.Id || SrapClient.Text(reply, "state") != "requested")
@@ -249,7 +202,7 @@ internal sealed class SrapPcListening(AndroidPhoneStore store, SrapPhoneTranspor
                 {
                     effective.Token.ThrowIfCancellationRequested();
                     if (stopped || local != attempt || request != attempt.Id || ReadRequest(session.Capabilities) != attempt.Id ||
-                        !AcceptsComputerRequest(session)) throw new SrapException("stale_session");
+                        transport.Session(device) != session || !AcceptsComputerRequest(session)) throw new SrapException("stale_session");
                     attempt.Approved = true;
                     changes.Writer.TryWrite(true);
                 }
@@ -260,10 +213,10 @@ internal sealed class SrapPcListening(AndroidPhoneStore store, SrapPhoneTranspor
                 lock (gate)
                 {
                     needsStop = local == attempt;
-                    if (needsStop) { local = null; declined = attempt.Id; }
+                    if (needsStop) { local = null; Retire(attempt.Id); }
                 }
-                if (needsStop && !session.Token.IsCancellationRequested)
-                    await NotifyAsync("audio.listen.status", "stopped", attempt.Id, session.Token).ConfigureAwait(false);
+                if (requested && needsStop && !token.IsCancellationRequested)
+                    await NotifyAsync("audio.listen.status", "stopped", attempt.Id, token).ConfigureAwait(false);
                 throw;
             }
         }
@@ -273,7 +226,7 @@ internal sealed class SrapPcListening(AndroidPhoneStore store, SrapPhoneTranspor
             lock (gate)
             {
                 if (stopped || StoppableRequest != shown) throw new SrapException("stale_session");
-                declined = shown;
+                Retire(shown);
                 local?.Advertised.TrySetCanceled();
                 local = null;
                 if (active != null)
@@ -281,7 +234,7 @@ internal sealed class SrapPcListening(AndroidPhoneStore store, SrapPhoneTranspor
                     active.Cancel();
                     return Task.CompletedTask;
                 }
-                return NotifyAsync("audio.listen.status", "stopped", shown, session.Token);
+                return NotifyAsync("audio.listen.status", "stopped", shown, token);
             }
         }
 
@@ -291,6 +244,7 @@ internal sealed class SrapPcListening(AndroidPhoneStore store, SrapPhoneTranspor
             {
                 if (stopped) return;
                 stopped = true;
+                local?.Advertised.TrySetCanceled();
                 lifetime.Cancel();
                 changes.Writer.TryComplete();
             }
@@ -298,52 +252,58 @@ internal sealed class SrapPcListening(AndroidPhoneStore store, SrapPhoneTranspor
 
         private async Task RunAsync()
         {
-            var token = lifetime.Token;
-            string? announced = null;
-            // Handles a withdrawn or replayed request once while bounding per-peer state.
-            var recent = new Queue<string>(32);
+            long announcedVersion = 0;
             try
             {
                 await foreach (var _ in changes.Reader.ReadAllAsync(token).ConfigureAwait(false))
                 {
-                    string? state, id;
-                    lock (gate) { state = offer; id = request; }
+                    string? state;
+                    long version;
+                    lock (gate) { state = offer; version = offerVersion; }
                     if (state == null) continue;
-                    if (announced != state)
+                    if (announcedVersion != version)
                     {
-                        await NotifyAsync("audio.listen.offer", state, null, token).ConfigureAwait(false);
-                        announced = state;
+                        bool accepted = await NotifyAsync("audio.listen.offer", state, null, token, () =>
+                        {
+                            lock (gate) { if (offerVersion == version) sentVersion = version; }
+                        }).ConfigureAwait(false);
+                        lock (gate)
+                        {
+                            if (stopped || offerVersion != version) continue;
+                            if (!accepted) { sentVersion = 0; Retire(request); }
+                            else if (state == "available" && offerReady.Task.IsCompletedSuccessfully && !offerReady.Task.Result)
+                                offerReady = new(TaskCreationOptions.RunContinuationsAsynchronously);
+                            offerReady.TrySetResult(accepted && state == "available");
+                            if (!accepted) continue;
+                            announcedVersion = version;
+                        }
                     }
-                    if (id == null || recent.Contains(id)) continue;
-                    CancellationTokenSource? capture;
+                    string id;
+                    CancellationTokenSource capture;
                     lock (gate)
                     {
-                        if (stopped || state != offer || id != request) continue;
-                        bool oneShot = local is { Approved: true } agreed && agreed.Id == id;
-                        if (local != null && !oneShot ||
-                            state == "needs_authorization" && declined != id && !oneShot) continue;
-                        if (recent.Count == 32) recent.Dequeue();
-                        recent.Enqueue(id);
-                        capture = active = (oneShot && state != "unsupported" || state == "available") && declined != id
-                            ? CancellationTokenSource.CreateLinkedTokenSource(token) : null;
+                        if (stopped || offerVersion != version || offer != "available" || request is not { } current ||
+                            local != null && (!local.Approved || local.Id != current) || !CanPlay(current) ||
+                            !used.Add(Guid.ParseExact(current, "N"))) continue;
+                        id = current;
+                        activeRequest = current;
+                        capture = active = CancellationTokenSource.CreateLinkedTokenSource(token);
                     }
-                    string result = "declined";
-                    if (capture != null)
+                    string result;
+                    try
                     {
-                        try
+                        await PlayAsync(id, capture.Token).ConfigureAwait(false);
+                        result = "stopped";
+                    }
+                    catch (Exception ex) { result = capture.IsCancellationRequested || ex is SrapException { Code: "canceled" } ? "stopped" : "failed"; }
+                    finally
+                    {
+                        lock (gate)
                         {
-                            await PlayAsync(id, capture.Token).ConfigureAwait(false);
-                            result = "stopped";
-                        }
-                        catch (Exception ex) { result = capture.IsCancellationRequested || ex is SrapException { Code: "canceled" } ? "stopped" : "failed"; }
-                        finally
-                        {
-                            lock (gate)
-                            {
-                                active = null;
-                                if (local?.Id == id) local = null;
-                                capture.Dispose();
-                            }
+                            active = null;
+                            activeRequest = null;
+                            if (local?.Id == id) local = null;
+                            capture.Dispose();
                         }
                     }
                     if (!token.IsCancellationRequested) await NotifyAsync("audio.listen.status", result, id, token).ConfigureAwait(false);
@@ -356,10 +316,14 @@ internal sealed class SrapPcListening(AndroidPhoneStore store, SrapPhoneTranspor
             }
         }
 
+        private bool CanPlay(string id) => transport.Session(device) == session && session.SupportsPcm && ReadRequest(session.Capabilities) == id;
+
         private async Task PlayAsync(string id, CancellationToken token)
         {
             await using var output = await SrapPcmOutput.OpenAsync(session, device, AndroidOutputSink.Current.Key, token,
                 listenRequest: id).ConfigureAwait(false);
+            token.ThrowIfCancellationRequested();
+            if (!CanPlay(id)) throw new SrapException("stale_session");
             using var capturing = CancellationTokenSource.CreateLinkedTokenSource(token);
             var capture = captureAudio(output.Stream, capturing.Token);
             if (await Task.WhenAny(capture, output.Completion).ConfigureAwait(false) == output.Completion)
@@ -371,13 +335,13 @@ internal sealed class SrapPcListening(AndroidPhoneStore store, SrapPhoneTranspor
             await capture.ConfigureAwait(false);
         }
 
-        private async Task NotifyAsync(string operation, string state, string? id, CancellationToken token)
+        private async Task<bool> NotifyAsync(string operation, string state, string? id, CancellationToken token, Action? beforeWrite = null)
         {
             var parameters = new System.Text.Json.Nodes.JsonObject { ["state"] = state };
             if (id != null) parameters["request"] = id;
-            try { await session.RequestAsync(operation, "audio.play", parameters, token).ConfigureAwait(false); }
+            try { await session.RequestAsync(operation, "audio.play", parameters, token, beforeWrite: beforeWrite).ConfigureAwait(false); return true; }
             catch (Exception ex) when (ex is IOException or OperationCanceledException or ObjectDisposedException or ChannelClosedException)
-            { /* Older phones and retired attachments may decline these optional requests. */ }
+            { return false; } // Older phones and retired attachments can decline these optional requests.
         }
     }
 }

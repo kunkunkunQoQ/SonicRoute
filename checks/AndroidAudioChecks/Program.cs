@@ -26,10 +26,9 @@ internal static partial class Program
         {
             if (args is ["--srap-ui-fixture", var uiDirectory]) { await SrapUiFixtureAsync(uiDirectory); return 0; }
             if (args is ["--srap-ui-sharing-fixture", var sharingUi]) { await SrapUiFixtureAsync(sharingUi, sharing: true); return 0; }
+            if (args is ["--srap-paired-ui-ops", var operations]) { CheckPairedWindowOperations(operations); return 0; }
             if (args is ["--srap-stage2a", var fixtureDirectory]) { await SrapStage2ACheckAsync(fixtureDirectory); return 0; }
             if (args is ["--srap-stage2b", var aliasDirectory, var aliasVectors]) { await SrapAliasChecksAsync(aliasDirectory, aliasVectors); return 0; }
-            if (args is ["--srap-clipboard", var clipDirectory, var clipVectors]) { await SrapClipboardChecksAsync(clipDirectory, clipVectors); return 0; }
-            if (args is ["--srap-live-clipboard", var liveClipboardDirectory]) { await SrapLiveClipboardAsync(liveClipboardDirectory); return 0; }
             if (args is ["--srap-pcm", var pcmDirectory, var pcmVectors]) { await SrapPcmChecksAsync(pcmDirectory, pcmVectors); return 0; }
             if (args is ["--srap-pc-listen", var listenDirectory]) { await SrapPcListenChecksAsync(listenDirectory); return 0; }
             if (args is ["--pc-listen-wave", var waveDirectory, var ownerPid]) { await PcListenWaveAsync(waveDirectory, int.Parse(ownerPid)); return 0; }
@@ -57,8 +56,8 @@ internal static partial class Program
                 });
                 return 0;
             }
-            if (args is ["--srap-stream-ownership", var streamDirectory, var streamKind])
-            { await SrapStreamOwnershipAsync(streamDirectory, streamKind); return 0; }
+            if (args is ["--srap-stream-ownership", var streamDirectory, "screen"])
+            { await SrapScreenOwnershipAsync(streamDirectory); return 0; }
             if (args.Length is 2 or 3 && args[0] == "--srap-live-soak")
             {
                 int seconds = args.Length == 2 ? 180 : int.Parse(args[2], System.Globalization.CultureInfo.InvariantCulture);
@@ -110,8 +109,6 @@ internal static partial class Program
             { await RunWithTrustedPhoneAsync(audioDirectory, (s, ct) => SrapVerifyCaptureAsync(s, ct, fixturePackage)); return 0; }
             if (args is ["--srap-live-screen", var srapLiveScreenDirectory])
             { await RunWithTrustedPhoneAsync(srapLiveScreenDirectory, SrapVerifyScreenAsync); return 0; }
-            if (args is ["--srap-live-files", var srapLiveFilesDirectory])
-            { await RunWithTrustedPhoneAsync(srapLiveFilesDirectory, (session, token) => SrapVerifyFilesAsync(session, srapLiveFilesDirectory, token)); return 0; }
             if (args is ["--srap-screen-frames"]) { SrapScreenFramesCheck(); return 0; }
             if (args.Length is 2 or 3 && args[0] is "--srap-live-pcm" or "--srap-live-nearby" or "--srap-live-owned-player" or "--srap-live-nearby-player")
             { await SrapLivePcmAsync(args[1], args.Length == 3 ? args[2] : "current",
@@ -128,7 +125,8 @@ internal static partial class Program
             if (args.Length > 0 && args[0] == "--airplay-phone-output") { await AirPlayPhoneOutputAsync(args[1]); return 0; }
             if (args.Length > 0 && args[0] == "--airplay-eld-decode") { AirPlayEldFixture(args[1], args[2]); return 0; }
             if (args.Length > 0 && args[0] == "--airplay-window-modes") { await AirPlayWindowModesAsync(); return 0; }
-            if (args.Length == 1 && args[0] == "--android-file-directory") { await AndroidFileDirectoryAsync(); return 0; }
+            if (args is ["--android-file-directory"]) { await AndroidFileDirectoryAsync(); return 0; }
+            if (args is ["--android-files-live", var adbFilesDirectory]) { await AndroidFilesLiveAsync(adbFilesDirectory); return 0; }
             if (args.Length > 0 && args[0] == "--decoder-settings") { await DecoderSettingsAsync(args[1]); return 0; }
             if (args.Length > 0 && args[0] == "--audio-latency") { await AudioLatencyChecksAsync(args[1]); return 0; }
             if (args.Length > 0 && args[0] == "--raw-pcm") { await RawPcmChecksAsync(args[1]); return 0; }
@@ -149,7 +147,6 @@ internal static partial class Program
             if (args.Length > 0 && args[0] == "--pairing-fixes") { await PairingFixesAsync(args[1]); return 0; }
             if (args.Length > 0 && args[0] == "--managed-connections") { await ManagedConnectionsAsync(args[1]); return 0; }
             if (args is ["--capture-restore", var captureDirectory]) { await CheckCaptureRestoreAsync(captureDirectory); return 0; }
-            if (args.Length == 2 && args[0] == "--android-files-live") { await AndroidFilesLiveAsync(args[1]); return 0; }
             if (args.Length > 0 && args[0] == "--mdns-discovery") { await MdnsDiscoveryChecksAsync(args.Contains("--lan")); return 0; }
             if (args.Length > 0 && args[0] == "--default-output") { await DefaultOutputAsync(args[1]); return 0; }
             if (args.Length > 0 && args[0] == "--self-impl-fixes") { await SelfImplementationFixesAsync(args[1]); return 0; }
@@ -180,6 +177,7 @@ internal static partial class Program
             if (args.Length > 0 && args[0] == "--connection-state") { await ConnectionStateAsync(args); return 0; }
             if (args.Length > 0 && args[0] == "--phone-library") { await PhoneLibraryAsync(args); return 0; }
             if (args.Length > 0 && args[0] is "--catalog" or "--live") { await DeviceAsync(args); return 0; }
+            if (args.Length != 0) throw new ArgumentException("Unknown check or invalid arguments: " + args[0]);
             await ModulesAsync(); Console.WriteLine($"PASS {_checks} focused assertions"); return 0;
         }
         catch (Exception ex)
