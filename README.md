@@ -14,24 +14,18 @@ SonicRoute 是一款常驻 Windows 通知区域的音频工具。你可以让音
 
 Windows 10 2004+ / Windows 11 · x64 / ARM64（实验版） · 九种语言 · [GPL-3.0](LICENSE)
 
-<a href="https://github.com/kunkunkunQoQ/SonicRoute/wiki/01-%E4%BD%BF%E7%94%A8%E6%8C%87%E5%8D%97#routing-canvas"><img src="https://raw.githubusercontent.com/wiki/kunkunkunQoQ/SonicRoute/images/routing-canvas-v2.00.png" width="820" alt="SonicRoute 2.00 的应用路由画布。实线连接主播放设备，虚线连接附加输出。"></a>
+<a name="interface-preview"></a>
 
-<sub>SonicRoute 2.00 的应用路由画布用实线显示主输出。点击「+」可添加转发，每路转发都有独立的音量和静音控制。</sub>
-
-<details>
-<summary><sub>🖼️ 旧版 1.36 界面示例</sub></summary>
-
-<div>
-<a href="docs/images/phone-audio-drag-demo.gif"><img src="docs/images/phone-audio-drag-demo.gif" width="380" align="top" alt="将手机应用拖到电脑的快速面板，展开应用行切换输出，再拖回手机"></a>
-<a href="docs/images/automation-editor.png"><img src="docs/images/automation-editor.png" width="380" align="top" alt="自动化规则编辑器：触发条件为按下快捷键，操作菜单中选中了“设置系统默认播放设备”"></a>
-</div>
-
-<div>
-<a href="docs/images/quick-panel.png"><img src="docs/images/quick-panel.png" width="275" align="top" alt="快速面板顶部显示输出设备，下方可分别调节各应用的音量"></a>
-<a href="docs/images/phone-management.png"><img src="docs/images/phone-management.png" width="465" align="top" alt="手机管理页面中的 Android 连接、固定应用和虚拟屏幕音频设置"></a>
-</div>
-
-</details>
+<table width="100%">
+<tr>
+<th scope="col" width="50%">快速面板 · 选择电脑与手机应用的播放输出</th>
+<th scope="col" width="50%">应用路由画布 · 主输出与附加转发</th>
+</tr>
+<tr>
+<td width="50%" valign="top"><a href="docs/images/quick-panel-output-v2.00.gif"><img src="docs/images/quick-panel-output-v2.00.gif" width="100%" alt="在快速面板中展开电脑和手机应用，选择各自的播放输出。"></a></td>
+<td width="50%" valign="top"><a href="https://raw.githubusercontent.com/wiki/kunkunkunQoQ/SonicRoute/images/routing-canvas-v2.00.png"><img src="docs/images/routing-canvas-v2.00-preview.png" width="100%" alt="SonicRoute 2.00 的应用路由画布。实线连接主播放设备，虚线连接附加输出。"></a></td>
+</tr>
+</table>
 
 <a name="downloads"></a>
 

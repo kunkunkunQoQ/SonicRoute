@@ -14,24 +14,18 @@ Hören Sie Musik über die Lautsprecher und nutzen Sie das Headset für Spiele u
 
 Windows 10 2004+ / Windows 11 · x64 / ARM64 (experimentell) · Neun Sprachen · [GPL-3.0](LICENSE)
 
-<a href="https://github.com/kunkunkunQoQ/SonicRoute/wiki/01-%E4%BD%BF%E7%94%A8%E6%8C%87%E5%8D%97#routing-canvas"><img src="https://raw.githubusercontent.com/wiki/kunkunkunQoQ/SonicRoute/images/routing-canvas-v2.00.png" width="820" alt="SonicRoute 2.00 zeigt eine App mit durchgezogener Verbindung zur Hauptausgabe und gestrichelter Weiterleitung zu einem zweiten Gerät."></a>
+<a name="interface-preview"></a>
 
-<sub>Die Audio-Arbeitsfläche in SonicRoute 2.00 zeigt die Hauptausgabe einer App und eine Weiterleitung an ein zweites Gerät.</sub>
-
-<details>
-<summary><sub>🖼️ Oberflächenbeispiele aus Version 1.36</sub></summary>
-
-<div>
-<a href="docs/images/phone-audio-drag-demo.gif"><img src="docs/images/phone-audio-drag-demo.gif" width="380" align="top" alt="Eine Android-App wird ins Schnellpanel des PCs gezogen. Dort lässt sich ihr Ausgabegerät wechseln."></a>
-<a href="docs/images/automation-editor.png"><img src="docs/images/automation-editor.png" width="380" align="top" alt="Regeleditor mit Tastenkürzel als Auslöser. Im geöffneten Aktionsmenü ist das Festlegen des Standardwiedergabegeräts ausgewählt."></a>
-</div>
-
-<div>
-<a href="docs/images/quick-panel.png"><img src="docs/images/quick-panel.png" width="275" align="top" alt="SonicRoute-Schnellpanel mit Ausgabegerät und Lautstärkereglern pro App"></a>
-<a href="docs/images/phone-management.png"><img src="docs/images/phone-management.png" width="465" align="top" alt="Smartphone-Verwaltung mit Android-Kopplung, angehefteten Apps und Audioeinstellungen für virtuelle Displays"></a>
-</div>
-
-</details>
+<table width="100%">
+<tr>
+<th scope="col" width="50%">Schnellpanel · Wiedergabeausgänge für PC- und Handy-Apps</th>
+<th scope="col" width="50%">Routing-Ansicht · Hauptausgang und zusätzliche Weiterleitungen</th>
+</tr>
+<tr>
+<td width="50%" valign="top"><a href="docs/images/quick-panel-output-v2.00.gif"><img src="docs/images/quick-panel-output-v2.00.gif" width="100%" alt="Das Schnellpanel zeigt die auswählbaren Wiedergabeausgänge für eine PC-App und eine Handy-App."></a></td>
+<td width="50%" valign="top"><a href="https://raw.githubusercontent.com/wiki/kunkunkunQoQ/SonicRoute/images/routing-canvas-v2.00.png"><img src="docs/images/routing-canvas-v2.00-preview.png" width="100%" alt="SonicRoute 2.00 zeigt eine App mit durchgezogener Verbindung zur Hauptausgabe und gestrichelter Weiterleitung zu einem zweiten Gerät."></a></td>
+</tr>
+</table>
 
 <a name="downloads"></a>
 

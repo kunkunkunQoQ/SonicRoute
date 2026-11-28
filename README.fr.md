@@ -14,24 +14,18 @@
 
 Windows 10 2004+ / Windows 11 · x64 / ARM64 (expérimental) · Interface disponible en neuf langues · [GPL-3.0](LICENSE)
 
-<a href="https://github.com/kunkunkunQoQ/SonicRoute/wiki/01-%E4%BD%BF%E7%94%A8%E6%8C%87%E5%8D%97#routing-canvas"><img src="https://raw.githubusercontent.com/wiki/kunkunkunQoQ/SonicRoute/images/routing-canvas-v2.00.png" width="820" alt="Fenêtre de SonicRoute 2.00 avec un trait plein entre une application et sa sortie principale, et une redirection en pointillés vers un deuxième périphérique."></a>
+<a name="interface-preview"></a>
 
-<sub>L’espace de routage audio de SonicRoute 2.00 montre la sortie principale d’une application et une redirection vers un deuxième périphérique.</sub>
-
-<details>
-<summary><sub>🖼️ Exemples d’interface de la version 1.36</sub></summary>
-
-<div>
-<a href="docs/images/phone-audio-drag-demo.gif"><img src="docs/images/phone-audio-drag-demo.gif" width="380" align="top" alt="Une application Android est déplacée vers le panneau rapide du PC pour y choisir sa sortie audio."></a>
-<a href="docs/images/automation-editor.png"><img src="docs/images/automation-editor.png" width="380" align="top" alt="Éditeur de règles avec un raccourci clavier comme déclencheur. Le menu des actions est ouvert sur le choix du périphérique de lecture par défaut."></a>
-</div>
-
-<div>
-<a href="docs/images/quick-panel.png"><img src="docs/images/quick-panel.png" width="275" align="top" alt="Panneau rapide avec le périphérique de sortie et les réglages de volume de chaque application"></a>
-<a href="docs/images/phone-management.png"><img src="docs/images/phone-management.png" width="465" align="top" alt="Gestion des appareils Android avec les options d’association, les applications épinglées et les réglages audio de l’écran virtuel"></a>
-</div>
-
-</details>
+<table width="100%">
+<tr>
+<th scope="col" width="50%">Panneau rapide · Sorties des applications PC et téléphone</th>
+<th scope="col" width="50%">Canevas de routage · Sortie principale et relais supplémentaires</th>
+</tr>
+<tr>
+<td width="50%" valign="top"><a href="docs/images/quick-panel-output-v2.00.gif"><img src="docs/images/quick-panel-output-v2.00.gif" width="100%" alt="Le panneau rapide affiche les sorties audio disponibles pour une application du PC et une du téléphone."></a></td>
+<td width="50%" valign="top"><a href="https://raw.githubusercontent.com/wiki/kunkunkunQoQ/SonicRoute/images/routing-canvas-v2.00.png"><img src="docs/images/routing-canvas-v2.00-preview.png" width="100%" alt="Fenêtre de SonicRoute 2.00 avec un trait plein entre une application et sa sortie principale, et une redirection en pointillés vers un deuxième périphérique."></a></td>
+</tr>
+</table>
 
 <a name="downloads"></a>
 

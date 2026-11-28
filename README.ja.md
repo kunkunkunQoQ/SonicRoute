@@ -14,24 +14,18 @@ SonicRoute は Windows の通知領域に常駐するオーディオツールで
 
 Windows 10 2004+ / Windows 11 · x64 / ARM64（試験提供） · 9 言語に対応 · [GPL-3.0](LICENSE)
 
-<a href="https://github.com/kunkunkunQoQ/SonicRoute/wiki/01-%E4%BD%BF%E7%94%A8%E6%8C%87%E5%8D%97#routing-canvas"><img src="https://raw.githubusercontent.com/wiki/kunkunkunQoQ/SonicRoute/images/routing-canvas-v2.00.png" width="820" alt="SonicRoute 2.00 のルーティングキャンバス。アプリ、再生デバイス、録音デバイスを接続線で表示"></a>
+<a name="interface-preview"></a>
 
-<sub>SonicRoute 2.00 の「アプリ」ページ。キャンバスの接続線で、選択したアプリの出力先を確認できます。</sub>
-
-<details>
-<summary><sub>🖼️ 旧バージョン 1.36 の画面例</sub></summary>
-
-<div>
-<a href="docs/images/phone-audio-drag-demo.gif"><img src="docs/images/phone-audio-drag-demo.gif" width="380" align="top" alt="スマートフォンのアプリを PC のクイックパネルにドラッグし、音声の出力先を切り替える様子"></a>
-<a href="docs/images/automation-editor-ja.png"><img src="docs/images/automation-editor-ja.png" width="380" align="top" alt="日本語表示の自動化ルール編集画面。アプリの音量やミュートを操作するアクションの一覧を表示"></a>
-</div>
-
-<div>
-<a href="docs/images/quick-panel.png"><img src="docs/images/quick-panel.png" width="275" align="top" alt="クイックパネル上部の出力デバイスとアプリ別の音量スライダー"></a>
-<a href="docs/images/phone-management.png"><img src="docs/images/phone-management.png" width="465" align="top" alt="スマートフォンの管理画面。Android 端末との接続、アプリのピン留め、仮想ディスプレイの音声設定を表示"></a>
-</div>
-
-</details>
+<table width="100%">
+<tr>
+<th scope="col" width="50%">クイックパネル · PC とスマートフォンのアプリの再生先</th>
+<th scope="col" width="50%">アプリのルーティングキャンバス · 主出力と追加の転送先</th>
+</tr>
+<tr>
+<td width="50%" valign="top"><a href="docs/images/quick-panel-output-v2.00.gif"><img src="docs/images/quick-panel-output-v2.00.gif" width="100%" alt="クイックパネルで PC とスマートフォンのアプリを展開し、それぞれの再生先を選択します。"></a></td>
+<td width="50%" valign="top"><a href="https://raw.githubusercontent.com/wiki/kunkunkunQoQ/SonicRoute/images/routing-canvas-v2.00.png"><img src="docs/images/routing-canvas-v2.00-preview.png" width="100%" alt="SonicRoute 2.00 のルーティングキャンバス。アプリ、再生デバイス、録音デバイスを接続線で表示"></a></td>
+</tr>
+</table>
 
 <a name="downloads"></a>
 

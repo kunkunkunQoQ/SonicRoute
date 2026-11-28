@@ -83,7 +83,6 @@ function render(language, text, releaseSummary = text.releaseSummary, previousRe
     if (!(key in variables)) throw new Error('Unknown shared placeholder: ' + key);
     return variables[key];
   });
-  const automationPreview = language.locale === 'ja-JP' ? 'docs/images/automation-editor-ja.png' : 'docs/images/automation-editor.png';
   const scenarioIcons = ['🎮 ', '🎵 ', '⚡ ', '🎙️ ', '📹 ', '📱 '];
   const rows = [
     ['⭐ ' + text.editionFull, portableFile('Full', 'x64') + '<br>' + portableFile('Full', 'arm64'), text.fullRequirement],
@@ -118,19 +117,17 @@ function render(language, text, releaseSummary = text.releaseSummary, previousRe
     '**' + text.tagline + '**', '', text.intro, '',
     '📥 ' + [link(text.download, releaseUrl), link(text.editionChoice, '#downloads'), link(text.quickStartTitle, '#quick-start'), link(text.guideTitle, wiki(pages.guide))].join(' · '), '',
     shared.minimumWindows + ' · x64 / ARM64' + experimentalSuffix + ' · ' + text.languages + ' · ' + link(text.license, 'LICENSE'), '',
-    `<a href="${wiki(pages.guide)}#routing-canvas"><img src="https://raw.githubusercontent.com/wiki/kunkunkunQoQ/SonicRoute/images/routing-canvas-v2.00.png" width="820" alt="${attr(text.canvasAlt)}"></a>`, '',
-    '<sub>' + attr(text.preview) + '</sub>', '',
-    '<details>',
-    '<summary><sub>🖼️ ' + attr(text.moreScreenshots) + '</sub></summary>', '',
-    '<div>',
-    `<a href="docs/images/phone-audio-drag-demo.gif"><img src="docs/images/phone-audio-drag-demo.gif" width="380" align="top" alt="${attr(text.demoAlt)}"></a>`,
-    `<a href="${automationPreview}"><img src="${automationPreview}" width="380" align="top" alt="${attr(text.automationPreviewAlt)}"></a>`,
-    '</div>', '',
-    '<div>',
-    `<a href="docs/images/quick-panel.png"><img src="docs/images/quick-panel.png" width="275" align="top" alt="${attr(text.panelAlt)}"></a>`,
-    `<a href="docs/images/phone-management.png"><img src="docs/images/phone-management.png" width="465" align="top" alt="${attr(text.phonePreviewAlt)}"></a>`,
-    '</div>', '',
-    '</details>', '',
+    '<a name="interface-preview"></a>', '',
+    '<table width="100%">',
+    '<tr>',
+    `<th scope="col" width="50%">${attr(text.quickPanelPreviewTitle)}</th>`,
+    `<th scope="col" width="50%">${attr(text.canvasPreviewTitle)}</th>`,
+    '</tr>',
+    '<tr>',
+    `<td width="50%" valign="top"><a href="docs/images/quick-panel-output-v2.00.gif"><img src="docs/images/quick-panel-output-v2.00.gif" width="100%" alt="${attr(text.quickPanelPreviewAlt)}"></a></td>`,
+    `<td width="50%" valign="top"><a href="https://raw.githubusercontent.com/wiki/kunkunkunQoQ/SonicRoute/images/routing-canvas-v2.00.png"><img src="docs/images/routing-canvas-v2.00-preview.png" width="100%" alt="${attr(text.canvasAlt)}"></a></td>`,
+    '</tr>',
+    '</table>', '',
     '<a name="downloads"></a>', '',
     '## 🚀 ' + text.downloadTitle, '',
     '**' + version + '** · ' + link(text.releaseNotes, versionNotes) + ' · ' + link(text.download, releaseUrl), '',

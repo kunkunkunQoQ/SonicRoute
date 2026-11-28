@@ -14,24 +14,18 @@ Play music through your speakers while games and calls use your headset. From th
 
 Windows 10 2004+ / Windows 11 · x64 / ARM64 (experimental) · Nine languages · [GPL-3.0](LICENSE)
 
-<a href="https://github.com/kunkunkunQoQ/SonicRoute/wiki/01-%E4%BD%BF%E7%94%A8%E6%8C%87%E5%8D%97#routing-canvas"><img src="https://raw.githubusercontent.com/wiki/kunkunkunQoQ/SonicRoute/images/routing-canvas-v2.00.png" width="820" alt="SonicRoute 2.00 routing canvas with a solid line to the primary playback device and dashed lines to additional outputs."></a>
+<a name="interface-preview"></a>
 
-<sub>The SonicRoute 2.00 routing canvas shows the primary output as a solid line. Click + to add a forwarded output, then set its volume and mute independently.</sub>
-
-<details>
-<summary><sub>🖼️ Older interface examples from 1.36</sub></summary>
-
-<div>
-<a href="docs/images/phone-audio-drag-demo.gif"><img src="docs/images/phone-audio-drag-demo.gif" width="380" align="top" alt="A phone app’s audio is dragged into the PC’s quick panel, switched to a different output, then dragged back to the phone"></a>
-<a href="docs/images/automation-editor.png"><img src="docs/images/automation-editor.png" width="380" align="top" alt="Automation rule editor with a hotkey trigger and the action menu open to “Set system default playback device”"></a>
-</div>
-
-<div>
-<a href="docs/images/quick-panel.png"><img src="docs/images/quick-panel.png" width="275" align="top" alt="Quick panel with an output selector and a volume slider for each app"></a>
-<a href="docs/images/phone-management.png"><img src="docs/images/phone-management.png" width="465" align="top" alt="Android device settings for pairing, pinned apps and virtual display audio"></a>
-</div>
-
-</details>
+<table width="100%">
+<tr>
+<th scope="col" width="50%">Quick Panel · PC and phone app outputs</th>
+<th scope="col" width="50%">Routing canvas · Primary output and forwards</th>
+</tr>
+<tr>
+<td width="50%" valign="top"><a href="docs/images/quick-panel-output-v2.00.gif"><img src="docs/images/quick-panel-output-v2.00.gif" width="100%" alt="Quick Panel showing playback output choices for a PC app and a phone app."></a></td>
+<td width="50%" valign="top"><a href="https://raw.githubusercontent.com/wiki/kunkunkunQoQ/SonicRoute/images/routing-canvas-v2.00.png"><img src="docs/images/routing-canvas-v2.00-preview.png" width="100%" alt="SonicRoute 2.00 routing canvas with a solid line to the primary playback device and dashed lines to additional outputs."></a></td>
+</tr>
+</table>
 
 <a name="downloads"></a>
 

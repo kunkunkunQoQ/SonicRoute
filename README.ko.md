@@ -14,24 +14,18 @@ SonicRoute는 Windows 알림 영역에서 앱별로 소리를 조절할 수 있�
 
 Windows 10 2004+ / Windows 11 · x64 / ARM64 (실험 버전) · 9개 언어 지원 · [GPL-3.0](LICENSE)
 
-<a href="https://github.com/kunkunkunQoQ/SonicRoute/wiki/01-%E4%BD%BF%E7%94%A8%E6%8C%87%E5%8D%97#routing-canvas"><img src="https://raw.githubusercontent.com/wiki/kunkunkunQoQ/SonicRoute/images/routing-canvas-v2.00.png" width="820" alt="SonicRoute 2.00 라우팅 캔버스에 앱과 재생·녹음 장치의 연결이 표시된 화면"></a>
+<a name="interface-preview"></a>
 
-<sub>SonicRoute 2.00의 앱 페이지입니다. 캔버스의 연결선을 보면 선택한 앱이 어느 장치로 소리를 보내는지 알 수 있습니다.</sub>
-
-<details>
-<summary><sub>🖼️ 이전 1.36 버전 화면 예시</sub></summary>
-
-<div>
-<a href="docs/images/phone-audio-drag-demo.gif"><img src="docs/images/phone-audio-drag-demo.gif" width="380" align="top" alt="휴대폰 앱을 PC의 빠른 패널로 끌어와 오디오 출력 장치를 바꾸는 모습"></a>
-<a href="docs/images/automation-editor.png"><img src="docs/images/automation-editor.png" width="380" align="top" alt="단축키로 실행하는 자동화 규칙의 작업 목록에서 시스템 기본 재생 장치 설정을 선택한 화면"></a>
-</div>
-
-<div>
-<a href="docs/images/quick-panel.png"><img src="docs/images/quick-panel.png" width="275" align="top" alt="빠른 패널 상단에 표시된 출력 장치와 앱별 볼륨 슬라이더"></a>
-<a href="docs/images/phone-management.png"><img src="docs/images/phone-management.png" width="465" align="top" alt="Android 기기 연결, 고정한 앱, 가상 디스플레이의 오디오 설정이 표시된 휴대폰 관리 화면"></a>
-</div>
-
-</details>
+<table width="100%">
+<tr>
+<th scope="col" width="50%">빠른 패널 · PC와 휴대폰 앱의 재생 출력</th>
+<th scope="col" width="50%">앱 라우팅 캔버스 · 기본 출력과 추가 전달</th>
+</tr>
+<tr>
+<td width="50%" valign="top"><a href="docs/images/quick-panel-output-v2.00.gif"><img src="docs/images/quick-panel-output-v2.00.gif" width="100%" alt="빠른 패널에서 PC와 휴대폰 앱을 펼쳐 각각의 재생 출력을 선택합니다."></a></td>
+<td width="50%" valign="top"><a href="https://raw.githubusercontent.com/wiki/kunkunkunQoQ/SonicRoute/images/routing-canvas-v2.00.png"><img src="docs/images/routing-canvas-v2.00-preview.png" width="100%" alt="SonicRoute 2.00 라우팅 캔버스에 앱과 재생·녹음 장치의 연결이 표시된 화면"></a></td>
+</tr>
+</table>
 
 <a name="downloads"></a>
 

@@ -14,24 +14,18 @@ SonicRoute te permite controlar el audio de cada aplicación desde el área de n
 
 Windows 10 2004+ / Windows 11 · x64 / ARM64 (experimental) · Interfaz en nueve idiomas · [GPL-3.0](LICENSE)
 
-<a href="https://github.com/kunkunkunQoQ/SonicRoute/wiki/01-%E4%BD%BF%E7%94%A8%E6%8C%87%E5%8D%97#routing-canvas"><img src="https://raw.githubusercontent.com/wiki/kunkunkunQoQ/SonicRoute/images/routing-canvas-v2.00.png" width="820" alt="Ventana de SonicRoute 2.00 con una línea continua hasta la salida principal de una aplicación y una línea discontinua de reenvío hacia otro dispositivo."></a>
+<a name="interface-preview"></a>
 
-<sub>El espacio de enrutamiento de SonicRoute 2.00 muestra la salida principal de una aplicación y el reenvío hacia un segundo dispositivo.</sub>
-
-<details>
-<summary><sub>🖼️ Ejemplos de interfaz de la versión 1.36</sub></summary>
-
-<div>
-<a href="docs/images/phone-audio-drag-demo.gif"><img src="docs/images/phone-audio-drag-demo.gif" width="380" align="top" alt="Una aplicación Android se arrastra al panel rápido del PC para elegir su salida de audio."></a>
-<a href="docs/images/automation-editor.png"><img src="docs/images/automation-editor.png" width="380" align="top" alt="Editor de reglas con un atajo de teclado como disparador y el menú de acciones abierto en la opción para establecer el dispositivo de reproducción predeterminado."></a>
-</div>
-
-<div>
-<a href="docs/images/quick-panel.png"><img src="docs/images/quick-panel.png" width="275" align="top" alt="Panel rápido de SonicRoute: dispositivo de salida y controles de volumen por aplicación"></a>
-<a href="docs/images/phone-management.png"><img src="docs/images/phone-management.png" width="465" align="top" alt="Panel de dispositivos Android con opciones de emparejamiento, aplicaciones ancladas y ajustes de audio de la pantalla virtual"></a>
-</div>
-
-</details>
+<table width="100%">
+<tr>
+<th scope="col" width="50%">Panel rápido · Salidas de apps del PC y del móvil</th>
+<th scope="col" width="50%">Lienzo de enrutamiento · Salida principal y reenvíos adicionales</th>
+</tr>
+<tr>
+<td width="50%" valign="top"><a href="docs/images/quick-panel-output-v2.00.gif"><img src="docs/images/quick-panel-output-v2.00.gif" width="100%" alt="El panel rápido muestra las salidas de reproducción disponibles para una aplicación del PC y otra del móvil."></a></td>
+<td width="50%" valign="top"><a href="https://raw.githubusercontent.com/wiki/kunkunkunQoQ/SonicRoute/images/routing-canvas-v2.00.png"><img src="docs/images/routing-canvas-v2.00-preview.png" width="100%" alt="Ventana de SonicRoute 2.00 con una línea continua hasta la salida principal de una aplicación y una línea discontinua de reenvío hacia otro dispositivo."></a></td>
+</tr>
+</table>
 
 <a name="downloads"></a>
 

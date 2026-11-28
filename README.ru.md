@@ -14,24 +14,18 @@ SonicRoute управляет звуком приложений из облас�
 
 Windows 10 2004+ / Windows 11 · x64 / ARM64 (экспериментальная сборка) · Девять языков интерфейса · [GPL-3.0](LICENSE)
 
-<a href="https://github.com/kunkunkunQoQ/SonicRoute/wiki/01-%E4%BD%BF%E7%94%A8%E6%8C%87%E5%8D%97#routing-canvas"><img src="https://raw.githubusercontent.com/wiki/kunkunkunQoQ/SonicRoute/images/routing-canvas-v2.00.png" width="820" alt="Схема маршрутизации SonicRoute 2.00 с соединениями между приложением, устройствами воспроизведения и устройствами записи"></a>
+<a name="interface-preview"></a>
 
-<sub>Страница приложений в SonicRoute 2.00. По линиям на схеме видно, какие устройства подключены к выбранному приложению.</sub>
-
-<details>
-<summary><sub>🖼️ Примеры интерфейса прежней версии 1.36</sub></summary>
-
-<div>
-<a href="docs/images/phone-audio-drag-demo.gif"><img src="docs/images/phone-audio-drag-demo.gif" width="380" align="top" alt="Звук мобильного приложения перетаскивают на быструю панель ПК, меняют устройство вывода и возвращают звук на телефон"></a>
-<a href="docs/images/automation-editor.png"><img src="docs/images/automation-editor.png" width="380" align="top" alt="Редактор правила с запуском по сочетанию клавиш. В меню действий выбрано назначение устройства воспроизведения по умолчанию."></a>
-</div>
-
-<div>
-<a href="docs/images/quick-panel.png"><img src="docs/images/quick-panel.png" width="275" align="top" alt="Быстрая панель с выбором устройства вывода и регуляторами громкости приложений"></a>
-<a href="docs/images/phone-management.png"><img src="docs/images/phone-management.png" width="465" align="top" alt="Настройки Android-устройства: сопряжение, закреплённые приложения и звук виртуального экрана"></a>
-</div>
-
-</details>
+<table width="100%">
+<tr>
+<th scope="col" width="50%">Быстрая панель · Выходы приложений ПК и телефона</th>
+<th scope="col" width="50%">Схема маршрутизации · Основной и дополнительные выходы</th>
+</tr>
+<tr>
+<td width="50%" valign="top"><a href="docs/images/quick-panel-output-v2.00.gif"><img src="docs/images/quick-panel-output-v2.00.gif" width="100%" alt="Быстрая панель показывает доступные выходы для приложения на ПК и приложения на телефоне."></a></td>
+<td width="50%" valign="top"><a href="https://raw.githubusercontent.com/wiki/kunkunkunQoQ/SonicRoute/images/routing-canvas-v2.00.png"><img src="docs/images/routing-canvas-v2.00-preview.png" width="100%" alt="Схема маршрутизации SonicRoute 2.00 с соединениями между приложением, устройствами воспроизведения и устройствами записи"></a></td>
+</tr>
+</table>
 
 <a name="downloads"></a>
 
