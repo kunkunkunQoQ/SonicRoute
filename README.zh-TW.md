@@ -43,8 +43,8 @@ v2.00 提供 **Full** 和 **Lite** 可攜版。需要連接 Android 手機或接
 
 | 版本或管道 | 下載 | 安裝與執行 |
 |---|---|---|
-| ⭐ Full（電腦音訊、Android 與 AirPlay） | `SonicRoute-v2.00-x64.exe`<br>`SonicRoute-v2.00-arm64.exe` | 單一執行檔，內含 .NET 10 Native AOT 執行階段，無須另外安裝 .NET 執行階段。 |
-| ⚡ Lite（僅電腦音訊） | `SonicRoute-v2.00-Lite-x64.exe`<br>`SonicRoute-v2.00-Lite-arm64.exe` | 單一執行檔，內含 .NET 10 Native AOT 執行階段，無須另外安裝 .NET 執行階段。 |
+| ⭐ Full（電腦音訊、Android 與 AirPlay） | [`SonicRoute-v2.00-x64.exe`](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v2.00/SonicRoute-v2.00-x64.exe)<br>[`SonicRoute-v2.00-arm64.exe`](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v2.00/SonicRoute-v2.00-arm64.exe) | 單一執行檔，內含 .NET 10 Native AOT 執行階段，無須另外安裝 .NET 執行階段。 |
+| ⚡ Lite（僅電腦音訊） | [`SonicRoute-v2.00-Lite-x64.exe`](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v2.00/SonicRoute-v2.00-Lite-x64.exe)<br>[`SonicRoute-v2.00-Lite-arm64.exe`](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v2.00/SonicRoute-v2.00-Lite-arm64.exe) | 單一執行檔，內含 .NET 10 Native AOT 執行階段，無須另外安裝 .NET 執行階段。 |
 | 🔄 **Microsoft Store** | [Full](https://apps.microsoft.com/detail/9NQZGRTPM1NT) / [Lite](https://apps.microsoft.com/detail/9N37LQ8SMLF6) | 由 Microsoft Store 獨立提供安裝與更新。上架版本請見商店頁面。 |
 
 📱 [Android App 下載頁](https://github.com/kunkunkunQoQ/SonicRoute-App/releases) · [安裝說明](https://github.com/kunkunkunQoQ/SonicRoute-App/blob/main/README.md#install)

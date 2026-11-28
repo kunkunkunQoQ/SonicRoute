@@ -43,8 +43,8 @@ v2.00 포터블 패키지는 Android 연동과 AirPlay 수신을 지원하는 **
 
 | 에디션 또는 배포 경로 | 다운로드 | 설치 및 실행 환경 |
 |---|---|---|
-| ⭐ Full(PC 오디오·Android·AirPlay) | `SonicRoute-v2.00-x64.exe`<br>`SonicRoute-v2.00-arm64.exe` | 단일 EXE에 .NET 10 Native AOT 런타임이 포함되어 있어 런타임을 별도로 설치할 필요가 없습니다. |
-| ⚡ Lite(PC 오디오 전용) | `SonicRoute-v2.00-Lite-x64.exe`<br>`SonicRoute-v2.00-Lite-arm64.exe` | 단일 EXE에 .NET 10 Native AOT 런타임이 포함되어 있어 런타임을 별도로 설치할 필요가 없습니다. |
+| ⭐ Full(PC 오디오·Android·AirPlay) | [`SonicRoute-v2.00-x64.exe`](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v2.00/SonicRoute-v2.00-x64.exe)<br>[`SonicRoute-v2.00-arm64.exe`](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v2.00/SonicRoute-v2.00-arm64.exe) | 단일 EXE에 .NET 10 Native AOT 런타임이 포함되어 있어 런타임을 별도로 설치할 필요가 없습니다. |
+| ⚡ Lite(PC 오디오 전용) | [`SonicRoute-v2.00-Lite-x64.exe`](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v2.00/SonicRoute-v2.00-Lite-x64.exe)<br>[`SonicRoute-v2.00-Lite-arm64.exe`](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v2.00/SonicRoute-v2.00-Lite-arm64.exe) | 단일 EXE에 .NET 10 Native AOT 런타임이 포함되어 있어 런타임을 별도로 설치할 필요가 없습니다. |
 | 🔄 **Microsoft Store** | [Full](https://apps.microsoft.com/detail/9NQZGRTPM1NT) / [Lite](https://apps.microsoft.com/detail/9N37LQ8SMLF6) | Microsoft Store 버전은 스토어에서 별도로 배포하고 업데이트합니다. 제공 중인 버전은 스토어에서 확인하세요. |
 
 📱 [Android 앱 릴리스](https://github.com/kunkunkunQoQ/SonicRoute-App/releases) · [설치 안내](https://github.com/kunkunkunQoQ/SonicRoute-App/blob/main/README.md#install)

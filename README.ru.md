@@ -43,8 +43,8 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64 (экспериментальная
 
 | Редакция или канал | Скачать | Установка и требования |
 |---|---|---|
-| ⭐ Full (звук ПК, Android и AirPlay) | `SonicRoute-v2.00-x64.exe`<br>`SonicRoute-v2.00-arm64.exe` | Один EXE-файл со встроенной средой .NET 10 Native AOT. Устанавливать среду отдельно не нужно. |
-| ⚡ Lite (только звук ПК) | `SonicRoute-v2.00-Lite-x64.exe`<br>`SonicRoute-v2.00-Lite-arm64.exe` | Один EXE-файл со встроенной средой .NET 10 Native AOT. Устанавливать среду отдельно не нужно. |
+| ⭐ Full (звук ПК, Android и AirPlay) | [`SonicRoute-v2.00-x64.exe`](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v2.00/SonicRoute-v2.00-x64.exe)<br>[`SonicRoute-v2.00-arm64.exe`](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v2.00/SonicRoute-v2.00-arm64.exe) | Один EXE-файл со встроенной средой .NET 10 Native AOT. Устанавливать среду отдельно не нужно. |
+| ⚡ Lite (только звук ПК) | [`SonicRoute-v2.00-Lite-x64.exe`](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v2.00/SonicRoute-v2.00-Lite-x64.exe)<br>[`SonicRoute-v2.00-Lite-arm64.exe`](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v2.00/SonicRoute-v2.00-Lite-arm64.exe) | Один EXE-файл со встроенной средой .NET 10 Native AOT. Устанавливать среду отдельно не нужно. |
 | 🔄 **Microsoft Store** | [Full](https://apps.microsoft.com/detail/9NQZGRTPM1NT) / [Lite](https://apps.microsoft.com/detail/9N37LQ8SMLF6) | Версия из Microsoft Store распространяется и обновляется через магазин. Номер доступной версии указан на странице в магазине. |
 
 📱 [Выпуски приложения для Android](https://github.com/kunkunkunQoQ/SonicRoute-App/releases) · [Инструкция по установке](https://github.com/kunkunkunQoQ/SonicRoute-App/blob/main/README.md#install)

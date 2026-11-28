@@ -6,9 +6,9 @@
   "runtime": "https://dotnet.microsoft.com/download/dotnet/10.0",
   "minimumWindows": "Windows 10 2004+ / Windows 11",
   "documentationVersion": "v2.00",
-  "release": "v1.36",
-  "releaseDate": "2026-11-24",
-  "releaseNotes": "docs/release-v1.36.md",
+  "release": "v2.00",
+  "releaseDate": "2026-11-28",
+  "releaseNotes": "docs/release-v2.00.md",
   "author": {
     "bilibili": "https://b23.tv/TDqSAKM",
     "afdian": "https://afdian.com/a/koukou021",
@@ -71,7 +71,7 @@
     }
   ],
   "nextRelease": "v2.00",
-  "arm64LastRelease": "v1.36",
+  "arm64LastRelease": "v2.00",
   "triggerCount": 6,
   "actionCount": 39,
   "wikiPages": {

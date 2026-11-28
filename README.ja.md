@@ -43,8 +43,8 @@ v2.00 のポータブル版は、Android 連携や AirPlay 受信に対応する
 
 | エディション・配布元 | ダウンロード | インストールと動作要件 |
 |---|---|---|
-| ⭐ Full（PC 音声・Android・AirPlay） | `SonicRoute-v2.00-x64.exe`<br>`SonicRoute-v2.00-arm64.exe` | 単体の EXE に .NET 10 Native AOT のランタイムを内蔵しています。ランタイムの別途インストールは不要です。 |
-| ⚡ Lite（PC の音声のみ） | `SonicRoute-v2.00-Lite-x64.exe`<br>`SonicRoute-v2.00-Lite-arm64.exe` | 単体の EXE に .NET 10 Native AOT のランタイムを内蔵しています。ランタイムの別途インストールは不要です。 |
+| ⭐ Full（PC 音声・Android・AirPlay） | [`SonicRoute-v2.00-x64.exe`](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v2.00/SonicRoute-v2.00-x64.exe)<br>[`SonicRoute-v2.00-arm64.exe`](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v2.00/SonicRoute-v2.00-arm64.exe) | 単体の EXE に .NET 10 Native AOT のランタイムを内蔵しています。ランタイムの別途インストールは不要です。 |
+| ⚡ Lite（PC の音声のみ） | [`SonicRoute-v2.00-Lite-x64.exe`](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v2.00/SonicRoute-v2.00-Lite-x64.exe)<br>[`SonicRoute-v2.00-Lite-arm64.exe`](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v2.00/SonicRoute-v2.00-Lite-arm64.exe) | 単体の EXE に .NET 10 Native AOT のランタイムを内蔵しています。ランタイムの別途インストールは不要です。 |
 | 🔄 **Microsoft Store** | [Full](https://apps.microsoft.com/detail/9NQZGRTPM1NT) / [Lite](https://apps.microsoft.com/detail/9N37LQ8SMLF6) | Microsoft Store 版はストアから配布され、ストアで更新されます。提供中のバージョンはストアでご確認ください。 |
 
 📱 [Android アプリのリリース](https://github.com/kunkunkunQoQ/SonicRoute-App/releases) · [インストール手順](https://github.com/kunkunkunQoQ/SonicRoute-App/blob/main/README.md#install)

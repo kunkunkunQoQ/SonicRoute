@@ -43,8 +43,8 @@ SonicRoute v2.00 tiene dos ediciones. Elige **Full** para usar el audio del PC, 
 
 | Edición o canal | Descarga | Instalación y requisitos |
 |---|---|---|
-| ⭐ Full (.NET 10, con integración móvil opcional) | `SonicRoute-v2.00-x64.exe`<br>`SonicRoute-v2.00-arm64.exe` | EXE portátil con .NET 10 Native AOT integrado. No requiere instalar un entorno de ejecución aparte. |
-| ⚡ Lite (.NET 10, solo audio de PC) | `SonicRoute-v2.00-Lite-x64.exe`<br>`SonicRoute-v2.00-Lite-arm64.exe` | EXE portátil con .NET 10 Native AOT integrado. No requiere instalar un entorno de ejecución aparte. |
+| ⭐ Full (.NET 10, con integración móvil opcional) | [`SonicRoute-v2.00-x64.exe`](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v2.00/SonicRoute-v2.00-x64.exe)<br>[`SonicRoute-v2.00-arm64.exe`](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v2.00/SonicRoute-v2.00-arm64.exe) | EXE portátil con .NET 10 Native AOT integrado. No requiere instalar un entorno de ejecución aparte. |
+| ⚡ Lite (.NET 10, solo audio de PC) | [`SonicRoute-v2.00-Lite-x64.exe`](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v2.00/SonicRoute-v2.00-Lite-x64.exe)<br>[`SonicRoute-v2.00-Lite-arm64.exe`](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v2.00/SonicRoute-v2.00-Lite-arm64.exe) | EXE portátil con .NET 10 Native AOT integrado. No requiere instalar un entorno de ejecución aparte. |
 | 🔄 **Microsoft Store** | [Full](https://apps.microsoft.com/detail/9NQZGRTPM1NT) / [Lite](https://apps.microsoft.com/detail/9N37LQ8SMLF6) | La distribución y las actualizaciones se gestionan por separado en Microsoft Store. Consulta la versión disponible en la ficha de la tienda. |
 
 📱 [Versiones de la aplicación Android](https://github.com/kunkunkunQoQ/SonicRoute-App/releases) · [Instrucciones de instalación](https://github.com/kunkunkunQoQ/SonicRoute-App/blob/main/README.md#install)

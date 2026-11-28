@@ -43,8 +43,8 @@ v2.00 comes in two portable editions. Choose **Full** for Windows audio, Android
 
 | Edition or channel | Download | Installation and requirements |
 |---|---|---|
-| ⭐ Full (PC, Android and AirPlay) | `SonicRoute-v2.00-x64.exe`<br>`SonicRoute-v2.00-arm64.exe` | Single EXE with the .NET 10 Native AOT runtime built in. No separate .NET installation required. |
-| ⚡ Lite (PC audio) | `SonicRoute-v2.00-Lite-x64.exe`<br>`SonicRoute-v2.00-Lite-arm64.exe` | Single EXE with the .NET 10 Native AOT runtime built in. No separate .NET installation required. |
+| ⭐ Full (PC, Android and AirPlay) | [`SonicRoute-v2.00-x64.exe`](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v2.00/SonicRoute-v2.00-x64.exe)<br>[`SonicRoute-v2.00-arm64.exe`](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v2.00/SonicRoute-v2.00-arm64.exe) | Single EXE with the .NET 10 Native AOT runtime built in. No separate .NET installation required. |
+| ⚡ Lite (PC audio) | [`SonicRoute-v2.00-Lite-x64.exe`](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v2.00/SonicRoute-v2.00-Lite-x64.exe)<br>[`SonicRoute-v2.00-Lite-arm64.exe`](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v2.00/SonicRoute-v2.00-Lite-arm64.exe) | Single EXE with the .NET 10 Native AOT runtime built in. No separate .NET installation required. |
 | 🔄 **Microsoft Store** | [Full](https://apps.microsoft.com/detail/9NQZGRTPM1NT) / [Lite](https://apps.microsoft.com/detail/9N37LQ8SMLF6) | Install and update through the Microsoft Store. See the Store listing for the available version. |
 
 📱 [Android app releases](https://github.com/kunkunkunQoQ/SonicRoute-App/releases) · [Installation instructions](https://github.com/kunkunkunQoQ/SonicRoute-App/blob/main/README.md#install)
