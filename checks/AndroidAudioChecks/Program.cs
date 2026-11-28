@@ -25,11 +25,17 @@ internal static partial class Program
         try
         {
             if (args is ["--srap-ui-fixture", var uiDirectory]) { await SrapUiFixtureAsync(uiDirectory); return 0; }
+            if (args is ["--srap-ui-sharing-fixture", var sharingUi]) { await SrapUiFixtureAsync(sharingUi, sharing: true); return 0; }
             if (args is ["--srap-stage2a", var fixtureDirectory]) { await SrapStage2ACheckAsync(fixtureDirectory); return 0; }
             if (args is ["--srap-stage2b", var aliasDirectory, var aliasVectors]) { await SrapAliasChecksAsync(aliasDirectory, aliasVectors); return 0; }
             if (args is ["--srap-clipboard", var clipDirectory, var clipVectors]) { await SrapClipboardChecksAsync(clipDirectory, clipVectors); return 0; }
             if (args is ["--srap-live-clipboard", var liveClipboardDirectory]) { await SrapLiveClipboardAsync(liveClipboardDirectory); return 0; }
             if (args is ["--srap-pcm", var pcmDirectory, var pcmVectors]) { await SrapPcmChecksAsync(pcmDirectory, pcmVectors); return 0; }
+            if (args is ["--srap-pc-listen", var listenDirectory]) { await SrapPcListenChecksAsync(listenDirectory); return 0; }
+            if (args is ["--pc-listen-wave", var waveDirectory, var ownerPid]) { await PcListenWaveAsync(waveDirectory, int.Parse(ownerPid)); return 0; }
+            if (args is ["--pc-listen-audit"]) { await PcListenAuditAsync(); return 0; }
+            if (args is ["--play-owned-wav"]) { await PlayOwnedFixtureWaveAsync(); return 0; }
+            if (args is ["--pc-listen-meter-probe", var meterDirectory]) { await PcListenMeterProbeAsync(meterDirectory); return 0; }
             if (args is ["--srap-capture", var srapCaptureDirectory]) { await SrapCaptureChecksAsync(srapCaptureDirectory); return 0; }
             if (args is ["--srap-live-alias", var aliasData, var adbTransportId, var conflictPreference])
             { await SrapLiveAliasAsync(aliasData, adbTransportId, conflictPreference); return 0; }
@@ -56,20 +62,61 @@ internal static partial class Program
             if (args.Length is 2 or 3 && args[0] == "--srap-live-soak")
             {
                 int seconds = args.Length == 2 ? 180 : int.Parse(args[2], System.Globalization.CultureInfo.InvariantCulture);
-                if (seconds is < 3 or > 1800) throw new ArgumentOutOfRangeException(nameof(seconds), "Choose 3 to 1800 seconds.");
+                if (seconds is < 3 or > 43200) throw new ArgumentOutOfRangeException(nameof(seconds), "Choose 3 to 43200 seconds.");
                 await RunWithTrustedPhoneAsync(args[1], (s, ct) => SrapVerifySoakAsync(s, seconds, ct), TimeSpan.FromSeconds(seconds + 45));
                 return 0;
             }
             if (args is ["--srap-soak-check", var soakFixture]) { await SrapSoakFixtureAsync(soakFixture); return 0; }
+            if (args is ["--srap-local-public-pin", var testProfile])
+            {
+                using var identity = new SrapIdentity(testProfile);
+                Console.WriteLine(Convert.ToHexString(identity.Fingerprint));
+                return 0;
+            }
+            if (args is ["--srap-nearby-vectors", var nearbyVectors])
+            {
+                var fields = File.ReadLines(nearbyVectors).Where(line => line.Contains('=')).Select(line => line.Split('=', 2))
+                    .ToDictionary(pair => pair[0], pair => pair[1]);
+                byte[] Bytes(string name)
+                {
+                    int[] ends = fields[name].Split("..").Select(v => Convert.ToInt32(v, 16)).ToArray();
+                    return Enumerable.Range(ends[0], ends[1] - ends[0] + 1).Select(v => (byte)v).ToArray();
+                }
+                var transcript = SrapClient.NearbyTranscript(Bytes("inviteId"), Bytes("phoneNonce"), Bytes("pcNonce"),
+                    Bytes("androidSpkiSha256"), Bytes("pcSpkiSha256"), int.Parse(fields["minor"]));
+                Check(Convert.ToHexString(SrapClient.NearbyCommitment(Bytes("pcSpkiSha256"), Bytes("pcNonce"))) == fields["commitment"], "nearby nonce commitment");
+                Check(transcript.Length == int.Parse(fields["transcriptBytes"]) &&
+                    Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(transcript)) == fields["transcriptSha256"], "nearby signed transcript");
+                Check(SrapClient.NearbyCode(transcript) == fields["comparison"], "nearby eight digit comparison");
+                return 0;
+            }
             if (args is ["--srap-live-capture", var srapLiveCaptureDirectory])
             { await RunWithTrustedPhoneAsync(srapLiveCaptureDirectory, SrapVerifyCaptureAsync); return 0; }
+            if (args is ["--srap-live-qq-icon", var iconDirectory, var expectedIcon, var receivedIcon])
+            {
+                await RunWithTrustedPhoneAsync(iconDirectory, async (session, ct) => {
+                    const string package = "com.tencent.qqmusic";
+                    if (expectedIcon.Length != 64 || !expectedIcon.All(char.IsAsciiHexDigitUpper)) throw new ArgumentException("Expected an Android SHA256.");
+                    var reply = await session.RequestAsync("catalog.icon", "catalog.apps", new() { ["appKey"] = package }, ct);
+                    var png = SrapOperationAdapter.ReadIcon(reply, package) ?? throw new InvalidDataException("Missing package icon.");
+                    if (Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(png)) != expectedIcon) throw new InvalidDataException("Launcher icon differs.");
+                    using var output = new FileStream(receivedIcon, FileMode.CreateNew, FileAccess.Write, FileShare.None);
+                    await output.WriteAsync(png, ct);
+                    Console.WriteLine($"PASS package={package} png48=matched sha256={expectedIcon}");
+                }, TimeSpan.FromSeconds(12));
+                return 0;
+            }
+            if (args is ["--srap-live-capture", var audioDirectory, var fixturePackage] && fixturePackage is "bin.mt.plus" or "cn.wenyu.bodian")
+            { await RunWithTrustedPhoneAsync(audioDirectory, (s, ct) => SrapVerifyCaptureAsync(s, ct, fixturePackage)); return 0; }
             if (args is ["--srap-live-screen", var srapLiveScreenDirectory])
             { await RunWithTrustedPhoneAsync(srapLiveScreenDirectory, SrapVerifyScreenAsync); return 0; }
             if (args is ["--srap-live-files", var srapLiveFilesDirectory])
             { await RunWithTrustedPhoneAsync(srapLiveFilesDirectory, (session, token) => SrapVerifyFilesAsync(session, srapLiveFilesDirectory, token)); return 0; }
             if (args is ["--srap-screen-frames"]) { SrapScreenFramesCheck(); return 0; }
-            if (args.Length is 2 or 3 && args[0] == "--srap-live-pcm")
-            { await SrapLivePcmAsync(args[1], args.Length == 3 ? args[2] : "current"); return 0; }
+            if (args.Length is 2 or 3 && args[0] is "--srap-live-pcm" or "--srap-live-nearby" or "--srap-live-owned-player" or "--srap-live-nearby-player")
+            { await SrapLivePcmAsync(args[1], args.Length == 3 ? args[2] : "current",
+                args[0] is "--srap-live-nearby" or "--srap-live-nearby-player",
+                args[0] is "--srap-live-owned-player" or "--srap-live-nearby-player"); return 0; }
             if (args is ["--srap-live", var liveDirectory]) { await SrapLiveAsync(liveDirectory); return 0; }
             if (args is ["--srap-live-revoke", var revokeDirectory]) { await SrapLiveRevokeAsync(revokeDirectory); return 0; }
             if (args is ["--gemini-android-contract", var output, var vectors])

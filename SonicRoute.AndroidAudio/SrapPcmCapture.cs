@@ -1,30 +1,70 @@
 using System.Buffers.Binary;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Threading.Channels;
 
 namespace SonicRoute.AndroidAudio;
 
-internal sealed record AppCapturePermission(string? Package, string? Reason, string? Grant)
+internal sealed record AppCapturePermission(string? Package, string? Reason, string? Grant, bool PlayOnComputer = false,
+    bool IsDeviceMedia = false)
 {
+    internal string? LocalSourceKey => IsDeviceMedia ? AndroidApp.DeviceAudioPackage : Package;
+
+    internal static string?[] WithLocalPlayback(AndroidDevice source, IReadOnlyList<string?> desired)
+    {
+        var monitors = new List<string?>(desired.Count + 1);
+        foreach (string? id in desired)
+        {
+            if (id == AndroidAudioSession.SourcePhoneOutputId) continue;
+            if (AndroidOutputIdentity.TryParseDeviceId(id, out string key, out string sink) &&
+                string.Equals(key, AndroidDeviceIdentity.Key(source), StringComparison.OrdinalIgnoreCase))
+            {
+                if (sink == AndroidOutputSink.Current.Key) continue;
+                throw new SrapException("unsupported");
+            }
+            if (!monitors.Contains(id, StringComparer.OrdinalIgnoreCase)) monitors.Add(id);
+        }
+        if (monitors.Count == 0) throw new SrapException("unsupported");
+        monitors.Add(AndroidAudioSession.SourcePhoneOutputId);
+        return monitors.ToArray();
+    }
+
     internal static AppCapturePermission? Read(IReadOnlyDictionary<string, SrapCapability> entries)
     {
-        if (!entries.TryGetValue("audio.capture.app", out var cap)) return null;
-        if (cap.State == "needs_authorization") return new(null, cap.Reason, null);
+        entries.TryGetValue("audio.capture.app", out var app);
+        entries.TryGetValue("audio.capture.device", out var device);
+        bool deviceMedia = device?.State == "available";
+        if (deviceMedia && app?.State == "available") return null;
+        var cap = deviceMedia ? device : app?.State == "available" ? app : null;
+        if (cap == null)
+        {
+            var needed = app?.State == "needs_authorization" ? app : device?.State == "needs_authorization" ? device : null;
+            return needed == null ? null : new(null, needed.Reason, null);
+        }
+        if (cap.Limits?.GetValueOrDefault("pcm") != SrapSession.PcmEncoding ||
+            cap.Limits.GetValueOrDefault("mode") != "playback_capture") return null;
+        string? grant = cap.Limits.GetValueOrDefault("grant");
+        bool hasGrant = grant is { Length: > 0 and <= 20 } && grant.All(char.IsAsciiDigit);
+        bool autoplay = hasGrant && cap.Limits.GetValueOrDefault("autoplay") == "pc_output_v1";
+        if (deviceMedia) return cap.Scope == "device_media" && hasGrant ? new(null, null, grant, autoplay, true) : null;
         const string prefix = "other_app:";
-        if (cap.State != "available" || cap.Scope?.StartsWith(prefix, StringComparison.Ordinal) != true
-            || cap.Limits?.GetValueOrDefault("pcm") != SrapSession.PcmEncoding
-            || cap.Limits.GetValueOrDefault("mode") != "playback_capture") return null;
+        if (cap.Scope?.StartsWith(prefix, StringComparison.Ordinal) != true) return null;
         string package = cap.Scope[prefix.Length..];
         if (package.Length is < 1 or > 255) return null;
         try { AdbClient.ValidatePackage(package); }
         catch (ArgumentException) { return null; }
-        return new(package, null, cap.Limits.GetValueOrDefault("grant"));
+        return new(package, null, grant, autoplay);
     }
 
     internal static void Require(AppCapturePermission? grant, AndroidApp app, bool keepPhoneAudio)
     {
-        if (!keepPhoneAudio || app.IsDeviceAudio || grant == null) throw new SrapException("unsupported");
-        if (!string.Equals(grant.Package, app.Package, StringComparison.Ordinal))
+        if (!keepPhoneAudio || grant == null) throw new SrapException("unsupported");
+        if (app.IsDeviceAudio)
+        {
+            if (!grant.IsDeviceMedia) throw new SrapException("unsupported");
+            return;
+        }
+        if (grant.Package == null || !string.Equals(grant.Package, app.Package, StringComparison.Ordinal))
             throw new SrapException("permission_required", grant.Reason);
     }
 }
@@ -39,6 +79,7 @@ internal sealed class SrapPcmCapture(SrapSession session, AndroidApp app)
         new BoundedChannelOptions(Window) { SingleReader = true, SingleWriter = true });
     private readonly object gate = new();
     private readonly AppCapturePermission? expected = session.Capabilities.Capture;
+    private readonly string capability = app.IsDeviceAudio ? "audio.capture.device" : "audio.capture.app";
     private CancellationTokenSource? run;
     private HashSet<uint>? canceledBeforeStart = [];
     private Exception? failure;
@@ -62,10 +103,13 @@ internal sealed class SrapPcmCapture(SrapSession session, AndroidApp app)
             AppCapturePermission.Require(expected, app, true);
             Recheck();
             ct.ThrowIfCancellationRequested();
-            var result = await session.RequestAsync("audio.capture.start", "audio.capture.app", new()
+            var parameters = new JsonObject
             {
-                ["appKey"] = app.Package, ["encoding"] = SrapSession.PcmEncoding, ["keepPhoneAudio"] = true
-            }, ct).ConfigureAwait(false);
+                ["encoding"] = SrapSession.PcmEncoding, ["keepPhoneAudio"] = true
+            };
+            if (app.IsDeviceAudio) parameters["scope"] = "device_media";
+            else parameters["appKey"] = app.Package;
+            var result = await session.RequestAsync("audio.capture.start", capability, parameters, ct).ConfigureAwait(false);
             if (!result.TryGetProperty("streamId", out var field) || !field.TryGetUInt32(out uint id) || id == 0 || (id & 1) != 0)
                 throw new SrapException("invalid_argument");
             // A new receiver owns the ID only after registration. On collision do
@@ -131,7 +175,7 @@ internal sealed class SrapPcmCapture(SrapSession session, AndroidApp app)
 
     private async Task GrantAsync(ulong acknowledged, CancellationToken token)
     {
-        var result = await session.RequestAsync("audio.capture.credit", "audio.capture.app", new()
+        var result = await session.RequestAsync("audio.capture.credit", capability, new()
         {
             ["streamId"] = streamId, ["consumedPackets"] = acknowledged
         }, token, beforeWrite: () => { lock (gate) permitted = acknowledged + Window; }).ConfigureAwait(false);

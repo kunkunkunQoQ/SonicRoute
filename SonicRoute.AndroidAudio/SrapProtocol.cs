@@ -21,7 +21,7 @@ internal static class SrapProtocol
         "catalog.apps", "media.control", "volume.device", "audio.capture.device", "audio.capture.app",
         "audio.capture.exclusive", "audio.play", "audio.devices", "audio.route.owned", "audio.route.other_app",
         "audio.volume.other_app", "bluetooth.control", "display.mirror", "display.virtual", "display.input",
-        "files.transfer", "clipboard.sync", "automation.rules", "identity.alias.adb"
+        "files.transfer", "clipboard.sync", "automation.rules", "identity.alias.adb", "sharing.prompt"
     };
     private static readonly HashSet<string> CapabilityStates = new(StringComparer.Ordinal)
     {

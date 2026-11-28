@@ -31,6 +31,7 @@ internal sealed partial class PhonePreview : IDisposable
     private readonly AdbTransportDiscovery adbDiscovery;
     private readonly AdbOperationAdapter adbOperations;
     private readonly SrapPhoneTransport appTransport;
+    internal readonly SrapPcListening PcListening;
     internal IPhoneOperationPort Operations { get; }
     internal readonly AndroidPhoneStore Store;
     internal readonly AndroidAudioSettingsStore Settings;
@@ -48,7 +49,7 @@ internal sealed partial class PhonePreview : IDisposable
     internal PhonePreview(string root, NativeApplicationWindow shell, IMainThread owner, AppConfig config,
         Func<int, IPcProcessSilenceLease?>? silenceLocalProcess = null,
         Func<AirPlayPreview?>? tryGetAirPlay = null, AndroidAudioSettingsStore? settings = null,
-        IAdbTransport? adbFixture = null)
+        IAdbTransport? adbFixture = null, Action<string>? openListeningPermission = null)
     {
         this.owner = owner;
         this.config = config;
@@ -65,6 +66,12 @@ internal sealed partial class PhonePreview : IDisposable
         MigrateLegacyPhoneStore(root, storePath);
         Store = new(storePath, () => L10n.T("Phone.DefaultName"));
         appTransport = new(Store, root);
+        PcListening = new(Store, appTransport);
+        if (openListeningPermission != null) PcListening.PermissionRequested += request => owner.TryPost(() =>
+        {
+            if (Volatile.Read(ref closed) == 0 && PcListening.Pending(request.ProfileId) == request)
+                openListeningPermission(request.ProfileId);
+        });
         Settings = settings ?? new(Path.Combine(root, "android-audio.json"));
         Discovery = new(adbDiscovery.ReadAsync);
         Connections = new(Store, () => Discovery, Settings.MigrateConnectionPreferences, appTransport, adb, Settings.MigrateConnectionPreferences);
@@ -109,16 +116,26 @@ internal sealed partial class PhonePreview : IDisposable
         await ProbeOutputsIfConnectedAsync([device], force: true, token: cancel).ConfigureAwait(false);
     }
 
+    internal async Task PairNearbyAppAsync(AndroidMdnsService service,
+        Func<string, CancellationToken, Task<bool>> confirmCode, CancellationToken cancel)
+    {
+        var device = await appTransport.PairNearbyAsync(service, confirmCode, cancel).ConfigureAwait(false);
+        await ProbeOutputsIfConnectedAsync([device], force: true, token: cancel).ConfigureAwait(false);
+    }
+
     private void OnAppTransportChanged()
     {
         if (token.IsCancellationRequested) return;
+        QueueSourceReconciliation();
+        PcListening.Reconcile();
         owner.TryPost(() => { if (Volatile.Read(ref closed) == 0 && Clipboard.Enabled) Clipboard.Reconcile(); });
         UpdatePlaybackConnections();
         Notify();
     }
 
     internal bool HasActivePlaybackConnections =>
-        LocalAppOutputMirrors.HasPhoneOutputs || Sources.HasActiveWork || Displays.Count > 0 || Pc.HasActiveWork || tryGetAirPlay?.Invoke()?.Source != null;
+        LocalAppOutputMirrors.HasPhoneOutputs || Sources.HasActiveWork || Displays.Count > 0 || Pc.HasActiveWork || PcListening.HasActiveWork ||
+        tryGetAirPlay?.Invoke()?.Source != null;
 
     private static void MigrateLegacyPhoneStore(string root, string targetPath)
     {
@@ -929,6 +946,7 @@ internal sealed partial class PhonePreview : IDisposable
 
     private void OnStoreChanged()
     {
+        PcListening.Reconcile();
         Sources.SyncSmartVolume((d, p) => Store.IsSmartVolumeEnabled(d, p));
         QueueSourceReconciliation();
         owner.TryPost(() => { if (Volatile.Read(ref closed) == 0) Clipboard.Reconcile(); });
@@ -985,6 +1003,7 @@ internal sealed partial class PhonePreview : IDisposable
         lifetime.Cancel();
         Task.Run(async () =>
         {
+            await PcListening.DisposeAsync().ConfigureAwait(false);
             await appTransport.DisposeAsync().ConfigureAwait(false);
             await Transfers.CloseAsync().ConfigureAwait(false);
             if (tracking != null) await tracking.ConfigureAwait(false);
@@ -1027,7 +1046,8 @@ internal sealed partial class ApplicationHost
             var created = new PhonePreview(_environment.DataDirectory, _window, this, _config,
                 _audio.ExternalAudio != null ? _audio.ExternalAudio.AcquireLocalSilenceLease : null,
                 () => HasAirPlay ? AirPlay : null, ExternalAudioSettings,
-                _environment.IsolatedAdbFixturePort() is { } port ? new AdbSocketClient(port) : null);
+                _environment.IsolatedAdbFixturePort() is { } port ? new AdbSocketClient(port) : null,
+                profile => OpenPhoneManagement(profile, airPlay: false));
             created.Changed += OnExternalSourcesChanged;
             phone = created;
             EnsureExternalOutputTopology();

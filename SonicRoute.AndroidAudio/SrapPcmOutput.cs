@@ -42,7 +42,7 @@ internal sealed class SrapPcmOutput : Stream, IPhonePcmConnection
     }
 
     internal static async Task<IPhonePcmConnection> OpenAsync(SrapSession session, AndroidDevice device, string target,
-        CancellationToken token, Action<string, int, string>? routed = null)
+        CancellationToken token, Action<string, int, string>? routed = null, string? listenRequest = null)
     {
         var output = new SrapPcmOutput(session, device, token, routed);
         try
@@ -51,7 +51,7 @@ internal sealed class SrapPcmOutput : Stream, IPhonePcmConnection
             session.CapabilitiesChanged += output.Recheck;
             session.StreamEvent += output.OnEvent;
             output.requested = true;
-            await session.StartPcmAsync(output.Id, target, output.stop.Token).ConfigureAwait(false);
+            await session.StartPcmAsync(output.Id, target, output.stop.Token, listenRequest).ConfigureAwait(false);
             await output.SwitchTargetAsync(target, output.stop.Token).ConfigureAwait(false);
             return output;
         }

@@ -30,11 +30,12 @@ internal sealed partial class SrapSession
     }
     internal void RetirePcm(SrapPcmOutput output) => Interlocked.CompareExchange(ref pcmOutput, null, output);
 
-    internal async Task StartPcmAsync(uint id, string target, CancellationToken token)
+    internal async Task StartPcmAsync(uint id, string target, CancellationToken token, string? listenRequest = null)
     {
         if (!SupportsPcm) throw new SrapException("unsupported");
-        var response = await RequestAsync("audio.play.start", "audio.play", new() { ["streamId"] = id,
-            ["targetKey"] = target, ["encoding"] = PcmEncoding }, token).ConfigureAwait(false);
+        var parameters = new System.Text.Json.Nodes.JsonObject { ["streamId"] = id, ["targetKey"] = target, ["encoding"] = PcmEncoding };
+        if (listenRequest != null) parameters["listenRequest"] = listenRequest;
+        var response = await RequestAsync("audio.play.start", "audio.play", parameters, token).ConfigureAwait(false);
         if (!response.TryGetProperty("streamId", out var streamField) || !streamField.TryGetUInt32(out uint echoed) || echoed != id
             || SrapClient.Text(response, "encoding") != PcmEncoding || !response.TryGetProperty("credit", out var credit)
             || !credit.TryGetInt32(out int count) || count != SrapPcmOutput.Window) throw new SrapException("invalid_argument");

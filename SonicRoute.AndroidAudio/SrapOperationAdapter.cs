@@ -1,3 +1,5 @@
+using System.Buffers.Binary;
+using System.Runtime.CompilerServices;
 using System.Text.Json;
 
 namespace SonicRoute.AndroidAudio;
@@ -6,6 +8,13 @@ namespace SonicRoute.AndroidAudio;
 // by AndroidConnectionManager. A selector must never fall back to ADB on a failed App call.
 internal sealed class SrapOperationAdapter(AdbOperationAdapter adb, SrapPhoneTransport app, Func<AndroidDevice, bool>? isCurrent = null) : IPhoneOperationPort
 {
+    private sealed record Catalog(long Revision, IReadOnlyList<AndroidApp> Apps, bool HasIcons);
+    private sealed class SessionCatalog
+    {
+        internal readonly SemaphoreSlim Read = new(1, 1);
+        internal Catalog? Latest;
+    }
+    private readonly ConditionalWeakTable<SrapSession, SessionCatalog> _catalogs = new();
     private SrapSession? Selected(AndroidDevice device) => isCurrent?.Invoke(device) == false ? null : app.Session(device);
     private SrapSession Require(AndroidDevice device) => Selected(device) ?? throw new SrapException("stale_session");
     private bool Allows(AndroidDevice device, string id) => Selected(device)?.Capabilities.Allows(id) == true;
@@ -27,52 +36,94 @@ internal sealed class SrapOperationAdapter(AdbOperationAdapter adb, SrapPhoneTra
         var session = Require(device);
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token, session.Token);
         deadline.CancelAfter(TimeSpan.FromSeconds(10));
-        JsonElement result;
         try
         {
-            while (true)
+            var cache = _catalogs.GetValue(session, static _ => new());
+            var single = packages is { Count: 1 };
+            Catalog catalog;
+            await cache.Read.WaitAsync(deadline.Token).ConfigureAwait(false);
+            try
             {
-                deadline.Token.ThrowIfCancellationRequested();
-                if (!ReferenceEquals(Selected(device), session)) throw new SrapException("stale_session");
-                var snapshot = session.Capabilities;
-                if (snapshot.Entries.GetValueOrDefault("catalog.apps") is not { State: "unavailable", Reason: "catalog_loading" })
-                {
-                    try
-                    {
-                        result = await session.RequestAsync("catalog.list", "catalog.apps", new(), deadline.Token).ConfigureAwait(false);
-                        break;
-                    }
-                    catch (SrapException ex) when (ex is { Code: "busy", WireReason: "catalog_loading" }) { }
-                    catch (SrapException ex) when (ex.Code == "unsupported" && session.Capabilities.Revision != snapshot.Revision) { continue; }
-                }
-                var changed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-                void Wake() => changed.TrySetResult();
-                session.CapabilitiesChanged += Wake;
+                catalog = single && cache.Latest is { } last && last.Revision == session.Capabilities.Revision
+                    ? last : cache.Latest = await ReadCatalogAsync(device, session, deadline.Token).ConfigureAwait(false);
+            }
+            finally { cache.Read.Release(); }
+            if (!ReferenceEquals(Selected(device), session)) throw new SrapException("stale_session");
+            if (packages == null) return catalog.Apps;
+            var selected = catalog.Apps.Where(a => packages.Contains(a.Package, StringComparer.Ordinal)).ToArray();
+            if (single && selected.Length == 1 && catalog.HasIcons)
+            {
+                var item = selected[0];
                 try
                 {
-                    if (session.Capabilities.Revision == snapshot.Revision)
-                        await changed.Task.WaitAsync(deadline.Token).ConfigureAwait(false);
+                    var reply = await session.RequestAsync("catalog.icon", "catalog.apps",
+                        new() { ["appKey"] = item.Package }, deadline.Token).ConfigureAwait(false);
+                    selected[0] = item with { IconPng = ReadIcon(reply, item.Package) };
                 }
-                finally { session.CapabilitiesChanged -= Wake; }
+                catch (SrapException error) when (error.Code is "target_unavailable" or "unsupported") { }
             }
+            if (!ReferenceEquals(Selected(device), session)) throw new SrapException("stale_session");
+            return selected;
         }
         catch (OperationCanceledException) when (!token.IsCancellationRequested)
         {
             throw new SrapException(session.Token.IsCancellationRequested ? "stale_session" : "timeout");
+        }
+    }
+
+    private async Task<Catalog> ReadCatalogAsync(AndroidDevice device, SrapSession session, CancellationToken token)
+    {
+        JsonElement result;
+        long revision;
+        while (true)
+        {
+            token.ThrowIfCancellationRequested();
+            if (!ReferenceEquals(Selected(device), session)) throw new SrapException("stale_session");
+            var snapshot = session.Capabilities;
+            if (snapshot.Entries.GetValueOrDefault("catalog.apps") is not { State: "unavailable", Reason: "catalog_loading" })
+            {
+                try
+                {
+                    result = await session.RequestAsync("catalog.list", "catalog.apps", new(), token).ConfigureAwait(false);
+                    revision = snapshot.Revision;
+                    break;
+                }
+                catch (SrapException ex) when (ex is { Code: "busy", WireReason: "catalog_loading" }) { }
+                catch (SrapException ex) when (ex.Code == "unsupported" && session.Capabilities.Revision != snapshot.Revision) { continue; }
+            }
+            var changed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            void Wake() => changed.TrySetResult();
+            session.CapabilitiesChanged += Wake;
+            try
+            {
+                if (session.Capabilities.Revision == snapshot.Revision)
+                    await changed.Task.WaitAsync(token).ConfigureAwait(false);
+            }
+            finally { session.CapabilitiesChanged -= Wake; }
         }
         if (!ReferenceEquals(Selected(device), session)) throw new SrapException("stale_session");
         var apps = new List<AndroidApp>();
         if (!result.TryGetProperty("apps", out var items) || items.ValueKind != JsonValueKind.Array) throw new SrapException("invalid_argument");
         foreach (var item in items.EnumerateArray().Take(1000))
         {
-            if (SrapClient.Text(item, "appKey") is not { Length: > 0 and <= 255 } package
-                || (packages != null && !packages.Contains(package, StringComparer.Ordinal))) continue;
+            if (SrapClient.Text(item, "appKey") is not { Length: > 0 and <= 255 } package) continue;
             try { AdbClient.ValidatePackage(package); }
             catch (ArgumentException) { continue; }
             string label = SrapClient.Text(item, "label") ?? package;
             apps.Add(new(package, label.Length <= 1024 ? label : package, 0, ""));
         }
-        return apps.DistinctBy(a => a.Package).ToArray();
+        return new(revision, apps.DistinctBy(a => a.Package).ToArray(), SrapClient.Text(result, "iconFormat") == "png48-v1");
+    }
+
+    internal static byte[]? ReadIcon(JsonElement reply, string package)
+    {
+        if (SrapClient.Text(reply, "appKey") != package || SrapClient.Text(reply, "format") != "png48-v1") return null;
+        byte[] png;
+        try { png = SrapInvite.Decode(SrapClient.Text(reply, "png"), 33, 16 * 1024); }
+        catch (Exception error) when (error is FormatException or InvalidDataException or ArgumentException) { return null; }
+        return png.AsSpan(0, 8).SequenceEqual(new byte[] { 137, 80, 78, 71, 13, 10, 26, 10 }) &&
+            BinaryPrimitives.ReadUInt32BigEndian(png.AsSpan(8)) == 13 && png.AsSpan(12, 4).SequenceEqual("IHDR"u8) &&
+            BinaryPrimitives.ReadUInt32BigEndian(png.AsSpan(16)) == 48 && BinaryPrimitives.ReadUInt32BigEndian(png.AsSpan(20)) == 48 ? png : null;
     }
 
     public async Task<IReadOnlyList<AndroidOutputSink>> OutputsAsync(AndroidDevice device, CancellationToken token)

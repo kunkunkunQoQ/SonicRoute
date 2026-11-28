@@ -175,22 +175,38 @@ internal static partial class Program
         Console.WriteLine($"PASS {_checks} SRAP volume checks");
     }
 
-    private static async Task SrapVerifyCaptureAsync(SrapSession session, CancellationToken token)
+    private static Task SrapVerifyCaptureAsync(SrapSession session, CancellationToken token) => SrapVerifyCaptureAsync(session, token, null);
+
+    private static async Task SrapVerifyCaptureAsync(SrapSession session, CancellationToken token, string? fixturePackage)
     {
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(session.Token, token);
         var ct = linked.Token;
         var permission = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
-        void Grant() { if (session.Capabilities.Capture?.Package is { } package) permission.TrySetResult(package); }
+        void Grant()
+        {
+            if (session.Capabilities.Capture?.Package is not { } candidate) return;
+            if (fixturePackage != null && candidate != fixturePackage)
+                permission.TrySetException(new InvalidOperationException("The Android grant selected another app."));
+            else permission.TrySetResult(candidate);
+        }
         session.CapabilitiesChanged += Grant;
         string package;
+        var permissionWait = Stopwatch.StartNew();
         try
         {
             Grant();
             if (!permission.Task.IsCompleted) Console.WriteLine("CAPTURE_GRANT_REQUIRED");
             package = await permission.Task.WaitAsync(ct);
         }
+        catch (OperationCanceledException) when (session.Token.IsCancellationRequested)
+        {
+            Console.WriteLine($"CAPTURE_SESSION_ENDED reason={await session.Completion ?? "connection_closed"} waitingMs={permissionWait.ElapsedMilliseconds}");
+            throw;
+        }
         finally { session.CapabilitiesChanged -= Grant; }
         Console.WriteLine("CAPTURE_PACKAGE " + package);
+        if (fixturePackage != null && await Console.In.ReadLineAsync(ct) != "OWNED_WAV_OPENED")
+            throw new InvalidOperationException("The host did not open its dedicated WAV.");
         var receiver = new SrapPcmCapture(session, new(package, package, 0, ""));
         var source = new AndroidPcmSource();
         using var player = new WasapiPcmPlayer(source, null);

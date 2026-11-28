@@ -1,0 +1,12 @@
+# Public, non-secret interoperability fixture. Each range includes both endpoints.
+inviteId=00..0F
+phoneNonce=20..3F
+pcNonce=40..5F
+androidSpkiSha256=60..7F
+pcSpkiSha256=80..9F
+major=1
+minor=0
+commitment=3705A1A7023C6B677E5566DE78FA70C191FF4C3D9CECF27FADCB2B46D23A1923
+transcriptBytes=168
+transcriptSha256=1FD90F9607592042A5DCA096DCC5956D378A15DD4C06D2126CA5504DE80602AF
+comparison=34318998

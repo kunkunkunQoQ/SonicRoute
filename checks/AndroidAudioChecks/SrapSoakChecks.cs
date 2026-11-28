@@ -12,9 +12,13 @@ internal static partial class Program
     {
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(token, session.Token);
         var ct = linked.Token;
-        int samples = Math.Clamp(1 + seconds / 30, 3, 7);
+        int samples = seconds <= 1800 ? Math.Clamp(1 + seconds / 30, 3, 7)
+            : 1 + (int)Math.Ceiling(seconds / 600d);
         var latency = new double[samples];
         var elapsed = Stopwatch.StartNew();
+        int completedSamples = 0;
+        using var lost = session.Token.Register(() => Console.WriteLine(
+            $"SOAK_DISCONNECTED elapsedMs={elapsed.ElapsedMilliseconds} completedSamples={Volatile.Read(ref completedSamples)}"));
         for (int i = 0; i < samples; i++)
         {
             var due = TimeSpan.FromSeconds(seconds * (double)i / (samples - 1)) - elapsed.Elapsed;
@@ -38,6 +42,7 @@ internal static partial class Program
                     throw new InvalidDataException("No readable phone output.");
             }
             latency[i] = timer.Elapsed.TotalMilliseconds;
+            Volatile.Write(ref completedSamples, i + 1);
             Console.WriteLine($"SOAK_SAMPLE number={i + 1} elapsedMs={elapsed.ElapsedMilliseconds} operation={(readVolume ? "volume.get" : "audio.devices.list")} requestMs={latency[i]:F1} revision={session.Capabilities.Revision}");
             if (i != 0) continue;
             var skip = new CancellationToken(canceled: true);

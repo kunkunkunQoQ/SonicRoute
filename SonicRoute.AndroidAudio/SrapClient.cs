@@ -67,7 +67,7 @@ internal sealed class SrapIdentity : IDisposable
     }
 }
 
-internal sealed class SrapClient(SrapIdentity identity, SslProtocols versions = SslProtocols.Tls12 | SslProtocols.Tls13)
+internal sealed partial class SrapClient(SrapIdentity identity, SslProtocols versions = SslProtocols.Tls12 | SslProtocols.Tls13)
 {
     internal async Task<SrapSession> ConnectAsync(IPEndPoint endpoint, string fingerprint, CancellationToken token, int major = 1)
     {
@@ -136,10 +136,16 @@ internal sealed class SrapClient(SrapIdentity identity, SslProtocols versions = 
     internal Task<SslStream> OpenAliasAsync(SrapAdbForward forward, string pin, CancellationToken token) =>
         OpenAsync(forward.Endpoint, pin, true, token, forward.Client);
 
-    private async Task<SslStream> OpenAsync(IPEndPoint endpoint, string pin, bool mutual, CancellationToken token, Socket? connected = null)
+    private Task<SslStream> OpenAsync(IPEndPoint endpoint, string pin, bool mutual, CancellationToken token, Socket? connected = null)
     {
         if (!SrapInvite.IsFingerprint(pin)) throw new SrapException("identity_conflict");
         byte[] expected = Convert.FromHexString(pin);
+        return OpenTlsAsync(endpoint, mutual, fp => CryptographicOperations.FixedTimeEquals(expected, fp), token, connected);
+    }
+
+    private async Task<SslStream> OpenTlsAsync(IPEndPoint endpoint, bool mutual, Func<byte[], bool> acceptFingerprint,
+        CancellationToken token, Socket? connected = null)
+    {
         var tcp = connected ?? new Socket(endpoint.AddressFamily, SocketType.Stream, ProtocolType.Tcp) { NoDelay = true };
         SslStream? tls = null;
         try
@@ -160,10 +166,10 @@ internal sealed class SrapClient(SrapIdentity identity, SslProtocols versions = 
                 TargetHost = endpoint.Address.ToString(), EnabledSslProtocols = versions, AllowRenegotiation = false,
                 AllowTlsResume = false, CertificateRevocationCheckMode = X509RevocationMode.NoCheck,
                 CertificateChainPolicy = new X509ChainPolicy { DisableCertificateDownloads = true, RevocationMode = X509RevocationMode.NoCheck },
-                RemoteCertificateValidationCallback = (_, cert, _, _) => IsPinned(cert)
+                RemoteCertificateValidationCallback = (_, cert, _, _) => AcceptLeaf(cert)
             };
             if (mutual)
-                options.LocalCertificateSelectionCallback = (_, _, _, remote, _) => IsPinned(remote) ? identity.Certificate : null!;
+                options.LocalCertificateSelectionCallback = (_, _, _, remote, _) => AcceptLeaf(remote) ? identity.Certificate : null!;
             await tls.AuthenticateAsClientAsync(options, token).ConfigureAwait(false);
             if (mutual && !tls.IsMutuallyAuthenticated) throw new AuthenticationException("SRAP mutual authentication failed.");
             if (!IsAllowedSuite(tls.SslProtocol, tls.NegotiatedCipherSuite))
@@ -176,13 +182,14 @@ internal sealed class SrapClient(SrapIdentity identity, SslProtocols versions = 
             throw;
         }
 
-        bool IsPinned(X509Certificate? certificate)
+        bool AcceptLeaf(X509Certificate? certificate)
         {
             if (certificate is not X509Certificate2 leaf) return false;
             var now = DateTime.UtcNow;
             using var key = leaf.GetECDsaPublicKey();
             return key?.KeySize == 256 && leaf.NotBefore.ToUniversalTime() <= now && leaf.NotAfter.ToUniversalTime() >= now
-                && CryptographicOperations.FixedTimeEquals(expected, SHA256.HashData(key.ExportSubjectPublicKeyInfo()));
+                && key.ExportParameters(false).Curve.Oid.Value == "1.2.840.10045.3.1.7"
+                && acceptFingerprint(SHA256.HashData(key.ExportSubjectPublicKeyInfo()));
         }
     }
 
@@ -214,7 +221,8 @@ internal sealed class SrapClient(SrapIdentity identity, SslProtocols versions = 
         Match(response, id);
         var body = Body(response);
         if (Text(response, "type") != "pair.result") throw new SrapException("invalid_argument");
-        return Text(body, "status") switch { "done" => "done", "pending" => "pending", "error" => throw Error(body), _ => throw new SrapException("invalid_argument") };
+        return Text(body, "status") switch { "done" => "done", "pending" => "pending", "confirmed" => "confirmed",
+            "error" => throw Error(body), _ => throw new SrapException("invalid_argument") };
     }
 
     private static void Match(JsonElement response, string id)

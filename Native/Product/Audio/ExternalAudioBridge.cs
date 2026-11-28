@@ -156,7 +156,8 @@ internal sealed class ExternalAudioBridge : IDisposable
         {
             ProcessId = 0, ExternalSourceId = live?.Id ?? key, ExternalPreferenceKey = key,
             ProcessName = "android:" + app.Package, DisplayName = app.IsDeviceAudio ? phoneName : app.Name,
-            SourceLabel = string.Format(L10n.T("Phone.FromDevice"), phoneName), ExternalIconPng = app.IconPng,
+            SourceLabel = string.Format(L10n.T(live?.Device.IsApp == true ? "Phone.AppCaptureSource" : "Phone.FromDevice"), phoneName),
+            ExternalIconPng = app.IconPng,
             HasActiveSession = live?.Session.State.State == CaptureState.Receiving,
             IsExternalOffline = live?.Session.State.State != CaptureState.Receiving,
         };
@@ -278,7 +279,7 @@ internal sealed class ExternalAudioBridge : IDisposable
         }
     }
 
-    internal string[] GetExternalOutputs(AudioAppInfo app)
+    internal string[] GetExternalOutputs(AudioAppInfo app, bool includeRequiredPhonePlayback = false)
     {
         var session = FindSession(app.ExternalSourceId);
         if (session?.State.State != CaptureState.Receiving && FindPreference(app) is { } saved)
@@ -286,13 +287,17 @@ internal sealed class ExternalAudioBridge : IDisposable
         if (session is IMultiOutputAudioSession multi)
         {
             var list = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            bool localRequired = session is AndroidAudioSession { State.Device.IsApp: true };
             foreach (string? id in multi.GetOutputs())
+            {
+                if (localRequired && !includeRequiredPhonePlayback && id == AndroidAudioSession.SourcePhoneOutputId) continue;
                 list.Add(string.IsNullOrWhiteSpace(id) || AudioService.IsSystemDefault(id)
                     ? AudioService.SystemDefaultDeviceId
                     : AudioPolicyConfig.UnpackDeviceId(id));
-            if (multi is AndroidAudioSession android && android.UsesSourcePhonePlayback)
+            }
+            if ((!localRequired || includeRequiredPhonePlayback) && multi is AndroidAudioSession android && android.UsesSourcePhonePlayback)
                 list.Add(AndroidAudioSession.SourcePhoneOutputId);
-            if (list.Count == 0) list.Add(AudioService.SystemDefaultDeviceId);
+            if (list.Count == 0 && !localRequired) list.Add(AudioService.SystemDefaultDeviceId);
             return list.ToArray();
         }
         string? single = session?.State.OutputId;
@@ -314,6 +319,8 @@ internal sealed class ExternalAudioBridge : IDisposable
     {
         var session = FindSession(app.ExternalSourceId);
         if (session == null) return new("error: external_session_unavailable");
+        if (session is AndroidAudioSession { State.Device.IsApp: true })
+            return await SetExternalOutputsAsync(app, [id]).ConfigureAwait(false);
         try
         {
             await session.SetOutputAsync(AudioService.IsSystemDefault(id) ? null : id).ConfigureAwait(false);
@@ -339,13 +346,15 @@ internal sealed class ExternalAudioBridge : IDisposable
                 .Select(id => string.IsNullOrWhiteSpace(id) || AudioService.IsSystemDefault(id) ? null : id)
                 .ToArray();
             if (normalized.Length == 0) normalized = [null];
+            if (session is AndroidAudioSession { State.Device: { IsApp: true } source })
+                normalized = AppCapturePermission.WithLocalPlayback(source, normalized);
             await multi.SetOutputsAsync(normalized).ConfigureAwait(false);
             _onChanged();
             if (!ReferenceEquals(session, FindSession(app.ExternalSourceId)) || session.State.State != CaptureState.Receiving)
                 return new("error: external_session_unavailable");
             var requested = normalized.Select(id => AddressedOutput(app, id ?? AudioService.SystemDefaultDeviceId))
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
-            return requested.SetEquals(GetExternalOutputs(app).Select(id => AddressedOutput(app, id)))
+            return requested.SetEquals(GetExternalOutputs(app, includeRequiredPhonePlayback: true).Select(id => AddressedOutput(app, id)))
                 ? new("ok") : new("error: output_readback_mismatch");
         }
         catch (Exception ex)
@@ -376,6 +385,7 @@ internal sealed class ExternalAudioBridge : IDisposable
         {
             string key = AndroidDeviceIdentity.Key(online);
             if (!seen.Add(key)) return;
+            if (source?.Device.IsApp == true && AndroidDeviceIdentity.Matches(source.Device, online)) return;
             string phoneName = phone.Store.GetDisplayName(online);
             if (aliases != null)
             {

@@ -1,5 +1,7 @@
 # SonicRoute for Android
 
+安卓端后续源码、安装说明和协议文档已迁至 [SonicRoute-App](https://github.com/kunkunkunQoQ/SonicRoute-App)。此目录保留双端工程最初合入时的源码。
+
 本版可独立管理手机音频，也可通过已配对的局域网电脑使用音频、媒体、文件和屏幕共享。实现、实机验收范围和已知限制见[双端交接与续测说明](docs/verified-handoff-20261128.md)。
 
 ## 早期版本沿革

@@ -90,16 +90,41 @@ internal sealed class SrapPhoneTransport : IAsyncDisposable
             }
             var client = new SrapClient(identity.Value);
             var session = await client.PairAsync(endpoint, invite, displayName ?? "SonicRoute · " + Environment.MachineName, pending, effective.Token).ConfigureAwait(false);
-            try
-            {
-                effective.Token.ThrowIfCancellationRequested();
-                var profile = store.RegisterApp(invite.Fingerprint, endpoint, revision);
-                lock (gate) revoked.Remove((profile.Id, invite.Fingerprint));
-                return Admit(profile, session);
-            }
-            catch { session.Dispose(); throw; }
+            return RegisterPair(session, endpoint, revision, effective.Token);
         }
         finally { dialing.Release(); }
+    }
+
+    internal async Task<AndroidDevice> PairNearbyAsync(AndroidMdnsService service,
+        Func<string, CancellationToken, Task<bool>> confirmCode, CancellationToken cancel, string? displayName = null)
+    {
+        if (service.Type != AndroidMdnsDiscovery.AppType || service.App?.Pairing != true
+            || !IPEndPoint.TryParse(service.Address, out var endpoint) || !SrapInvite.IsUsableEndpoint(endpoint))
+            throw new SrapException("target_unavailable");
+        using var effective = CancellationTokenSource.CreateLinkedTokenSource(cancel, token);
+        await dialing.WaitAsync(effective.Token).ConfigureAwait(false);
+        try
+        {
+            long revision = store.ManagementRevision;
+            var client = new SrapClient(identity.Value);
+            var session = await client.PairNearbyAsync(endpoint, displayName ?? "SonicRoute · " + Environment.MachineName,
+                confirmCode, effective.Token).ConfigureAwait(false);
+            return RegisterPair(session, endpoint, revision, effective.Token);
+        }
+        finally { dialing.Release(); }
+    }
+
+    private AndroidDevice RegisterPair(SrapSession session, IPEndPoint endpoint, long revision, CancellationToken cancel)
+    {
+        try
+        {
+            cancel.ThrowIfCancellationRequested();
+            string pin = session.PeerFingerprint;
+            var profile = store.RegisterApp(pin, endpoint, revision);
+            lock (gate) revoked.Remove((profile.Id, pin));
+            return Admit(profile, session);
+        }
+        catch { session.Dispose(); throw; }
     }
 
     internal async Task<AndroidDevice> ReconnectAsync(AndroidPhoneProfile profile, CancellationToken cancel)

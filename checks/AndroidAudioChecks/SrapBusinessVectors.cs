@@ -118,7 +118,22 @@ internal static partial class Program
                 key + " cannot be produced by the typed system volume setter");
         }
         await Reply(request, new() { ["scope"] = "system_media", ["streamIndex"] = index, ["minIndex"] = 0, ["maxIndex"] = 150 });
-        Check((await setting).GetProperty("streamIndex").GetInt32() == index && vectors.Count == 6, "all six shared file, screen and volume vectors were consumed");
+        Check((await setting).GetProperty("streamIndex").GetInt32() == index, "the exact volume index is confirmed");
+        foreach (var kind in new[] { "screen", "audio" })
+        {
+            var vector = vectors["sharing." + kind];
+            var parameters = vector.Meta.GetProperty("params");
+            Check(vector.Expected == "accept" && SrapClient.Text(vector.Meta, "op") == "sharing.request"
+                && parameters.EnumerateObject().Count() == 1 && SrapClient.Text(parameters, "kind") == kind,
+                "the local " + kind + " prompt contains only its intended kind");
+        }
+        var mixed = vectors["sharing.mixed"];
+        var listen = vectors["listen.request"];
+        Check(mixed.Expected == "reject" && mixed.Meta.GetProperty("params").TryGetProperty("uid", out _),
+            "a remote UID cannot broaden a local audio prompt");
+        Check(listen.Expected == "accept" && SrapClient.Text(listen.Meta, "op") == "audio.listen.request"
+            && SrapClient.Text(listen.Meta.GetProperty("params"), "request") == string.Concat(Enumerable.Repeat("01", 16)),
+            "the shared listening request carries the single-use token");
         Console.WriteLine($"PASS {_checks} SRAP business vector checks");
     }
 }

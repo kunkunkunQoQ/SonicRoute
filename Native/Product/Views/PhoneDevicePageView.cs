@@ -117,7 +117,17 @@ internal sealed partial class PhoneDevicePageView : IViewPage, IViewDockPage
 
     internal void ShowConnectionPage(bool airPlay = false) => SwitchSection(connection: true, airPlay: airPlay);
 
-    internal void ShowConfigurationPage(string? profileId = null) => SwitchSection(connection: false, profileId: profileId);
+    internal void ShowConfigurationPage(string? profileId = null)
+    {
+        SwitchSection(connection: false, profileId: profileId);
+        if (profileId != null && _actions.Host.Phone.PcListening.Pending(profileId) != null)
+        {
+            CloseCatalog();
+            CloseAndroidPicker();
+            _scroll.Offset = 0f;
+            _actions.Invalidate();
+        }
+    }
 
     private void SwitchSection(bool connection, bool airPlay = false, string? profileId = null)
     {
@@ -132,13 +142,16 @@ internal sealed partial class PhoneDevicePageView : IViewPage, IViewDockPage
         CloseAndroidPicker();
         _showConnection = connection;
         _airPlayConnectionChoice = airPlay;
-        _selectedAppCandidate = null;
         _appCandidates = [];
         _appSearchComplete = false;
         if (switchProfile) store.SelectProfile(profileId!);
         _scroll.Offset = 0f;
         CancelEncoderRead();
-        if (_active) RefreshData();
+        if (_active)
+        {
+            RefreshData();
+            if (AndroidConnectionVisible) SearchAppCandidates();
+        }
     }
 
     public void OnActivated()
@@ -153,6 +166,7 @@ internal sealed partial class PhoneDevicePageView : IViewPage, IViewDockPage
         if (phone.Discovery.CurrentDevices == null && (IsConnectionPage ? !_airPlayConnectionChoice : phone.Store.Profile.LastDevice != null))
             _ = phone.RefreshAsync();
         RefreshData();
+        if (AndroidConnectionVisible) SearchAppCandidates();
     }
 
     public void OnDeactivated()
@@ -204,6 +218,7 @@ internal sealed partial class PhoneDevicePageView : IViewPage, IViewDockPage
         if (_pinnedOrder.Pressed && _pinnedOrderProfile != profile.Id) FinishPinnedOrder(commit: false);
         _appIcons.SetProfile(profile.Id);
         var online = profile.LastDevice is { } last ? phone.Connections.Get(last).Device : null;
+        RefreshSharingStatus(online);
         if (!Equals(online, _activeDevice))
         {
             CancelEncoderRead();
@@ -254,7 +269,7 @@ internal sealed partial class PhoneDevicePageView : IViewPage, IViewDockPage
         _deviceDockArea = !IsConnectionPage && _deviceProfiles.Length > 0 ? contentRect : default;
         if (!_deviceDockArea.IsEmpty)
             contentRect = contentRect.Deflate(UiDockRail.Width - 3f, 0f, 0f, 0f);
-        string? status = IsConnectionPage && _airPlayConnectionChoice ? null : _statusMessage;
+        string? status = IsConnectionPage && (_airPlayConnectionChoice || _nearbyPairing != null) ? null : _statusMessage;
         if (!string.IsNullOrEmpty(status))
         {
             float usable = MathF.Max(1f, contentRect.Width - 8f);
@@ -307,20 +322,22 @@ internal sealed partial class PhoneDevicePageView : IViewPage, IViewDockPage
 
     private float RenderDeviceHeader(D2dTarget g, UiThemePalette t, float x, float y, float w, string name, AndroidDevice? online)
     {
-        var card = new UiRect(x, y, w, 64f);
+        var profile = _actions.Host.Phone.Store.Profile;
+        var prompt = _actions.Host.Phone.PcListening.Pending(profile.Id);
+        var card = new UiRect(x, y, w, 64f + (prompt == null ? 0 : PcListenPromptHeight(w)));
         UiPrimitives.DrawCard(g, t, card, DeviceCardRadius);
-        var iconBox = new UiRect(x + DeviceCardPadding, card.CenterY - 19f, 38f, 38f);
+        var iconBox = new UiRect(x + DeviceCardPadding, y + 13f, 38f, 38f);
         g.FillRoundedRect(iconBox, 8f, t.Overlay);
         g.DrawIcon(UiIcon.Phone, iconBox.Deflate(7f), t.TextSecondary, 1.6f);
 
-        var profile = _actions.Host.Phone.Store.Profile;
         string action = L10n.T(online != null ? online.IsApp || online.IsWifi ? "Phone.Disconnect" : "Phone.StopReceiving"
             : profile is { AppTrustRevoked: true, LastDevice.IsApp: true } ? "Phone.SrapPairAgain" : "Phone.Reconnect");
         float actionW = MathF.Max(74f, PhoneTextWidth(action, 12f) + 22f);
-        var more = new UiRect(card.Right - DeviceCardPadding - 28f, card.CenterY - DeviceControlHeight / 2f, 28f, DeviceControlHeight);
+        var more = new UiRect(card.Right - DeviceCardPadding - 28f, y + 32f - DeviceControlHeight / 2f, 28f, DeviceControlHeight);
         var primary = new UiRect(more.X - 6f - actionW, more.Y, actionW, DeviceControlHeight);
         float nameX = iconBox.Right + 10f;
-        float nameAreaW = MathF.Max(1f, primary.X - nameX - 12f);
+        float? appActions = online is { IsApp: true } app ? RenderAppHeaderActions(g, t, more, nameX, app) : null;
+        float nameAreaW = MathF.Max(1f, (appActions ?? primary.X) - nameX - 12f);
         bool editing = _actions.ActiveInlineEditTag == "phone.rename.box";
         _renameRect = new UiRect(nameX, y + 9f, MathF.Max(1f, nameAreaW - 30f), 26f);
         if (editing)
@@ -336,10 +353,11 @@ internal sealed partial class PhoneDevicePageView : IViewPage, IViewDockPage
         g.DrawText(connection, new UiRect(nameX + 14f, y + 37f, MathF.Max(1f, nameAreaW - 14f), 18f), t.TextSecondary, 11.5f);
         _hit.DescribeText("phone.connection.status", new UiRect(nameX, y + 35f, nameAreaW, 22f), name + " · " + connection);
 
-        UiPrimitives.DrawSecondaryButton(g, t, _hit, online == null ? "phone.connect" : "phone.disconnect",
+        if (appActions == null) UiPrimitives.DrawSecondaryButton(g, t, _hit, online == null ? "phone.connect" : "phone.disconnect",
             primary, action, enabled: !_busy, fontSize: 12f, tooltip: action);
         UiPrimitives.DrawSecondaryButton(g, t, _hit, "phone.more", more, "", enabled: !_busy, icon: UiIcon.More,
-            tooltip: L10n.T("Auto.More"));
+            tooltip: L10n.T("Phone.DeviceTools"));
+        if (prompt != null) DrawPcListeningPrompt(g, t, card, prompt);
         return card.Bottom + DeviceCardGap;
     }
 
@@ -352,7 +370,6 @@ internal sealed partial class PhoneDevicePageView : IViewPage, IViewDockPage
         y = RenderDeviceHeader(g, t, x, y, w, phone.Store.GetProfileDisplayName(profile), online);
         if ((online ?? detail)?.IsApp == true)
         {
-            y = RenderAppControls(g, t, x, y, w, online);
             y = RenderQuickPanelApps(g, t, x, y, w, phone, profile, online != null && phone.Operations.CanListApps(online));
             y = RenderFileTransferCard(g, t, x, y, w, phone, profile, online);
             return RenderClipboardCard(g, t, x, y, w, phone, detail);
@@ -451,7 +468,7 @@ internal sealed partial class PhoneDevicePageView : IViewPage, IViewDockPage
             _pinnedOrder.DrawInsertionLine(g, t, app.Package, row, gap: 0f);
 
             var icon = new UiRect(row.X + 4f, row.CenterY - 12f, 24f, 24f);
-            if (_appIcons.TryGet(app, out var pixels, out int iw, out int ih, out int version))
+            if (_appIcons.TryGet(_appIcons.Resolve(_activeDevice, app), out var pixels, out int iw, out int ih, out int version))
                 g.DrawBgraBitmap($"phonepage.icon:{app.Package}", pixels, iw, ih, icon, version: version);
             else
             {
@@ -843,6 +860,7 @@ internal sealed partial class PhoneDevicePageView : IViewPage, IViewDockPage
                 _airPlayConnectionChoice = false;
                 _scroll.Offset = 0f;
                 UpdateQrPairing();
+                SearchAppCandidates();
                 _actions.Invalidate();
             }
             return true;
@@ -1650,6 +1668,7 @@ internal sealed partial class PhoneDevicePageView : IViewPage, IViewDockPage
         var phone = _actions.Host.Phone;
         if (IsConnectionPage)
         {
+            SearchAppCandidates();
             RunBusy(ct => phone.RefreshAsync().WaitAsync(ct), pauseWirelessPairing: false);
         }
         else
@@ -1676,6 +1695,7 @@ internal sealed partial class PhoneDevicePageView : IViewPage, IViewDockPage
         [
             new UiMenuItem { Text = L10n.T("Phone.Reconnect"), Icon = UiIcon.Refresh, Click = () => Execute("phone.connect") },
         ];
+        AddAppDeviceTools(items, _actions.Host.Phone.Store.Profile, anchor);
         AddAppBindingMenu(items, _actions.Host.Phone.Store.Profile);
         if (_activeDevice?.IsApp != true || _actions.Host.Phone.Store.Profile.LastDevice?.IsApp == true)
             items.Add(new UiMenuItem { Text = L10n.T("Phone.Unpair"), Icon = UiIcon.Link, Click = () => Execute("phone.unpair") });
@@ -1724,11 +1744,12 @@ internal sealed partial class PhoneDevicePageView : IViewPage, IViewDockPage
         _busy = false;
         _pauseWirelessPairing = false;
         previous?.Cancel();
+        ClearNearbyPairing();
         _statusMessage = null;
     }
 
     private void RunBusy(Func<CancellationToken, Task> op, string? successKey = null, bool openDevice = false, Action<Exception>? failed = null,
-        int timeoutSeconds = 25, bool pauseWirelessPairing = true)
+        int timeoutSeconds = 25, bool pauseWirelessPairing = true, Func<string>? completedText = null)
     {
         if (_busy || !_active) return;
         _busy = true;
@@ -1773,7 +1794,7 @@ internal sealed partial class PhoneDevicePageView : IViewPage, IViewDockPage
                     else
                     {
                         if (openDevice) CompleteDeviceConnection();
-                        SetStatus(successKey == null ? "" : L10n.T(successKey), false);
+                        SetStatus(completedText?.Invoke() ?? (successKey == null ? "" : L10n.T(successKey)), false);
                     }
                     RefreshData();
                 }
@@ -1854,7 +1875,7 @@ internal sealed partial class PhoneDevicePageView : IViewPage, IViewDockPage
         {
             CancelAppDiscovery();
             _appCandidates = [];
-            _selectedAppCandidate = null;
+            ClearNearbyPairing();
             _appSearchComplete = false;
             ResetSavedSearch();
         }
@@ -2022,6 +2043,7 @@ internal sealed partial class PhoneDevicePageView : IViewPage, IViewDockPage
 
     private void LoadCatalog(AndroidDevice device, bool refresh)
     {
+        if (refresh) _appIcons.Clear();
         CancelCts(ref _catalogCts);
         var phone = _actions.Host.Phone;
         var cache = _catalogCache ??= new AndroidAppCatalogCache(Path.Combine(_actions.Host.DataDirectory, "phone-app-catalog.json"),

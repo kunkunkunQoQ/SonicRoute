@@ -85,8 +85,12 @@ public sealed class AndroidAudioManager : IAsyncDisposable
     internal Task<AndroidAudioSource> ResumeAsync(AndroidDevice device, AndroidApp app, string?[] outputs) =>
         AddCore(device, app, outputs.Contains(AndroidAudioSession.SourcePhoneOutputId), outputs[0], false, outputs);
 
+    internal Task<AndroidAudioSource> PlayPhoneRequestAsync(AndroidDevice device, AndroidApp app, string?[] computerOutputs) =>
+        AddCore(device, app, true, computerOutputs[0], false,
+            AppCapturePermission.WithLocalPlayback(device, computerOutputs), phoneRequest: true);
+
     private Task<AndroidAudioSource> AddCore(AndroidDevice device, AndroidApp app, bool keepPhoneAudio, string? outputId,
-        bool displayOwned, string?[]? initialOutputs)
+        bool displayOwned, string?[]? initialOutputs, bool phoneRequest = false)
     {
         if (_mayCapture?.Invoke(device) == false) throw new OperationCanceledException();
         if (device.IsApp) AppCapturePermission.Require(_appCapture?.Invoke(device), app, keepPhoneAudio);
@@ -102,7 +106,7 @@ public sealed class AndroidAudioManager : IAsyncDisposable
                 && s.App.IsDeviceAudio && s.Session.State.State != CaptureState.Failed) is { } wholePhone)
                 return wholePhone.Started.Task;
             var replaced = _sources.FirstOrDefault(s => AndroidDeviceIdentity.Matches(s.Device, device) && s.App.Package == app.Package);
-            if (initialOutputs != null)
+            if (initialOutputs != null && !phoneRequest)
             {
                 if (replaced != null) return replaced.Started.Task;
                 var retained = _settings?.FindExternalAudio(ExternalAudioPreference.AndroidKey(device, app.Package));

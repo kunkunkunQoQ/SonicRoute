@@ -56,6 +56,7 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
     private IReadOnlyList<AndroidApp>? _filteredAppsSource;
     private string? _filteredAppsQuery;
     private string? _filteredGrant;
+    private AndroidApp? _grantApp;
     private bool _filteredAppChannel;
     private AndroidApp[] _filteredApps = [];
     private string? _activeProfileId;
@@ -210,6 +211,7 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
         {
             _activeProfileId = profile.Id;
             CancelCatalogRefresh();
+            ClearFilteredApps();
             _dropStatusMessage = null;
         }
         _appIcons.SetProfile(profile.Id);
@@ -741,6 +743,9 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
 
         var mediaApp = _mediaState == null ? null
             : profile.RetainedApps.FirstOrDefault(a => a.Package == _mediaState.Package);
+        if (mediaApp == null && _mediaState?.Package is { Length: > 0 } activePackage && online is { IsApp: true })
+            mediaApp = new AndroidApp(activePackage, activePackage, 0, "");
+        if (mediaApp != null) mediaApp = _appIcons.Resolve(online, mediaApp);
 
         bool hasArtwork = TryGetArtwork(_mediaState?.ArtworkPng, out var artBgra, out int aw, out int ah, out int aver);
         if (hasArtwork)
@@ -846,7 +851,7 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
 
         // Keep whole-phone audio first and the retained apps in their saved order.
         var apps = GetFilteredApps(profile);
-        string? capturePackage = online?.IsApp == true ? phone.Operations.AppCapture(online)?.Package : null;
+        var grant = online?.IsApp == true ? phone.Operations.AppCapture(online) : null;
         const float itemH = 50f;
         const float itemGap = 4f;
         _scroll.ViewportHeight = listRect.Height;
@@ -872,15 +877,16 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
                 float iy = listRect.Y + 2f + i * (itemH + itemGap) - _scroll.Offset;
                 if (iy + itemH < listRect.Y || iy > listRect.Bottom) continue;
 
-                var app = apps[i];
+                var app = _appIcons.Resolve(online, apps[i]);
                 var rowRect = new UiRect(listRect.X + 4f, iy + 2f, MathF.Max(1f, itemW - 6f), itemH);
                 string rowId = $"companion.app:{app.Package}";
                 bool isPlayingApp = IsAppCurrentlyPlaying(app);
                 bool hot = _hit.IsHover(rowId);
 
                 string rowName = app.IsDeviceAudio ? phone.Store.GetProfileDisplayName(profile) : app.Name;
-                string rowSub = PhoneAppPresentation.Description(app);
-                bool grantNeeded = online?.IsApp == true && capturePackage != app.Package;
+                string rowSub = grant?.IsDeviceMedia == true && app.IsDeviceAudio
+                    ? L10n.T("Phone.DeviceMediaDescription") : PhoneAppPresentation.Description(app);
+                bool grantNeeded = online?.IsApp == true && grant?.LocalSourceKey != app.Package;
                 _hit.Add(rowId, rowRect, UiCursorKind.Hand, grantNeeded ? L10n.T("Phone.SrapCaptureGrant") : rowName);
                 bool selected = _selectedPackage == app.Package;
                 UiColor bg = selected ? _theme.NavSelected : hot ? _theme.NavHover : isPlayingApp ? _theme.Overlay : _theme.SurfaceBgAlpha;
@@ -1110,7 +1116,7 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
         if (hit is { } row && row.Id.StartsWith(AppPrefix, StringComparison.Ordinal) && _activeDevice is { } active)
         {
             string package = row.Id[AppPrefix.Length..];
-            _pressApp = !active.IsApp || _host.Phone.Operations.AppCapture(active)?.Package == package
+            _pressApp = !active.IsApp || _host.Phone.Operations.AppCapture(active)?.LocalSourceKey == package
                 ? GetFilteredApps().FirstOrDefault(a => a.Package == package) : null;
             _pressDevice = active;
             _pressX = e.X;
@@ -1328,6 +1334,8 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
     private async Task RefreshCatalogAsync()
     {
         if (_catalogRefresh != null) return;
+        ClearFilteredApps();
+        _appIcons.Clear();
         CancelOpeningReconnect();
         var phone = _host.Phone;
         var selected = phone.Store.Profile;
@@ -1423,14 +1431,24 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
         if (profile.LastDevice == null) return Array.Empty<AndroidApp>();
         var source = profile.QuickPanelApps;
         bool appChannel = (_activeDevice ?? profile.LastDevice).IsApp;
-        string? granted = _activeDevice is { IsApp: true } peer ? _host.Phone.Operations.AppCapture(peer)?.Package : null;
+        var grant = _activeDevice is { IsApp: true } peer ? _host.Phone.Operations.AppCapture(peer) : null;
+        string? granted = grant?.LocalSourceKey;
+        AndroidApp? grantApp = null;
+        if (grant?.IsDeviceMedia == true) grantApp = AndroidApp.DeviceAudio;
+        else if (granted != null)
+        {
+            var known = source.FirstOrDefault(a => a.Package == granted)
+                ?? _host.Phone.Sources.Sources.FirstOrDefault(s => AndroidDeviceIdentity.SameTransport(s.Device, _activeDevice) && s.App.Package == granted)?.App
+                ?? (_filteredGrant == granted ? _grantApp : null) ?? new AndroidApp(granted, granted, 0, "");
+            grantApp = _appIcons.Resolve(_activeDevice, known);
+        }
         if (ReferenceEquals(_filteredAppsSource, source) && _filteredAppsQuery == _searchText
-            && _filteredGrant == granted && _filteredAppChannel == appChannel) return _filteredApps;
+            && _filteredGrant == granted && ReferenceEquals(_grantApp, grantApp) && _filteredAppChannel == appChannel) return _filteredApps;
 
         string query = _searchText.Trim();
         IEnumerable<AndroidApp> items = source;
-        if (granted != null && !source.Any(a => a.Package == granted))
-            items = items.Prepend(profile.RetainedApps.FirstOrDefault(a => a.Package == granted) ?? new AndroidApp(granted, granted, 0, ""));
+        if (grantApp != null)
+            items = source.Any(a => a.Package == granted) ? items.Select(a => a.Package == granted ? grantApp : a) : items.Prepend(grantApp);
         if (query.Length != 0) items = items.Where(a =>
             a.Name.Contains(query, StringComparison.CurrentCultureIgnoreCase) ||
             a.Package.Contains(query, StringComparison.OrdinalIgnoreCase));
@@ -1438,12 +1456,14 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
         _filteredAppsSource = source;
         _filteredAppsQuery = _searchText;
         _filteredGrant = granted;
+        _grantApp = grantApp;
         _filteredAppChannel = appChannel;
         return _filteredApps;
     }
 
     private void ClearFilteredApps()
     {
+        _grantApp = null;
         _filteredAppsSource = null;
         _filteredApps = [];
     }

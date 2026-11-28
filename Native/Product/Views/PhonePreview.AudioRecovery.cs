@@ -9,6 +9,7 @@ internal sealed partial class PhonePreview
 {
     private readonly object sourceRecoveryGate = new();
     private readonly Dictionary<string, (AndroidDevice Device, string? Grant)> captureAttempts = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, (AndroidDevice Device, string Grant)> phonePlaybackRequests = new(StringComparer.Ordinal);
     private Task sourceRecovery = Task.CompletedTask;
     private bool sourceRecoveryRunning, sourceRecoveryPending, sourceRoutesChanged;
     private readonly object wirelessWatchGate = new();
@@ -62,6 +63,8 @@ internal sealed partial class PhonePreview
 
     private async Task ReconcileCaptureSourcesAsync(bool refreshRoutes)
     {
+        StartRequestedScreenViewers();
+        await StartPhoneRequestedPlaybackAsync().ConfigureAwait(false);
         if (Discovery.CurrentDevices == null) return;
         await Sources.SuspendUnavailableAsync(Connections.IsCurrent).ConfigureAwait(false);
         foreach (var (key, attempt) in captureAttempts.ToArray())
@@ -111,11 +114,46 @@ internal sealed partial class PhonePreview
         }
     }
 
+    private async Task StartPhoneRequestedPlaybackAsync()
+    {
+        var profiles = Store.Profiles;
+        foreach (var id in phonePlaybackRequests.Keys.ToArray())
+            if (!profiles.Any(p => p.Id == id && ReferenceEquals(appTransport.Resolve(p), phonePlaybackRequests[id].Device)))
+                phonePlaybackRequests.Remove(id);
+        foreach (var profile in profiles)
+        {
+            if (appTransport.Resolve(profile) is not { } device || !Connections.IsCurrent(device)) continue;
+            if (Operations.AppCapture(device) is not { PlayOnComputer: true, Grant: { } grant, LocalSourceKey: { } key } permission) continue;
+            if (phonePlaybackRequests.TryGetValue(profile.Id, out var previous) && ReferenceEquals(previous.Device, device)
+                && previous.Grant == grant) continue;
+            phonePlaybackRequests[profile.Id] = (device, grant);
+            if (Sources.Sources.Any(source => AndroidDeviceIdentity.Matches(source.Device, device)
+                && source.App.Package == key && source.Session.State.State != CaptureState.Failed)) continue;
+            try
+            {
+                using var operation = CancellationTokenSource.CreateLinkedTokenSource(token, Connections.OperationToken(device));
+                var app = permission.IsDeviceMedia ? AndroidApp.DeviceAudio :
+                    (await Operations.AppsAsync(device, operation.Token, [key]).ConfigureAwait(false))
+                        .FirstOrDefault(item => item.Package == key)
+                        ?? profile.RetainedApps.FirstOrDefault(item => item.Package == key)
+                        ?? new AndroidApp(key, key, 0, "");
+                if (Operations.AppCapture(device) != permission || !Connections.IsCurrent(device)) continue;
+                var preferences = Settings.FindExternalAudio(ExternalAudioPreference.AndroidKey(device, app.Package));
+                var selected = preferences?.Outputs ?? Settings.Get(device, app.Package).ResumeOutputs ?? [null];
+                var local = ExternalAudioBridge.ResolveAvailableOutputs(selected)
+                    .Where(id => id != AndroidAudioSession.SourcePhoneOutputId && !AndroidOutputIdentity.IsPhoneOutput(id)).ToArray();
+                await Sources.PlayPhoneRequestAsync(device, app, local.Length == 0 ? [null] : local).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) { }
+            catch (Exception error) { ExceptionDiagnostics.Record("NativePhone.StartSharedAudio", error); }
+        }
+    }
+
     private async Task ResumeCaptureAsync(string key, AndroidDevice online, AndroidApp app, string?[] outputs)
     {
         token.ThrowIfCancellationRequested();
         var grant = online.IsApp ? Operations.AppCapture(online) : null;
-        if (online.IsApp && (grant?.Package != app.Package
+        if (online.IsApp && (grant?.LocalSourceKey != app.Package
             || !outputs.Contains(AndroidAudioSession.SourcePhoneOutputId))) return;
         if (Sources.Sources.Any(s => AndroidDeviceIdentity.Matches(s.Device, online)
             && (s.App.Package == app.Package || s.App.IsDeviceAudio || app.IsDeviceAudio))) return;

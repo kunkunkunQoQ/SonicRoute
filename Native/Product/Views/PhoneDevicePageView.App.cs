@@ -10,13 +10,18 @@ internal sealed partial class PhoneDevicePageView
     private CancellationTokenSource? _appDiscovery;
     private AndroidMdnsService[] _appCandidates = [];
     private bool _appSearchComplete;
-    private IPEndPoint? _selectedAppCandidate;
-    private AndroidDevice? _controlAttachment;
-    private int? _appVolume;
-    private string? _appRoute;
-    private AndroidDevice? _interactiveAdb;
-    private IReadOnlyList<AndroidDevice>? _interactiveAdbScan;
-    private long _interactiveRevision = -1;
+    private NearbyPairing? _nearbyPairing;
+    private (AndroidDevice Device, bool Screen)? _requestedSharing;
+
+    private sealed class NearbyPairing(AndroidMdnsService service)
+    {
+        public AndroidMdnsService Service { get; } = service;
+        private readonly string attempt = Guid.NewGuid().ToString("N");
+        public string MatchAction => "phone.app.pair.match:" + attempt;
+        public string CancelAction => "phone.app.pair.cancel:" + attempt;
+        public string? ComparisonCode { get; set; }
+        public TaskCompletionSource<bool>? Confirmation { get; set; }
+    }
 
     private void AddAppBindingMenu(List<UiMenuItem> items, AndroidPhoneProfile profile)
     {
@@ -64,22 +69,17 @@ internal sealed partial class PhoneDevicePageView
 
     private float RenderAppConnection(D2dTarget g, UiThemePalette t, float x, float y, float w)
     {
+        if (_nearbyPairing is { } pairing) return RenderNearbyPairing(g, t, x, y, w, pairing);
         const float pad = DeviceCardPadding;
         float inner = MathF.Max(1f, w - 2 * pad);
-        string guide = L10n.T("Phone.SrapPairGuide");
-        string pasteLabel = L10n.T("Phone.SrapPaste"), findLabel = L10n.T("Phone.SrapFindNearby");
-        float half = Math.Max(1f, (inner - 8f) / 2);
-        float pasteW = Math.Min(half, Math.Max(90f, PhoneTextWidth(pasteLabel, 12f, 600) + 24f));
-        float findW = Math.Min(half, Math.Max(90f, PhoneTextWidth(findLabel, 12f) + 24f));
-        float actionWidth = pasteW + 8f + findW;
-        bool beside = inner - actionWidth - 20f >= 280f;
-        float textWidth = beside ? inner - actionWidth - 20f : inner;
+        string guide = L10n.T(_appSearchComplete && _appCandidates.Length == 0 ? "Phone.SrapNoneNearby" : "Phone.SrapPairGuide");
+        string findLabel = L10n.T(_appDiscovery == null ? "Phone.SrapFindNearby" : "Phone.SrapFinding");
+        float findW = Math.Min(inner, Math.Max(90f, PhoneTextWidth(findLabel, 12f, 600) + 24f));
+        bool beside = inner - findW - 16f >= 240f;
+        float textWidth = beside ? inner - findW - 16f : inner;
         float hint = PhoneTextHeight(guide, textWidth);
-        bool hasCandidates = _appCandidates.Length != 0;
-        string noResults = _appDiscovery != null ? L10n.T("Phone.ProcessingStatus") : _appSearchComplete && !hasCandidates ? L10n.T("Phone.SrapNoneNearby") : "";
-        float resultsHeight = hasCandidates ? 40f : noResults.Length == 0 ? 0f : 8f + PhoneTextHeight(noResults, inner);
         float bodyHeight = 24f + hint + (beside ? 0f : 40f);
-        var card = new UiRect(x, y, w, pad * 2 + bodyHeight + resultsHeight);
+        var card = new UiRect(x, y, w, pad * 2 + bodyHeight + 40f * _appCandidates.Length);
         UiPrimitives.DrawCard(g, t, card, DeviceCardRadius);
         var heading = new UiRect(x + pad, y + pad, textWidth, 20f);
         string title = L10n.T("Phone.SrapPairTitle");
@@ -88,196 +88,238 @@ internal sealed partial class PhoneDevicePageView
         var description = new UiRect(heading.X, heading.Bottom + 4f, textWidth, hint);
         g.DrawText(guide, description, t.TextSecondary, 12f, wrap: true);
         _hit.DescribeText("phone.app.pair.guide", description, guide);
-        var paste = new UiRect(beside ? card.Right - pad - actionWidth : heading.X,
-            beside ? heading.Y + (bodyHeight - 32f) / 2 : description.Bottom + 8f, pasteW, 32f);
-        UiPrimitives.DrawAccentButton(g, t, _hit, "phone.app.paste", paste, pasteLabel, enabled: !_busy, fontSize: 12f);
-        UiPrimitives.DrawSecondaryButton(g, t, _hit, "phone.app.find", new UiRect(paste.Right + 8f, paste.Y,
-            findW, 32f), findLabel, enabled: !_busy && _appDiscovery == null, fontSize: 12f);
-        if (hasCandidates)
+        var find = new UiRect(beside ? card.Right - pad - findW : heading.X,
+            beside ? heading.Y + (bodyHeight - 32f) / 2 : description.Bottom + 8f, findW, 32f);
+        UiPrimitives.DrawAccentButton(g, t, _hit, "phone.app.find", find, findLabel,
+            enabled: !_busy && _appDiscovery == null, fontSize: 12f);
+        float row = heading.Y + bodyHeight + 8f;
+        foreach (var service in _appCandidates)
         {
-            string candidate = _appCandidates.FirstOrDefault(a => a.Address == _selectedAppCandidate?.ToString())?.Name ?? L10n.T("Phone.SrapCandidate");
-            UiPrimitives.DrawComboBox(g, t, _hit, "phone.app.candidates", new UiRect(heading.X, heading.Y + bodyHeight + 8f, inner, 32f), candidate, enabled: !_busy);
-        }
-        else if (noResults.Length != 0)
-        {
-            var message = new UiRect(heading.X, heading.Y + bodyHeight + 8f, inner, resultsHeight - 8f);
-            g.DrawText(noResults, message, t.TextSecondary, 12f, wrap: true);
-            _hit.DescribeText("phone.app.discovery.status", message, noResults);
+            UiPrimitives.DrawSecondaryButton(g, t, _hit, CandidateAction(service), new UiRect(heading.X, row, inner, 32f),
+                CandidateLabel(service), enabled: !_busy, fontSize: 12f, icon: UiIcon.Phone);
+            row += 40f;
         }
         return card.Bottom + DeviceCardGap;
     }
 
-    private float RenderAppControls(D2dTarget g, UiThemePalette t, float x, float y, float w, AndroidDevice? online)
+    private float RenderNearbyPairing(D2dTarget g, UiThemePalette t, float x, float y, float w, NearbyPairing pairing)
     {
-        if (!ReferenceEquals(online, _controlAttachment))
-        {
-            _controlAttachment = online;
-            _appVolume = null;
-            _appRoute = null;
-            _interactiveRevision = -1;
-        }
-        if (online == null) return y;
-        var controls = _actions.Host.Phone.Operations;
-        bool volume = controls.CanControlVolume(online);
-        bool route = controls.CanTestRoute(online);
-        bool screen = controls.CanViewSharedScreen(online);
-        bool screenRow = screen || controls.NeedsScreenConsent(online);
-        var connections = _actions.Host.Phone.Connections;
-        if (_interactiveRevision != connections.Revision || !ReferenceEquals(_interactiveAdbScan, connections.CurrentRaw))
-        {
-            _interactiveRevision = connections.Revision;
-            _interactiveAdbScan = connections.CurrentRaw;
-            _interactiveAdb = connections.VerifiedAdbForDisplay(online);
-        }
-        var capture = controls.AppCapture(online);
-        if (!volume && !route && !screenRow && capture == null && _interactiveAdb == null) return y;
         const float pad = DeviceCardPadding;
-        float left = x + pad, inner = MathF.Max(1f, w - 2 * pad);
-        string screenGuide = screenRow && !screen ? L10n.T("Phone.SrapScreenGrant") : "";
-        string captureGuide = capture is { Package: null } ? L10n.T("Phone.SrapCaptureGrant") : "";
-        float PermissionHeight(string guide) => 31f + PhoneTextHeight(guide, inner, 12f);
-        float screenHeight = !screenRow ? 0f : screen ? 38f : PermissionHeight(screenGuide);
-        float captureHeight = capture == null ? 0f : capture.Package != null ? 38f : PermissionHeight(captureGuide);
-        var card = new UiRect(x, y, w, 2 * pad + 38f * ((volume ? 1 : 0) + (route ? 1 : 0) + (_interactiveAdb != null ? 1 : 0)) + screenHeight + captureHeight);
+        float inner = MathF.Max(1f, w - 2 * pad);
+        string title = CandidateLabel(pairing.Service);
+        float headingHeight = PhoneTextHeight(title, inner, DeviceHeadingSize);
+        bool hasCode = pairing.ComparisonCode != null, needsDecision = pairing.Confirmation != null;
+        string guide = L10n.T(!hasCode ? "Phone.SrapStartingNearby" :
+            needsDecision ? "Phone.SrapCompareCode" : "Phone.SrapWaitForPhone");
+        float guideHeight = PhoneTextHeight(guide, inner);
+        string agree = L10n.T("Phone.SrapCodesMatch"), cancel = L10n.T("Auto.Cancel");
+        float agreeW = Math.Min(inner, Math.Max(82f, PhoneTextWidth(agree, 12f, 600) + 24f));
+        float cancelW = Math.Min(inner, Math.Max(72f, PhoneTextWidth(cancel, 12f) + 24f));
+        bool stacked = needsDecision && agreeW + cancelW + 8f > inner;
+        var card = new UiRect(x, y, w, pad * 2 + headingHeight + (hasCode ? 47f : 0f) + 6f + guideHeight + 10f + (stacked ? 72f : 32f));
         UiPrimitives.DrawCard(g, t, card, DeviceCardRadius);
-        float row = y + pad;
-        if (volume)
+        var heading = new UiRect(x + pad, y + pad, inner, headingHeight);
+        g.DrawText(title, heading, t.TextPrimary, DeviceHeadingSize, 600, wrap: true);
+        _hit.DescribeText("phone.app.pair.target", heading, title);
+        float row = heading.Bottom;
+        if (pairing.ComparisonCode is { } code)
         {
-            string label = L10n.T("Phone.SrapVolume") + (_appVolume is { } value ? $" · {value}%" : "");
-            g.DrawText(label, new UiRect(left, row, MathF.Max(1f, inner - 134f), 28f), t.TextPrimary, 12f, 600);
-            _hit.DescribeText("phone.app.volume.value", new UiRect(left, row, MathF.Max(1f, inner - 150f), 28f), label);
-            float right = card.Right - pad;
-            UiPrimitives.DrawSecondaryButton(g, t, _hit, "phone.app.volume.down", new UiRect(right - 136f, row, 28f, 28f),
-                "−", enabled: !_busy && _appVolume > 0);
-            UiPrimitives.DrawSecondaryButton(g, t, _hit, "phone.app.volume.up", new UiRect(right - 106f, row, 28f, 28f),
-                "+", enabled: !_busy && _appVolume is < 100);
-            UiPrimitives.DrawSecondaryButton(g, t, _hit, "phone.app.volume.read", new UiRect(right - 76f, row, 76f, 28f),
-                L10n.T("Apps.Refresh"), enabled: !_busy, fontSize: 11f);
-            row += 38f;
+            var number = new UiRect(heading.X, row + 4f, inner, 43f);
+            g.DrawText(code, number, t.Accent, 28f, 600, UiTextAlign.Leading, UiVertAlign.Center);
+            _hit.DescribeText("phone.app.pair.comparison", number, code);
+            row = number.Bottom;
         }
-        if (route)
-        {
-            string buttonLabel = L10n.T("Phone.SrapSelectOutput");
-            string label = L10n.T("Phone.SrapOutput") + (_appRoute == null ? "" : " · " + _appRoute);
-            float button = Math.Min(inner * 0.55f, PhoneTextWidth(buttonLabel, 12f) + 28f);
-            var outputLabel = new UiRect(left, row, MathF.Max(1f, inner - button - 10f), 30f);
-            g.DrawText(label, outputLabel, t.TextPrimary, 12f, 600);
-            _hit.DescribeText("phone.app.output.value", outputLabel, label);
-            UiPrimitives.DrawSecondaryButton(g, t, _hit, "phone.app.test", new UiRect(card.Right - pad - button, row, button, 30f),
-                buttonLabel, enabled: !_busy, fontSize: 12f, tooltip: L10n.T("Phone.SrapTestRoute"));
-            row += 38f;
-        }
-        if (screen)
-            UiPrimitives.DrawSecondaryButton(g, t, _hit, "phone.app.screen", new UiRect(left, row + 4f, MathF.Min(inner, 230f), 30f),
-                L10n.T("Phone.SrapOpenScreen"), enabled: !_busy, fontSize: 12f);
-        else if (screenRow) DrawPermission("phone.app.permission.screen", L10n.T("Phone.SrapScreenSharing"), screenGuide);
-        row += screenHeight;
-        if (_interactiveAdb != null)
-        {
-            UiPrimitives.DrawSecondaryButton(g, t, _hit, "phone.app.interactiveAdb", new UiRect(left, row, MathF.Min(inner, 260f), 28f),
-                L10n.T("Phone.SrapInteractiveAdb"), enabled: !_busy, fontSize: 11f, tooltip: L10n.T("Phone.SrapInteractiveAdbHint"));
-            row += 38f;
-        }
-        if (capture?.Package is { } package)
-        {
-            var phone = _actions.Host.Phone;
-            string name = phone.Store.FindProfile(online)?.RetainedApps.FirstOrDefault(a => a.Package == package)?.Name ?? package;
-            bool listening = phone.Sources.Sources.Any(s => AndroidDeviceIdentity.SameTransport(s.Device, online) && s.App.Package == package);
-            string label = L10n.T(listening ? "Phone.SrapCaptureStop" : "Phone.SrapCaptureListen");
-            float button = Math.Min(inner * 0.58f, PhoneTextWidth(label, 11f) + 30f);
-            g.DrawText(name, new UiRect(left, row, MathF.Max(1f, inner - button - 8f), 40f), t.TextPrimary, 12f, 600);
-            UiPrimitives.DrawSecondaryButton(g, t, _hit, (listening ? "phone.app.capture.stop." : "phone.app.capture.listen.") + package,
-                new UiRect(card.Right - pad - button, row + 5f, button, 30f), label, enabled: !_busy, fontSize: 11f);
-        }
-        else if (capture != null) DrawPermission("phone.app.permission.capture", L10n.T("Phone.SrapAudioSharing"), captureGuide);
+        var description = new UiRect(heading.X, row + 6f, inner, guideHeight);
+        g.DrawText(guide, description, t.TextSecondary, 12f, wrap: true);
+        _hit.DescribeText("phone.app.pair.instruction", description, guide);
+        float actionsY = description.Bottom + 10f;
+        if (needsDecision)
+            UiPrimitives.DrawAccentButton(g, t, _hit, pairing.MatchAction, new UiRect(heading.X, actionsY, agreeW, 32f), agree);
+        var dismiss = new UiRect(heading.X + (needsDecision && !stacked ? agreeW + 8f : 0f), actionsY + (stacked ? 40f : 0f), cancelW, 32f);
+        UiPrimitives.DrawSecondaryButton(g, t, _hit, pairing.CancelAction, dismiss, cancel);
         return card.Bottom + DeviceCardGap;
+    }
 
-        void DrawPermission(string id, string title, string guide)
+    private static string CandidateLabel(AndroidMdnsService service) => service.Name + " · " + service.Address;
+    private static string CandidateAction(AndroidMdnsService service) => $"phone.app.nearby:{service.App!.Instance}/{service.Address}";
+
+    private float? RenderAppHeaderActions(D2dTarget g, UiThemePalette t, UiRect more, float nameX, AndroidDevice device)
+    {
+        var phone = _actions.Host.Phone;
+        bool mayAsk = phone.CanRequestPhoneSharing(device);
+        bool screen = mayAsk || phone.Operations.CanViewSharedScreen(device);
+        var package = phone.Operations.AppCapture(device)?.LocalSourceKey;
+        bool sound = mayAsk || package != null;
+        if (!screen && !sound) return null;
+        bool playing = package != null && HasPhoneAudio(device, package);
+        string soundLabel = L10n.T(playing ? "Phone.SrapCaptureStop" : "Phone.PlayPhoneAudio");
+        string screenLabel = L10n.T("Phone.MirrorPhone");
+        float soundW = sound ? PhoneTextWidth(soundLabel, 12f) + 24f : 0f;
+        float screenW = screen ? PhoneTextWidth(screenLabel, 12f) + 24f : 0f;
+        bool icons = more.X - nameX - screenW - soundW < 140f;
+        float right = more.X - 6f;
+        if (sound) Draw("phone.app.sound", soundLabel, playing ? UiIcon.Pause : UiIcon.Headphones, soundW);
+        if (screen) Draw("phone.app.screen", screenLabel, UiIcon.Monitor, screenW);
+        return right;
+
+        void Draw(string action, string title, UiIcon icon, float buttonWidth)
         {
-            g.DrawLine(left, row, card.Right - pad, row, t.Border, 1f);
-            var heading = new UiRect(left, row + 6f, inner, 18f);
-            g.DrawText(title, heading, t.TextPrimary, 12f, 600);
-            var description = new UiRect(left, heading.Bottom + 1f, inner, PhoneTextHeight(guide, inner, 12f));
-            g.DrawText(guide, description, t.TextSecondary, 12f, wrap: true);
-            _hit.DescribeText(id, new UiRect(left, row + 4f, inner, description.Bottom - row - 4f), title + " · " + guide);
+            float width = icons ? 30f : buttonWidth;
+            right -= width;
+            UiPrimitives.DrawSecondaryButton(g, t, _hit, action, new UiRect(right, more.Y, width, more.Height),
+                icons ? "" : title, enabled: !_busy, fontSize: 12f, icon: icons ? icon : null, tooltip: title);
+            right -= 6f;
         }
+    }
+
+    private bool HasPhoneAudio(AndroidDevice device, string package) => _actions.Host.Phone.Sources.Sources.Any(source =>
+        AndroidDeviceIdentity.SameTransport(source.Device, device) && source.App.Package == package && source.Session.State.State != CaptureState.Failed);
+
+    private void AddAppDeviceTools(List<UiMenuItem> items, AndroidPhoneProfile profile, UiRect anchor)
+    {
+        var phone = _actions.Host.Phone;
+        if (profile.AppPublicKeySha256 is { } pin && phone.PcListening.IsAllowed(profile))
+        {
+            items.Add(new UiMenuItem { Text = L10n.T("Phone.AllowPcListening"), Checked = true, Click = () =>
+            {
+                if (!_active || IsConnectionPage || phone.Store.Profile.Id != profile.Id) return;
+                try { phone.PcListening.SetPermission(profile.Id, pin, false); }
+                catch (Exception ex) { SetStatus(PhonePreview.TranslateError(ex), true); }
+            } });
+        }
+        if (_activeDevice is not { IsApp: true } device) return;
+        bool current() => _active && !IsConnectionPage && !_busy && ReferenceEquals(_activeDevice, device) && phone.Store.Profile.Id == profile.Id;
+        void Command(string id) { if (current()) HandleAppDeviceAction(id, anchor); }
+        if (phone.PcListening.StoppableRequest(device) is { } playing)
+            items.Add(new UiMenuItem { Text = L10n.T("Phone.StopPcAudioOnPhone"), Icon = UiIcon.Pause, Click = () =>
+            {
+                if (current()) RunBusy(_ => phone.PcListening.StopOnPhoneAsync(device, playing));
+            } });
+        else if (phone.PcListening.CanStartOnPhone(device))
+            items.Add(new UiMenuItem { Text = L10n.T("Phone.PlayPcAudioOnPhone"), Icon = UiIcon.Speaker, Click = () =>
+            {
+                if (current()) RunBusy(ct => phone.PcListening.StartOnPhoneAsync(device, ct));
+            } });
+        if (phone.Operations.CanTestRoute(device))
+            items.Add(new UiMenuItem { Text = L10n.T("Phone.SrapSelectOutput"), Click = () => Command("phone.app.test") });
+        if (phone.Operations.CanControlVolume(device))
+        {
+            void Volume(int step)
+            {
+                if (!current()) return;
+                int value = 0;
+                RunBusy(async ct =>
+                {
+                    value = await phone.Operations.VolumeAsync(device, null, ct).ConfigureAwait(false);
+                    if (step != 0) value = await phone.Operations.VolumeAsync(device, Math.Clamp(value + step, 0, 100), ct).ConfigureAwait(false);
+                }, completedText: () => L10n.T("Phone.SrapVolume") + " · " + value + "%");
+            }
+            items.Add(new UiMenuItem { Text = L10n.T("Phone.SrapVolume"), SubItems =
+            [
+                new() { Text = "−", Click = () => Volume(-10) },
+                new() { Text = "+", Click = () => Volume(10) },
+                new() { Text = L10n.T("Apps.Refresh"), Click = () => Volume(0) }
+            ] });
+        }
+        if (phone.Connections.VerifiedAdbForDisplay(device) is { } adb)
+            items.Add(new UiMenuItem { Text = L10n.T("Phone.SrapInteractiveAdb"), Click = () =>
+            {
+                if (current()) RunBusy(_ => { phone.Connections.SelectVerifiedAdbForDisplay(device, adb); return Task.CompletedTask; }, "Phone.SrapSwitchedAdb");
+            } });
+        items.Add(new UiMenuItem { Text = L10n.T("Phone.Disconnect"), Click = () => { if (current()) RunDeviceCommand("phone.disconnect"); } });
+    }
+
+    private static string PromptAction(PcListeningPrompt prompt, bool allow) =>
+        $"phone.pcListen.{(allow ? "allow" : "deny")}:{prompt.Attachment}:{prompt.Request}";
+
+    private float PcListenPromptHeight(float w) => 52f + PhoneTextHeight(L10n.T("Phone.PcAudioAsk"), Math.Max(1f, w - 2 * DeviceCardPadding), 13f);
+
+    private void DrawPcListeningPrompt(D2dTarget g, UiThemePalette t, UiRect card, PcListeningPrompt prompt)
+    {
+        float left = card.X + DeviceCardPadding, inner = card.Width - 2 * DeviceCardPadding;
+        float top = card.Y + 64f;
+        g.DrawLine(left, top, card.Right - DeviceCardPadding, top, t.Border, 1f);
+        string title = L10n.T("Phone.PcAudioAsk");
+        var question = new UiRect(left, top + 5f, inner, PhoneTextHeight(title, inner, 13f));
+        g.DrawText(title, question, t.TextPrimary, 13f, 600, wrap: true);
+        _hit.DescribeText("phone.pcListen.prompt", question, title);
+        string allow = L10n.T("Phone.PcAudioAllow"), deny = L10n.T("Phone.PcAudioDecline");
+        float yesW = Math.Min(inner * .6f, PhoneTextWidth(allow, 12f, 600) + 24f);
+        var yes = new UiRect(left, question.Bottom + 6f, yesW, 29f);
+        UiPrimitives.DrawAccentButton(g, t, _hit, PromptAction(prompt, true), yes, allow, fontSize: 12f);
+        var no = new UiRect(yes.Right + 6f, yes.Y, Math.Min(inner - yesW - 6f, PhoneTextWidth(deny, 12f) + 24f), yes.Height);
+        UiPrimitives.DrawSecondaryButton(g, t, _hit, PromptAction(prompt, false), no, deny, fontSize: 12f);
     }
 
     private bool HandleAppDeviceAction(string id, UiRect anchor)
     {
         var host = _actions.Host;
-        switch (id)
+        if (id.StartsWith("phone.pcListen.", StringComparison.Ordinal))
         {
-            case "phone.app.find":
-                SearchAppCandidates();
-                return true;
-            case "phone.app.candidates":
-                if (!AndroidConnectionVisible || _busy) return true;
-                var choices = _appCandidates.Select(service => new UiMenuItem
+            if (_active && !IsConnectionPage && host.Phone.PcListening.Pending(host.Phone.Store.Profile.Id) is { } prompt)
+            {
+                bool allow = id == PromptAction(prompt, true);
+                if (allow || id == PromptAction(prompt, false))
                 {
-                    Text = service.Name + " · " + service.Address,
-                    Click = () =>
-                    {
-                        if (!AndroidConnectionVisible || _busy) return;
-                        _selectedAppCandidate = IPEndPoint.Parse(service.Address);
-                        _actions.Invalidate();
-                    }
-                }).ToList();
-                if (choices.Count != 0) _actions.ShowMenu(anchor, choices);
-                return true;
-            case "phone.app.paste":
-                if (!AndroidConnectionVisible || _busy) return true;
-                string? invite = NativeTextClipboard.ReadBoundedText(1024);
-                if (string.IsNullOrWhiteSpace(invite))
-                {
-                    SetStatus(L10n.T("Phone.SrapInvalidInvite"), true);
-                    return true;
+                    try { host.Phone.PcListening.Answer(prompt, allow); _actions.Invalidate(); }
+                    catch (Exception ex) { SetStatus(PhonePreview.TranslateError(ex), true); }
                 }
-                var selected = _selectedAppCandidate;
-                RunBusy(ct => host.Phone.PairAppAsync(invite, selected, () => host.TryPost(() =>
-                {
-                    if (AndroidConnectionVisible && !ct.IsCancellationRequested) SetStatus(L10n.T("Phone.SrapConfirmOnPhone"), false);
-                }), ct), "Phone.ConnectedStatus", openDevice: true, timeoutSeconds: 130);
+            }
+            return true;
+        }
+        if (id == "phone.app.find")
+        {
+            SearchAppCandidates();
+            return true;
+        }
+        if (id.StartsWith("phone.app.nearby:", StringComparison.Ordinal))
+        {
+            if (AndroidConnectionVisible && !_busy && _appCandidates.FirstOrDefault(s => CandidateAction(s) == id) is { } service)
+                BeginNearbyPairing(service);
+            return true;
+        }
+        if (AndroidConnectionVisible && _nearbyPairing is { } pairing)
+        {
+            if (id == pairing.MatchAction && pairing.Confirmation is { } answer)
+            {
+                pairing.Confirmation = null;
+                answer.TrySetResult(true);
+                _actions.Invalidate();
                 return true;
+            }
+            if (id == pairing.CancelAction)
+            {
+                CancelViewOperation();
+                RefreshData();
+                SetStatus(L10n.T("Phone.StatusCancelled"), false);
+                return true;
+            }
         }
         if (_activeDevice is not { IsApp: true } device) return false;
-        if (host.Phone.Operations.AppCapture(device)?.Package is { } package)
+        if (id == "phone.app.sound")
         {
-            if (id == "phone.app.capture.listen." + package)
+            if (host.Phone.Operations.AppCapture(device) is { LocalSourceKey: { } package } capture)
             {
-                var app = host.Phone.Store.FindProfile(device)?.RetainedApps.FirstOrDefault(a => a.Package == package)
-                    ?? new AndroidApp(package, package, 0, "");
-                RunBusy(ct => host.Phone.Sources.AddAsync(device, app, keepPhoneAudio: true).WaitAsync(ct));
-                return true;
+                if (HasPhoneAudio(device, package))
+                    RunBusy(ct => host.Phone.Sources.RemoveApplicationAsync(device, package).WaitAsync(ct));
+                else
+                {
+                    var app = capture.IsDeviceMedia ? AndroidApp.DeviceAudio :
+                        host.Phone.Store.FindProfile(device)?.RetainedApps.FirstOrDefault(a => a.Package == package) ?? new AndroidApp(package, package, 0, "");
+                    RunBusy(ct => host.Phone.Sources.AddAsync(device, app, keepPhoneAudio: true).WaitAsync(ct));
+                }
             }
-            if (id == "phone.app.capture.stop." + package)
-            {
-                RunBusy(ct => host.Phone.Sources.RemoveApplicationAsync(device, package).WaitAsync(ct));
-                return true;
-            }
+            else if (host.Phone.CanRequestPhoneSharing(device))
+                RequestSharing(device, screen: false);
+            return true;
         }
         switch (id)
         {
             case "phone.app.screen":
-                string title = host.Phone.Store.GetDisplayName(device);
-                RunBusy(ct => host.Phone.Operations.ViewSharedScreenAsync(device, title, ct), "Phone.SrapScreenPresented");
-                return true;
-            case "phone.app.interactiveAdb":
-                if (_interactiveAdb is { } shown)
-                    RunBusy(_ => { host.Phone.Connections.SelectVerifiedAdbForDisplay(device, shown); return Task.CompletedTask; }, "Phone.SrapSwitchedAdb");
-                return true;
-            case "phone.app.volume.read":
-            case "phone.app.volume.up":
-            case "phone.app.volume.down":
-                int? value = id == "phone.app.volume.read" || _appVolume == null ? null : Math.Clamp(_appVolume.Value + (id == "phone.app.volume.up" ? 10 : -10), 0, 100);
-                RunBusy(async ct =>
-                {
-                    int volume = await host.Phone.Operations.VolumeAsync(device, value, ct).ConfigureAwait(false);
-                    host.TryPost(() =>
-                    {
-                        if (ReferenceEquals(_activeDevice, device)) _appVolume = volume;
-                    });
-                });
+                if (host.Phone.Operations.CanViewSharedScreen(device))
+                    RunBusy(ct => host.Phone.Operations.ViewSharedScreenAsync(device, host.Phone.Store.GetDisplayName(device), ct), "Phone.SrapScreenPresented");
+                else if (host.Phone.CanRequestPhoneSharing(device))
+                    RequestSharing(device, screen: true);
                 return true;
             case "phone.app.test":
                 RunBusy(async ct =>
@@ -300,20 +342,74 @@ internal sealed partial class PhoneDevicePageView
         }
     }
 
+    private void RequestSharing(AndroidDevice device, bool screen)
+    {
+        bool busy = false;
+        RunBusy(async ct =>
+        {
+            try { await _actions.Host.Phone.RequestPhoneSharingAsync(device, screen, ct).ConfigureAwait(false); }
+            catch (SrapException error) when (error.Code == "busy") { busy = true; }
+        }, completedText: () =>
+        {
+            _requestedSharing = (device, screen);
+            return L10n.T(busy ? "Phone.SharingBusy" : "Phone.WaitPhoneSharing");
+        });
+    }
+
+    private void RefreshSharingStatus(AndroidDevice? device)
+    {
+        if (_requestedSharing is not { } request) return;
+        var operations = _actions.Host.Phone.Operations;
+        if (ReferenceEquals(request.Device, device) && !(request.Screen ? operations.CanViewSharedScreen(request.Device) :
+            operations.AppCapture(request.Device)?.LocalSourceKey != null)) return;
+        _requestedSharing = null;
+        if (_statusMessage == L10n.T("Phone.WaitPhoneSharing") || _statusMessage == L10n.T("Phone.SharingBusy")) _statusMessage = null;
+    }
+
     private void TestAppRoute(AndroidDevice device, AndroidOutputSink target, IReadOnlyList<AndroidOutputSink> outputs)
     {
         if (IsConnectionPage || !ReferenceEquals(_activeDevice, device)) return;
-        _appRoute = null;
+        string routed = "";
         RunBusy(async ct =>
         {
             string actual = await _actions.Host.Phone.Operations.TestRouteAsync(device, target.Key, ct).ConfigureAwait(false);
             var result = outputs.FirstOrDefault(o => o.Key == actual);
-            _actions.Host.TryPost(() =>
+            routed = result != null ? PhoneAppPresentation.OutputLabel(result, _actions.Host.Phone.Store.GetDisplayName(device)) : actual;
+        }, completedText: () => L10n.T("Phone.SrapRouteVerified") + " " + routed);
+    }
+
+    private void BeginNearbyPairing(AndroidMdnsService service)
+    {
+        var pairing = new NearbyPairing(service);
+        _nearbyPairing = pairing;
+        _scroll.Offset = 0f;
+        RunBusy(ct => _actions.Host.Phone.PairNearbyAppAsync(service, ConfirmCode, ct),
+            "Phone.ConnectedStatus", openDevice: true, failed: _ => ClearNearbyPairing(), timeoutSeconds: 130);
+
+        Task<bool> ConfirmCode(string code, CancellationToken stop)
+        {
+            if (code.Length != 8 || !code.All(char.IsAsciiDigit)) return Task.FromResult(false);
+            var reply = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            if (!_actions.Host.TryPost(() =>
             {
-                if (ReferenceEquals(_activeDevice, device))
-                    _appRoute = result != null ? PhoneAppPresentation.OutputLabel(result, _actions.Host.Phone.Store.GetDisplayName(device)) : actual;
-            });
-        }, "Phone.SrapRouteVerified");
+                if (!AndroidConnectionVisible || !ReferenceEquals(_nearbyPairing, pairing) || stop.IsCancellationRequested || pairing.ComparisonCode != null)
+                {
+                    reply.TrySetResult(false);
+                    return;
+                }
+                pairing.ComparisonCode = code.Insert(4, " ");
+                pairing.Confirmation = reply;
+                _actions.Invalidate();
+            })) return Task.FromResult(false);
+            return reply.Task.WaitAsync(stop);
+        }
+    }
+
+    private void ClearNearbyPairing()
+    {
+        var pairing = _nearbyPairing;
+        _nearbyPairing = null;
+        pairing?.Confirmation?.TrySetResult(false);
     }
 
     private void CancelAppDiscovery()
@@ -326,7 +422,6 @@ internal sealed partial class PhoneDevicePageView
     private void SearchAppCandidates()
     {
         if (!AndroidConnectionVisible || _busy || _appDiscovery != null) return;
-        _selectedAppCandidate = null;
         _appCandidates = [];
         _appSearchComplete = false;
         var searching = CancellationTokenSource.CreateLinkedTokenSource(_actions.Host.Phone.Lifetime);
@@ -342,7 +437,8 @@ internal sealed partial class PhoneDevicePageView
             try
             {
                 found = (await PhonePreview.DiscoverAppConnectionsAsync(searching.Token).ConfigureAwait(false))
-                    .Where(s => s.App?.Pairing == true && IPEndPoint.TryParse(s.Address, out _)).Take(16).ToArray();
+                    .Where(s => s.App?.Pairing == true && IPEndPoint.TryParse(s.Address, out _))
+                    .DistinctBy(s => (s.Name, s.App!.Instance)).Take(16).ToArray();
             }
             catch (OperationCanceledException) when (searching.IsCancellationRequested) { }
             catch (Exception error) { failure = error; }
@@ -354,8 +450,6 @@ internal sealed partial class PhoneDevicePageView
                 if (!AndroidConnectionVisible) return;
                 _appCandidates = found;
                 _appSearchComplete = failure == null;
-                if (found.Select(s => s.App!.Instance).Distinct().Count() == 1)
-                    _selectedAppCandidate = IPEndPoint.Parse(found[0].Address);
                 if (failure != null) SetStatus(PhonePreview.TranslateError(failure), true);
                 else _actions.Invalidate();
             })) searching.Dispose();

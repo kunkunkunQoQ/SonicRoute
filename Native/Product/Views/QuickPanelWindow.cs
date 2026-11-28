@@ -51,8 +51,10 @@ internal sealed class QuickPanelWindow : LayeredWindow
         public string? OutputAnchor;
         public string NativeInputId = AudioService.SystemDefaultInputDeviceId;
         public string? CachedOutputLabel;
+#if SONICROUTE_PHONE
         public byte[]? ExternalIconBgra;
         public int ExtIconW, ExtIconH, ExtIconVer;
+#endif
     }
 
     private static readonly string VersionLabel = "v" + BuildIdentity.ProductVersion;
@@ -70,8 +72,9 @@ internal sealed class QuickPanelWindow : LayeredWindow
     protected override bool ShowOwnedWindowTooltips => false;
     private readonly UiHitMap _hit = new();
     private readonly UiScrollState _scroll = new();
-    private readonly Dictionary<string, (byte[] Pixels, int W, int H, int Ver)> _extIconCache = new(StringComparer.Ordinal);
-    private int _extIconVer;
+#if SONICROUTE_PHONE
+    private readonly PhoneAppIconCache _phoneIcons;
+#endif
 
 
 
@@ -176,6 +179,9 @@ internal sealed class QuickPanelWindow : LayeredWindow
         : base(UiMetrics.QuickPanelWindowWidth, Math.Clamp(config.QuickPanelHeight, 350, 850), UiMetrics.QuickPanelWindowWidth, UiMetrics.QuickPanelMinHeight)
     {
         _host = host;
+#if SONICROUTE_PHONE
+        _phoneIcons = new(host, 64, Invalidate);
+#endif
         _config = config;
         _onOpenMain = onOpenMain;
         if (onDismissRequested != null) OnDismissRequested += onDismissRequested;
@@ -463,16 +469,6 @@ internal sealed class QuickPanelWindow : LayeredWindow
                 foreach (var row in _rows)
                 {
                     row.Peak = row.CanMeasurePeak ? _smoothedPeaks.GetValueOrDefault(row.Identity) : 0f;
-                    if (row.IsExternal && row.App.ExternalIconPng is { Length: > 0 } png)
-                    {
-                        if (TryGetExternalIcon(row.Identity, png, out var bgra, out int w, out int h, out int ver))
-                        {
-                            row.ExternalIconBgra = bgra;
-                            row.ExtIconW = w;
-                            row.ExtIconH = h;
-                            row.ExtIconVer = ver;
-                        }
-                    }
                 }
 
                 if (IsVisible) Invalidate();
@@ -623,6 +619,9 @@ internal sealed class QuickPanelWindow : LayeredWindow
 
     protected override void OnHidden()
     {
+#if SONICROUTE_PHONE
+        _phoneIcons.Clear();
+#endif
         _deviceError = null;
         StopAnimationTimer();
         _timerInterval = 0;
@@ -644,6 +643,9 @@ internal sealed class QuickPanelWindow : LayeredWindow
 
     protected override void OnClosed()
     {
+#if SONICROUTE_PHONE
+        _phoneIcons.Clear();
+#endif
         StopAnimationTimer();
         _timerInterval = 0;
         _animatingEntrance = false;
@@ -1132,11 +1134,14 @@ internal sealed class QuickPanelWindow : LayeredWindow
         }
 
         var iconBox = new UiRect(iconBtnRect.CenterX - 9f, iconBtnRect.CenterY - 9f, 18f, 18f);
-        if (row.ExternalIconBgra is { } extBgra && row.ExtIconW > 0)
+#if SONICROUTE_PHONE
+        if (row.IsExternal && TryGetPhoneIcon(row) && row.ExternalIconBgra is { } extBgra)
         {
             g.DrawBgraBitmap($"qp.ext:{row.Identity}", extBgra, row.ExtIconW, row.ExtIconH, iconBox, version: row.ExtIconVer);
         }
-        else if (!row.IsExternal && NativeAppIconService.GetAppIcon(_config, row.Pid, row.App.IconPath, row.App.ProcessName, () =>
+        else
+#endif
+        if (!row.IsExternal && NativeAppIconService.GetAppIcon(_config, row.Pid, row.App.IconPath, row.App.ProcessName, () =>
         {
             if (IsVisible && !IsDisposed) Invalidate();
         }) is { } bmp)
@@ -2504,24 +2509,20 @@ internal sealed class QuickPanelWindow : LayeredWindow
         });
     }
 
-    private bool TryGetExternalIcon(string key, byte[] png, out byte[] bgra, out int w, out int h, out int ver)
+#if SONICROUTE_PHONE
+    private bool TryGetPhoneIcon(AppRowState row)
     {
-        if (_extIconCache.TryGetValue(key, out var cached))
-        {
-            bgra = cached.Pixels; w = cached.W; h = cached.H; ver = cached.Ver;
-            return true;
-        }
-        if (UiBitmap.TryDecodePng(png, 48, out byte[] pixels, out int pw, out int ph))
-        {
-            int nextVer = ++_extIconVer;
-            if (_extIconCache.Count >= 64) _extIconCache.Clear();
-            _extIconCache[key] = (pixels, pw, ph, nextVer);
-            bgra = pixels; w = pw; h = ph; ver = nextVer;
-            return true;
-        }
-        bgra = []; w = h = ver = 0;
-        return false;
+        if (row.App.ProcessName is not { } name || !name.StartsWith("android:", StringComparison.Ordinal)) return false;
+        var live = row.App.ExternalSourceId is { } id ? _host.Phone.Sources.FindSource(id) : null;
+        var app = live?.App ?? new AndroidApp(name["android:".Length..], row.DisplayName, 0, "", row.App.ExternalIconPng);
+        if (app.IsDeviceAudio) return false;
+        app = _phoneIcons.Resolve(live?.Device, app);
+        if (live != null && row.DisplayName == app.Package) row.DisplayName = app.Name;
+        bool ready = _phoneIcons.TryGet(app, out var pixels, out row.ExtIconW, out row.ExtIconH, out row.ExtIconVer, row.Identity);
+        row.ExternalIconBgra = ready ? pixels : null;
+        return ready;
     }
+#endif
 
     private string ResolveDeviceDisplayName(Endpoint[] devices, string? deviceId)
     {

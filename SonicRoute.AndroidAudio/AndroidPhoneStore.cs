@@ -18,6 +18,8 @@ public sealed record AndroidPhoneProfile(string Name, AndroidDevice? LastDevice,
     internal string? AppPublicKeySha256 { get; init; }
     internal string? LastAppAddress { get; init; }
     internal bool AppTrustRevoked { get; init; }
+    internal string? PcListenFingerprint { get; init; }
+    internal bool AllowsPcListening => !AppTrustRevoked && PcListenFingerprint != null && PcListenFingerprint == AppPublicKeySha256;
     internal bool PreferAppTransport { get; init; }
 
     internal static string? WirelessAddress(string? serial) =>
@@ -90,7 +92,8 @@ public sealed class AndroidPhoneStore
         }
         if (hasBackup && TryLoadState(backup, out loaded, out legacy))
         {
-            _state = loaded;
+            // A fallback copy can predate revocation. Recover the library and require a fresh audio grant.
+            _state = loaded with { Profiles = Array.AsReadOnly(loaded.Profiles.Select(p => p with { PcListenFingerprint = null }).ToArray()) };
             _loadedSafely = true;
             _legacyFormat = legacy;
         }
@@ -147,7 +150,7 @@ public sealed class AndroidPhoneStore
         {
             if (item?.Device is not { } device || string.IsNullOrWhiteSpace(device.Serial) || device.Serial.Length > 512
                 || (device.HardwareId?.Length ?? 0) > 128) continue;
-            try { var profile = LoadProfile(item); profiles[profile.Id] = profile; }
+            try { var profile = LoadProfile(item) with { PcListenFingerprint = null }; profiles[profile.Id] = profile; }
             catch (ArgumentException ex) { Trace.WriteLine("Removed phone preferences: " + ex.Message); }
         }
         return Array.AsReadOnly(profiles.Values.ToArray());
@@ -166,6 +169,8 @@ public sealed class AndroidPhoneStore
             Id = saved.Id,
             AdditionalFields = saved.AdditionalFields,
             AppPublicKeySha256 = appFingerprint,
+            PcListenFingerprint = !saved.AppTrustRevoked && NormalizeAppFingerprint(saved.PcListenFingerprint) == appFingerprint
+                ? appFingerprint : null,
             LastAppAddress = saved.LastAppAddress != null && System.Net.IPEndPoint.TryParse(saved.LastAppAddress, out var appAddress) && appAddress.Port > 0
                 ? appAddress.ToString() : null,
             AppTrustRevoked = saved.AppTrustRevoked,
@@ -317,6 +322,7 @@ public sealed class AndroidPhoneStore
             var merged = WithQuickPanelApps(target with
             {
                 AppPublicKeySha256 = fingerprint, LastAppAddress = source.LastAppAddress, AppTrustRevoked = false,
+                PcListenFingerprint = source.AllowsPcListening ? fingerprint : null,
                 RetainedApps = Array.AsReadOnly(apps), DisabledSmartVolumeApps = Array.AsReadOnly(disabled),
                 ReceiveFolder = first.ReceiveFolder != AndroidFileTransfer.Downloads ? first.ReceiveFolder : second.ReceiveFolder,
                 AdditionalFields = extensions.Count == 0 ? null : extensions
@@ -350,6 +356,7 @@ public sealed class AndroidPhoneStore
             {
                 LastDevice = previous?.LastDevice is { IsApp: false } bound ? bound : saved,
                 AppPublicKeySha256 = fingerprint, LastAppAddress = endpoint.ToString(),
+                PcListenFingerprint = active.Length == 1 && active[0].AllowsPcListening ? fingerprint : null,
                 ManuallyDisconnected = false, AppTrustRevoked = false
             };
             var phones = state.Profiles.Contains(previous!)
@@ -376,7 +383,7 @@ public sealed class AndroidPhoneStore
     internal void RevokeAppTrust(string id, string fingerprint) => Change(state =>
     {
         var phones = state.Profiles.Select(p => p.Id == id && p.AppPublicKeySha256 == fingerprint && !p.AppTrustRevoked
-            ? p with { AppTrustRevoked = true, LastAppAddress = null, ManuallyDisconnected = p.LastDevice?.IsApp == true || p.ManuallyDisconnected } : p).ToArray();
+            ? p with { AppTrustRevoked = true, PcListenFingerprint = null, LastAppAddress = null, ManuallyDisconnected = p.LastDevice?.IsApp == true || p.ManuallyDisconnected } : p).ToArray();
         return phones.SequenceEqual(state.Profiles) ? state : state with { Profiles = Array.AsReadOnly(phones) };
     }, durable: true, management: true);
 
@@ -387,9 +394,15 @@ public sealed class AndroidPhoneStore
             throw new SrapException("stale_session");
         var next = preferApp is { } prefer
             ? profile with { PreferAppTransport = prefer }
-            : profile with { AppPublicKeySha256 = null, LastAppAddress = null, AppTrustRevoked = false, PreferAppTransport = false };
+            : profile with { AppPublicKeySha256 = null, PcListenFingerprint = null, LastAppAddress = null, AppTrustRevoked = false, PreferAppTransport = false };
         return next == profile ? state : state with { Profiles = Array.AsReadOnly(state.Profiles.Select(p => p.Id == id ? next : p).ToArray()) };
     }, durable: true, management: true);
+
+    internal void SetPcListening(string profileId, string fingerprint, bool allow) => ChangeProfile(profileId, profile =>
+    {
+        if (profile.AppTrustRevoked || !HasUniqueAppOwner(profileId, fingerprint)) throw new SrapException("stale_session");
+        return profile with { PcListenFingerprint = allow ? fingerprint : null };
+    }, durable: true);
 
     private static string? NormalizeAppFingerprint(string? fingerprint) =>
         fingerprint?.Length == 64 && fingerprint.All(char.IsAsciiHexDigit) ? fingerprint.ToUpperInvariant() : null;
@@ -445,6 +458,7 @@ public sealed class AndroidPhoneStore
             var connected = primary.WithDevice(device, wirelessAddress);
             var merged = WithQuickPanelApps(connected with {
                 AppPublicKeySha256 = appAliases.FirstOrDefault(),
+                PcListenFingerprint = matching.FirstOrDefault(p => p.AllowsPcListening)?.PcListenFingerprint,
                 Name = primary.Name.Length != 0 ? primary.Name : combined.FirstOrDefault(p => p.Name.Length != 0)?.Name ?? "",
                 LastWirelessAddress = connected.LastWirelessAddress ?? combined.Select(p => p.LastWirelessAddress).FirstOrDefault(a => a != null),
                 ManuallyDisconnected = false,
@@ -503,7 +517,7 @@ public sealed class AndroidPhoneStore
             {
                 // Keep preferences without keeping per-device app artwork or live output endpoints.
                 var saved = WithQuickPanelApps(profile with {
-                    LastDevice = identity ?? device, OutputSinks = [AndroidOutputSink.DefaultSpeaker],
+                    LastDevice = identity ?? device, OutputSinks = [AndroidOutputSink.DefaultSpeaker], PcListenFingerprint = null,
                     RetainedApps = Array.AsReadOnly(profile.RetainedApps.Select(a => a.IconPng == null ? a : a with { IconPng = null }).ToArray())
                 });
                 archived = Array.AsReadOnly((archived ?? []).Where(p => !AndroidDeviceIdentity.MatchesSavedDevice(p.LastDevice, identity ?? device)).Append(saved).ToArray());
@@ -657,8 +671,10 @@ public sealed class AndroidPhoneStore
             var updated = p.RetainedApps.Select(a =>
             {
                 if (!current.TryGetValue(a.Package, out var nextApp)) return a;
-                // Preserve existing IconPng array reference when bytes are identical so UI weak caches do not re-decode.
-                if (a.IconPng != null && nextApp.IconPng != null && a.IconPng.AsSpan().SequenceEqual(nextApp.IconPng))
+                // SRAP's launcher catalog supplies a label. UID and category are reported by ADB.
+                if (nextApp.Uid == 0 && string.IsNullOrEmpty(nextApp.Category) && nextApp.PlatformCategory == -1)
+                    nextApp = nextApp with { Uid = a.Uid, Category = a.Category, PlatformCategory = a.PlatformCategory };
+                if (a.IconPng != null && (nextApp.IconPng is not { Length: > 0 } || a.IconPng.AsSpan().SequenceEqual(nextApp.IconPng)))
                     nextApp = nextApp with { IconPng = a.IconPng };
                 return nextApp;
             }).ToArray();
@@ -670,7 +686,7 @@ public sealed class AndroidPhoneStore
             return same ? p : p with { RetainedApps = Array.AsReadOnly(updated) };
         });
     }
-    private void ChangeProfile(string? id, Func<AndroidPhoneProfile, AndroidPhoneProfile> change) => Change(state =>
+    private void ChangeProfile(string? id, Func<AndroidPhoneProfile, AndroidPhoneProfile> change, bool durable = false) => Change(state =>
     {
         int index = state.Profiles.ToList().FindIndex(p => p.Id == (id ?? state.SelectedId));
         if (index < 0) return state;
@@ -680,7 +696,7 @@ public sealed class AndroidPhoneStore
             next = WithQuickPanelApps(next);
         var profiles = state.Profiles.ToArray(); profiles[index] = next;
         return state with { Profiles = Array.AsReadOnly(profiles) };
-    });
+    }, durable: durable);
     private void Change(Func<State, State> change, bool durable = false, bool management = false, Action? beforeCommit = null)
     {
         bool namesChanged;
@@ -752,7 +768,8 @@ public sealed class AndroidPhoneStore
         profile.RetainedApps.ToArray(), profile.DisabledSmartVolumeApps.ToArray(), profile.ReceiveFolder, profile.ManuallyDisconnected, profile.LastWirelessAddress)
         {
             AdditionalFields = profile.AdditionalFields, AppPublicKeySha256 = profile.AppPublicKeySha256,
-            LastAppAddress = profile.LastAppAddress, AppTrustRevoked = profile.AppTrustRevoked, PreferAppTransport = profile.PreferAppTransport
+            LastAppAddress = profile.LastAppAddress, AppTrustRevoked = profile.AppTrustRevoked, PreferAppTransport = profile.PreferAppTransport,
+            PcListenFingerprint = profile.AllowsPcListening ? profile.PcListenFingerprint : null
         };
     internal sealed record LegacyFile(int Version, string Name, AndroidDevice? Device, AndroidApp[] Apps, string[]? DisabledSmartVolumePackages = null)
     {
@@ -763,6 +780,8 @@ public sealed class AndroidPhoneStore
     {
         [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
         public string? AppPublicKeySha256 { get; set; }
+        [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+        public string? PcListenFingerprint { get; set; }
         [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
         public string? LastAppAddress { get; set; }
         [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault)]

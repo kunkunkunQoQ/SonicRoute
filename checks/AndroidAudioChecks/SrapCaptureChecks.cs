@@ -51,12 +51,14 @@ internal static partial class Program
         }
         Task Reply(JsonElement message, JsonObject result) => SrapClient.WriteAsync(remote, "response",
             new() { ["status"] = "done", ["result"] = result }, ct, SrapClient.Text(message, "id"), parent);
-        async Task<JsonElement> Open(uint id)
+        async Task<JsonElement> Open(uint id, bool deviceMedia = false)
         {
             var begin = await Request("audio.capture.start");
             var p = SrapClient.Body(begin).GetProperty("params");
-            if (SrapClient.Text(p, "appKey") != package || SrapClient.Text(p, "encoding") != SrapSession.PcmEncoding
-                || !p.GetProperty("keepPhoneAudio").GetBoolean() || p.TryGetProperty("streamId", out _))
+            bool scoped = deviceMedia ? SrapClient.Text(p, "scope") == "device_media" && !p.TryGetProperty("appKey", out _)
+                : SrapClient.Text(p, "appKey") == package && !p.TryGetProperty("scope", out _);
+            if (!scoped || SrapClient.Text(p, "encoding") != SrapSession.PcmEncoding || !p.GetProperty("keepPhoneAudio").GetBoolean()
+                || p.EnumerateObject().Count() != 3)
                 throw new InvalidDataException("Wrong package or capture mode.");
             await Reply(begin, new() { ["streamId"] = id, ["encoding"] = SrapSession.PcmEncoding, ["credit"] = 4 });
             var credit = await Request("audio.capture.credit");
@@ -138,6 +140,13 @@ internal static partial class Program
             "changing the Windows endpoint retains the same authorized capture");
         await Denied(() => ((IMultiOutputAudioSession)capture).SetOutputsAsync([null]), "unsupported",
             "an explicit output selection cannot suppress the phone");
+        var multi = (IMultiOutputAudioSession)capture;
+        await multi.SetOutputsAsync(AppCapturePermission.WithLocalPlayback(device, [null]));
+        Check(capture.State.OutputId == null && multi.GetOutputs().Contains(null) && capture.UsesSourcePhonePlayback && ReferenceEquals(pcm, capture.Pcm),
+            "switching to the Windows system default reads back the implicit phone output and the same PCM capture");
+        await multi.SetOutputsAsync(AppCapturePermission.WithLocalPlayback(device, ["second-windows-renderer"]));
+        Check(capture.State.OutputId == "second-windows-renderer" && multi.GetOutputs().Contains("second-windows-renderer")
+            && capture.UsesSourcePhonePlayback && ReferenceEquals(pcm, capture.Pcm), "switching Windows renderers keeps the same grant and reports the selected sink");
         var stop = capture.StopAsync();
         await ConfirmStop(2);
         await stop;
@@ -201,6 +210,84 @@ internal static partial class Program
             }
         }
         Check(session.Capabilities.Capture is { Package: null, Reason: "media_projection_required" }, "the phone's authorization requirement remains visible");
+        var deviceGrant = new JsonObject { ["id"] = "audio.capture.device", ["state"] = "available", ["scope"] = "device_media",
+            ["limits"] = new JsonObject { ["mode"] = "playback_capture", ["pcm"] = SrapSession.PcmEncoding, ["grant"] = "9", ["autoplay"] = "pc_output_v1" } };
+        async Task Publish(JsonArray entries)
+        {
+            long next = ++revision;
+            var seen = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            void Changed() { if (session.Capabilities.Revision == next) seen.TrySetResult(); }
+            session.CapabilitiesChanged += Changed;
+            try
+            {
+                await SrapClient.WriteAsync(remote, "capabilities", new() { ["capabilityRevision"] = next, ["entries"] = entries }, ct, session: parent);
+                await seen.Task.WaitAsync(ct);
+            }
+            finally { session.CapabilitiesChanged -= Changed; }
+        }
+        var both = Capabilities();
+        both.Add(deviceGrant.DeepClone());
+        await Publish(both);
+        Check(session.Capabilities.Capture == null, "two available capture scopes fail closed");
+        await Denied(() => capture.StartAsync(device, AndroidApp.DeviceAudio, true, ct), "unsupported", "ambiguous whole-device grant rejected");
+        var wrongScope = deviceGrant.DeepClone();
+        wrongScope["scope"] = "other_app:" + package;
+        await Publish([wrongScope]);
+        Check(session.Capabilities.Capture == null, "the device capability cannot grant a package or an unknown scope");
+        await Publish([deviceGrant]);
+        Check(session.Capabilities.Capture is { IsDeviceMedia: true, Package: null, Grant: "9", PlayOnComputer: true }, "explicit device grant identifies no package");
+        await Denied(() => capture.StartAsync(device, app, true, ct), "permission_required", "a whole-device grant cannot impersonate a chosen package");
+        await Denied(() => capture.StartAsync(device, AndroidApp.DeviceAudio, false, ct), "unsupported", "device capture always keeps phone playback");
+        var whole = capture.StartAsync(device, AndroidApp.DeviceAudio, true, ct);
+        var firstCredit = await Open(56, deviceMedia: true);
+        await Ack(firstCredit, 56, 0);
+        await Data(56, 0, 0, [0, 32, 0, 224]);
+        await whole;
+        Check(capture.Pcm!.NonSilentSamplesWritten == 2 && capture.UsesSourcePhonePlayback, "device-scoped PCM reaches the Windows player and retains local playback");
+        var endWhole = capture.StopAsync();
+        await ConfirmStop(56);
+        await endWhole;
+        Check(capture.State.State == CaptureState.Idle && !session.Token.IsCancellationRequested, "device capture stops its own stream without closing TLS");
+        await Publish([new JsonObject { ["id"] = "catalog.apps", ["state"] = "available", ["scope"] = "launcher_apps" }]);
+        var store = new AndroidPhoneStore(Path.Combine(directory, parent + ".json"));
+        var profile = store.RegisterApp(pin, (IPEndPoint)listener.LocalEndpoint, store.ManagementRevision);
+        await using var transport = new SrapPhoneTransport(store, directory);
+        var peer = transport.Admit(profile, session);
+        await using var adb = new AdbOperationAdapter(new AdbClient(new AndroidRuntimeBundle(Path.Combine(directory, "unused-adb"))));
+        var operations = new SrapOperationAdapter(adb, transport, active => ReferenceEquals(active, peer));
+        JsonObject Catalog(bool icons)
+        {
+            var catalog = new JsonObject { ["apps"] = new JsonArray(
+                new JsonObject { ["appKey"] = package, ["label"] = "Fixture player" },
+                new JsonObject { ["appKey"] = "example.another", ["label"] = "Another app" }) };
+            if (icons) catalog["iconFormat"] = "png48-v1";
+            return catalog;
+        }
+        var full = operations.AppsAsync(peer, ct);
+        await Reply(await Request("catalog.list"), Catalog(true));
+        Check((await full).Count == 2 && (await full).All(item => item.IconPng == null), "loading the complete authenticated catalog returns names without per-package image requests");
+        const string fixturePng = "iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAABTSURBVGhD7c8xDQAgAMAwFGEHUYiGHwMLSY8--zbmXudn4w2_MVAzUDNQM1AzUDNQM1AzUDNQM1AzUDNQM1AzUDNQM1AzUDNQM1AzUDNQM1AzULtVrIgPJJToPQAAAABJRU5ErkJggg";
+        var one = operations.AppsAsync(peer, ct, [package]);
+        var iconRequest = await Request("catalog.icon");
+        var wanted = SrapClient.Body(iconRequest).GetProperty("params");
+        Check(wanted.EnumerateObject().Count() == 1 && SrapClient.Text(wanted, "appKey") == package,
+            "single-package lookup requests exactly the authorized visible package icon");
+        await Reply(iconRequest, new() { ["appKey"] = package, ["format"] = "png48-v1", ["png"] = fixturePng });
+        var row = (await one).Single();
+        Check(row.Name == "Fixture player" && row.IconPng is { Length: > 0 } png &&
+            WicIconLoader.TryDecodePngToBgra32(png, 48, 48, out var pixels, out int width, out int height) &&
+            width == 48 && height == 48 && pixels.Length == 48 * 48 * 4 && pixels[3] == 255,
+            "the authenticated source name and bounded 48x48 PNG decode to real renderer pixels");
+        store.Retain(row with { Uid = 10995, Category = "media", PlatformCategory = 1 });
+        store.UpdateMetadata(peer, [new(package, "Updated label", 0, "")]);
+        Check(store.Profile.RetainedApps.Single() is { Name: "Updated label", Uid: 10995, Category: "media", PlatformCategory: 1 } stored &&
+            ReferenceEquals(stored.IconPng, row.IconPng), "metadata-only refresh preserves the saved image and ADB identity");
+        var legacy = operations.AppsAsync(peer, ct);
+        await Reply(await Request("catalog.list"), Catalog(false));
+        await legacy;
+        Check((await operations.AppsAsync(peer, ct, [package])).Single() is { Name: "Fixture player", IconPng: null },
+            "an older catalog returns the real label without an unsupported icon request");
+        await store.FlushAsync();
         Console.WriteLine($"PASS {_checks} SRAP capture checks");
     }
 }

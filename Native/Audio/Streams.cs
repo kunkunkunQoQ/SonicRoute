@@ -142,13 +142,14 @@ internal sealed unsafe class ProcessCapture : AudioStream
     private byte[]? _buffer;
     internal bool EventDriven { get; }
     internal long Discontinuities { get; private set; }
-    internal static Com Begin(uint processId,ICompletion handler)
+    internal static Com Begin(uint processId,ICompletion handler,bool excludeProcessTree = false)
     {
         nint callback = (nint)ComInterfaceMarshaller<ICompletion>.ConvertToUnmanaged(handler);
         nint op = 0;
         try
         {
-            uint* data = stackalloc uint[3] {1,processId,0};
+            // AUDIOCLIENT_ACTIVATION_PARAMS: process loopback, target PID, PROCESS_LOOPBACK_MODE.
+            uint* data = stackalloc uint[3] {1,processId,excludeProcessTree ? 1u : 0u};
             PropVariant parameters = new() { Type = 65,BlobSize = 12,Blob = (nint)data };
             Guid iid = Endpoints.AudioClient;
             fixed (char* path = @"VAD\Process_Loopback")
@@ -159,15 +160,16 @@ internal sealed unsafe class ProcessCapture : AudioStream
         }
         finally { Com.Release(op); Com.Release(callback); }
     }
-    internal static Com Activate(uint processId,CancellationToken token)
+    internal static Com Activate(uint processId,CancellationToken token,bool excludeProcessTree = false)
     {
         token.ThrowIfCancellationRequested();
         var handler = new LoopbackCompletion();
-        using var operation = Begin(processId,handler);
+        using var operation = Begin(processId,handler,excludeProcessTree);
         try { return handler.Take(TimeSpan.FromSeconds(5),token); }
         finally { handler.Abandon(); }
     }
-    internal ProcessCapture(uint pid,Guid session,CancellationToken token,bool preferEvents = true, WaitHandle? renderWake = null) : base(Activate(pid,token))
+    internal ProcessCapture(uint pid,Guid session,CancellationToken token,bool preferEvents = true, WaitHandle? renderWake = null,
+        bool excludeProcessTree = false) : base(Activate(pid,token,excludeProcessTree))
     {
         _token = token;
         try
@@ -181,7 +183,7 @@ internal sealed unsafe class ProcessCapture : AudioStream
                 if (!EventDriven)
                 {
                     Client.Dispose();
-                    Client = Activate(pid,token);
+                    Client = Activate(pid,token,excludeProcessTree);
                 }
             }
             if (!EventDriven) Com.Check(Initialize(loopback,session,captureDuration,false),"initialize non-event capture");

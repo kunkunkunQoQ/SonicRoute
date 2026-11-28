@@ -57,7 +57,7 @@ internal sealed partial class SrapSession : IDisposable
     internal Task<JsonElement> RequestAsync(string op, string? capability, JsonObject parameters, CancellationToken cancel,
         string? routeTarget = null, Action? beforeWrite = null)
         => routeTarget == null && beforeWrite == null &&
-            (op is "audio.devices.list" or "catalog.list" or "volume.get" or "display.next" ||
+            (op is "audio.devices.list" or "catalog.list" or "catalog.icon" or "volume.get" or "display.next" or "audio.listen.offer" or "audio.listen.status" ||
              op == "media.get" && !parameters.ContainsKey("watchId"))
             ? ReadWithFreshCapabilitiesAsync(op, capability, parameters, cancel)
             : RequestOnceAsync(op, capability, parameters, cancel, routeTarget, beforeWrite);

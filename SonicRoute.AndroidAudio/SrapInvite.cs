@@ -73,6 +73,9 @@ internal sealed class SrapInvite(byte[] id, byte[] secret, string fingerprint, I
     private static bool TryPort(string value, out int port) => int.TryParse(value, System.Globalization.NumberStyles.None, null, out port)
         && port is > 0 and <= 65535 && value == port.ToString(System.Globalization.CultureInfo.InvariantCulture);
 
+    internal static bool IsUsableEndpoint(IPEndPoint endpoint) => endpoint.Port > 0
+        && TryAddress(endpoint.Address.ToString().Replace("%", "%25", StringComparison.Ordinal), out _);
+
     internal static bool IsFingerprint(string? value) => value is { Length: 64 } && value.All(Uri.IsHexDigit);
 
     internal static string Encode(byte[] bytes) => Convert.ToBase64String(bytes).TrimEnd('=').Replace('+', '-').Replace('/', '_');

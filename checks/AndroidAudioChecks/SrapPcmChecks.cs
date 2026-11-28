@@ -144,7 +144,7 @@ internal static partial class Program
         Console.WriteLine($"PASS {_checks} SRAP PCM checks");
     }
 
-    private static async Task SrapLivePcmAsync(string directory, string requestedTarget)
+    private static async Task SrapLivePcmAsync(string directory, string requestedTarget, bool nearby = false, bool ownedPlayer = false)
     {
         Directory.CreateDirectory(directory);
         using var pcIdentity = new SrapIdentity(directory);
@@ -159,8 +159,31 @@ internal static partial class Program
             Console.WriteLine("STAGE trusted_reconnect");
             device = await transport.ReconnectAsync(saved, ct);
         }
+        else if (nearby)
+        {
+            Console.WriteLine("NEARBY");
+            string serviceName = await Console.In.ReadLineAsync(ct) ?? throw new EndOfStreamException();
+            if (!System.Text.RegularExpressions.Regex.IsMatch(serviceName, "^sr-[a-f0-9]{8}(?:-[0-9]+)?$"))
+                throw new InvalidOperationException("Expected the temporary name visible on the test phone.");
+            AndroidMdnsService? service = null;
+            for (int attempt = 0; attempt < 4 && service == null; attempt++)
+            {
+                var discovered = await SrapPhoneTransport.DiscoverAsync(ct);
+                service = discovered.FirstOrDefault(row => row.App?.Pairing == true && row.Name == serviceName);
+            }
+            Check(service != null, "the selected pairing window was discovered on the LAN");
+            device = await transport.PairNearbyAsync(service!, async (code, decision) =>
+            {
+                string digest = Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.ASCII.GetBytes(code)));
+                Console.WriteLine("COMPARE " + digest);
+                return await Console.In.ReadLineAsync(decision) == "APPROVE";
+            }, ct, "SonicRoute Interop");
+            Check(store.Profiles.Count(p => p.AppPublicKeySha256 == device.Serial) == 1,
+                "both explicit confirmations produced one authenticated profile");
+        }
         else
         {
+            if (ownedPlayer) throw new InvalidOperationException("The limited player check requires a current trusted profile or nearby confirmation.");
             Console.WriteLine("INVITE");
             var invite = await Console.In.ReadLineAsync(ct) ?? throw new EndOfStreamException();
             Console.WriteLine("STAGE pair_and_establish_session");
@@ -177,6 +200,11 @@ internal static partial class Program
             "current" or "speaker" => requestedTarget,
             _ => throw new ArgumentException("Choose current, speaker, or bluetooth.")
         };
+        if (ownedPlayer)
+        {
+            await VerifyOwnedPlayerAsync(device, session, target, ct);
+            return;
+        }
         string? routed = null;
         var output = (SrapPcmOutput)await SrapPcmOutput.OpenAsync(session, device, target, ct, (key, _, _) => routed = key);
         try
