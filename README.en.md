@@ -142,11 +142,9 @@ The Wiki is currently in Chinese.
 
 ## 💖 Support SonicRoute
 
-SonicRoute is a free, actively maintained open-source project. If it makes managing audio on your PC easier, a donation through Afdian helps fund new features, compatibility improvements, and long-term maintenance.
+SonicRoute is free and open source on Windows and Android. If it saves you a few trips to the sound settings, you can buy the developer a coffee on [Afdian](https://afdian.com/a/koukou021).
 
-☕ [Support on Afdian](https://afdian.com/a/koukou021)
-
-Donations are optional. You can use every feature without donating. Reporting an issue, recommending SonicRoute to a friend, or giving the project a star on GitHub also helps. Thank you!
+A GitHub star or a recommendation to a friend helps others find SonicRoute. If something goes wrong, report it in the [Windows](https://github.com/kunkunkunQoQ/SonicRoute/issues) or [Android](https://github.com/kunkunkunQoQ/SonicRoute-App/issues) issue tracker with your device model and the steps to reproduce it.
 
 ## 📜 License
 

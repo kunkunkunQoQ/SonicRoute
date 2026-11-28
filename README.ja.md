@@ -142,11 +142,9 @@ Full では、AirPlay で受信した音声を複数のデバイスで同時に�
 
 ## 💖 SonicRoute を応援する
 
-SonicRoute は、開発とメンテナンスを続けている無料のオープンソースソフトウェアです。PC の音量を調整したり、出力先を切り替えたりするときに便利だと感じたら、Afdian から開発を応援していただけます。ご支援は、新機能の開発や互換性の向上、継続的なメンテナンスに役立てます。
+Windows 版も Android 版も、SonicRoute は無料のオープンソースソフトウェアです。サウンド設定を開く手間が減ったら、[Afdian](https://afdian.com/a/koukou021) で開発者にコーヒーを一杯おごる形で応援できます。
 
-☕ [Afdian で開発を応援する](https://afdian.com/a/koukou021)
-
-寄付は任意です。すべての機能を無料でお使いいただけます。不具合の報告や周りの方へのご紹介、GitHub でのスターも開発の励みになります。ありがとうございます。
+GitHub でスターを付けたり、友人に紹介したりするのも応援になります。不具合は [Windows](https://github.com/kunkunkunQoQ/SonicRoute/issues) 版または [Android](https://github.com/kunkunkunQoQ/SonicRoute-App/issues) 版の Issues に、機種名と再現手順を添えてお知らせください。
 
 ## 📜 ライセンス
 

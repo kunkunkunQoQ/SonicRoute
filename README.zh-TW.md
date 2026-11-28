@@ -142,11 +142,9 @@ Full 版現在可將收到的 AirPlay 音訊同時送到多個輸出裝置。擷
 
 ## 💖 支持 SonicRoute
 
-SonicRoute 是持續維護的免費開放原始碼專案。如果它讓你在電腦上聽音樂、玩遊戲或通話更方便，歡迎透過愛發電贊助，支持新功能開發、相容性改善與長期維護。
+SonicRoute 的 Windows 版和 Android 版都是免費的開放原始碼軟體。如果它讓你少花一點時間切換耳機和喇叭，歡迎透過 [Afdian](https://afdian.com/a/koukou021) 請作者喝杯咖啡，支持後續開發。
 
-☕ [透過愛發電贊助 SonicRoute](https://afdian.com/a/koukou021)
-
-贊助完全自願，所有功能都能免費使用。回報問題、向朋友推薦 SonicRoute，或在 GitHub 上給專案一顆星，也都是對專案的支持。謝謝你！
+你也可以在 GitHub 給專案一顆星，或把 SonicRoute 推薦給朋友。遇到問題時，請到 [Windows](https://github.com/kunkunkunQoQ/SonicRoute/issues) 或 [Android](https://github.com/kunkunkunQoQ/SonicRoute-App/issues) 的問題回報區，附上裝置型號和重現步驟。
 
 ## 📜 授權條款說明
 

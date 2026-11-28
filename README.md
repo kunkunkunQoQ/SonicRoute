@@ -140,11 +140,9 @@ Full 现在能将收到的 AirPlay 音频同时送到多个输出。捕获 Andro
 
 ## 💖 支持 SonicRoute
 
-SonicRoute 是一个持续维护的免费开源项目。如果它让你在电脑上听音乐、玩游戏或通话更方便，欢迎通过爱发电赞助，支持新功能开发、兼容性改进和长期维护。
+SonicRoute 的 Windows 版和安卓版都免费开源。如果它帮你省去了反复打开声音设置的麻烦，欢迎通过[爱发电](https://afdian.com/a/koukou021)请作者喝杯咖啡，支持后续开发。
 
-☕ [在爱发电赞助](https://afdian.com/a/koukou021)
-
-赞助完全自愿，所有功能都可以免费使用。反馈问题、向朋友推荐 SonicRoute，或在 GitHub 上给项目点个 Star，也是在支持项目。谢谢你！
+你也可以在 GitHub 点个 Star，或把 SonicRoute 推荐给朋友。遇到问题时，请到 [Windows](https://github.com/kunkunkunQoQ/SonicRoute/issues) 或 [Android](https://github.com/kunkunkunQoQ/SonicRoute-App/issues) 问题区留下设备型号和复现步骤。
 
 ## 📜 许可证
 
