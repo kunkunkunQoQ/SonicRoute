@@ -1174,6 +1174,8 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
         CancelHotkeyCapture();
         _selectedRuleId = rule.Id;
         _editingRule = rule.Clone();
+        _editingRule.Name ??= string.Empty;
+        _editingRule.Hotkey ??= string.Empty;
         _editingRule.TriggerApp ??= string.Empty;
         _editingSteps = _editingRule.CloneSteps();
         if (_editingSteps.Count == 0) _editingSteps.Add(new AutoRuleStep());

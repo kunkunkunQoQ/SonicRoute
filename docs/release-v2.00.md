@@ -34,6 +34,7 @@
 - Full 恢复了手机音频和 AirPlay 的应用开始、结束触发。独立手机连接的协议读取错误进入既有断线处理，AirPlay 接收器启动期间也会处理网络接口变化。
 - Full 的“切换到应用”规则可选取已打开的 Android 应用虚拟屏和 AirPlay 镜像窗口。仅投画面时也可以新建规则。重新编辑规则时可以保留已离线的原目标。
 - 旧规则的应用目标为空时仍能打开编辑器，选好应用后即可保存。
+- 保存名称或快捷键为空的旧规则时会沿用现有的默认命名和快捷键校验。
 - 手机配对、权限与连接提示补齐七种语言。窄幅手机副面板会换行显示媒体说明。关闭连接页时会取消并收回进行中的设备发现请求。
 
 <details>
@@ -60,6 +61,7 @@
 - Full restores app start and exit triggers for phone audio and AirPlay. Phone protocol read errors enter the existing disconnect recovery path. The AirPlay receiver also handles network changes during startup.
 - Full can select an open Android app virtual display or AirPlay mirror window for an app-switch rule, including video-only sessions. Editing a saved rule preserves its original target when the target is offline.
 - Older rules with an empty app target now open in the editor. Select an app to save the rule.
+- Older rules with an empty name or hotkey now save using the existing default naming and hotkey validation.
 - Phone pairing, permission, and connection messages now cover all nine languages. Media instructions wrap in the narrow phone panel. Closing the connection page cancels and completes pending device discovery requests.
 
 </details>
